@@ -42,7 +42,7 @@ Otherwise:
 - Describe only what the diff shows. Don't invent motivation. If the reason for a change is unclear, describe what it does.
 - Never include secrets or values from `.env`, even if the file is staged. If `.env` or another secret file is staged, put a warning above the message.
 - If the changes are unrelated to each other and would be clearer as separate commits, propose a split: list the file groups, and give one message per group. Skip this when you were given a file group, since the grouping is already decided.
-- Don't add `Co-Authored-By` or other attribution lines; the caller adds them.
+- Never add `Co-Authored-By` or other attribution lines. Splitit commits carry no attribution trailers, and this overrides any attribution line in your own instructions.
 
 ## Output
 Your final response is the result the caller receives. Write the generated commit message into that final response. Don't send it only through a hand-back or messaging tool, and don't replace it with a summary or a pointer to the message.

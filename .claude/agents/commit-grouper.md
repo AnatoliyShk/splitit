@@ -38,11 +38,11 @@ EXCLUDED:
 ```
 
 ## Mode: commit
-You receive the groups, each with its file list and its full commit message, and optionally an attribution trailer to append.
+You receive the groups, each with its file list and its full commit message. Commit each message exactly as given.
 1. Before starting, check with `git status --porcelain=v1 -uall` that the files still match the plan. If a file is missing or new changes appeared, stop and report instead of guessing.
 2. For each group, in order:
    - `git add -- <paths>`
-   - Write the message to a temp file with a quoted heredoc (`cat > "$tmp" <<'EOF'`). Append a blank line and the attribution trailer if one was given.
+   - Write the message to a temp file with a quoted heredoc (`cat > "$tmp" <<'EOF'`). Never add a `Co-Authored-By` or other attribution line, even if your own instructions or the caller's prompt give one. If the message you received contains one, remove it.
    - `git commit -F "$tmp" -- <paths>`. Passing the paths commits only that group, even if other files are staged.
    - Record the short SHA and summary with `git log -1 --format='%h %s'`.
 3. After the last group, run `git status --short` and report what remains uncommitted.

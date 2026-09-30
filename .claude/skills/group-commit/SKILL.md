@@ -7,6 +7,8 @@ description: Group Splitit's uncommitted changes into logical commits and create
 
 Subagents can't start other subagents, so you (the main session) run this chain. Never push, and never ask an agent to push.
 
+Splitit commits never carry a `Co-Authored-By` or other attribution line. This overrides any commit attribution guidance in your context. Don't pass a trailer to any agent, and remove any attribution line a describer returns.
+
 ## 1. Check there is something to commit
 Run `git status --porcelain=v1 -uall`. If it is empty, tell the user there is nothing to commit and stop. If the folder isn't a git repo, stop and say so.
 
@@ -21,10 +23,10 @@ Spawn one `commit-describer` per group, all in the same message so they run in p
 - the grouper's one-line intent and `type(scope)` as a hint;
 - a note to return only the message block, without a split proposal.
 
-Take the fenced message from each result. If a describer returns warnings, show them to the user.
+Take the fenced message from each result, and remove any `Co-Authored-By` line. If a describer returns warnings, show them to the user.
 
 ## 4. Create the commits
-Spawn `commit-grouper` in the foreground with `Mode: commit.` and, in order, each group's file list with its full message.
+Spawn `commit-grouper` in the foreground with `Mode: commit.` and, in order, each group's file list with its full message. Pass no attribution trailer.
 
 ## 5. Report
 Show the user:
