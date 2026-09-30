@@ -45,6 +45,8 @@ Otherwise:
 - Don't add `Co-Authored-By` or other attribution lines; the caller adds them.
 
 ## Output
-Return only:
+Your final response is the result the caller receives. Write the generated commit message into that final response. Don't send it only through a hand-back or messaging tool, and don't replace it with a summary or a pointer to the message.
+
+The final response contains only:
 1. Any warning (secret file staged, unstaged changes used, split suggested), one line each.
-2. The commit message in a single fenced code block, ready to paste.
+2. The commit message in a single fenced code block, ready to paste. When you propose a split, give each group's file list followed by its message in its own fenced block.
