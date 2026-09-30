@@ -1,0 +1,16 @@
+# Env
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+staticfiles/
+
+# Node / Yarn
+node_modules/
+dist/
+**/.yarn/*
+!**/.yarn/releases
+!**/.yarn/plugins
+.pnp.*
