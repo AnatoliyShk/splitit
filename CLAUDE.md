@@ -6,21 +6,33 @@ Splitit helps people go to events together and find community and friends. Users
 
 - **Backend:** Django 6 + Django REST Framework, Python 3.12, dependencies managed with uv (`backend/pyproject.toml`, `backend/uv.lock`)
 - **Frontend:** React 19 + TypeScript + Vite, Yarn 4, linted with oxlint
-- **Database:** PostgreSQL 17
+- **Database:** PostgreSQL 17 with pgvector (`pgvector/pgvector:pg17` image); `events` and `tags` have 768-dim `embedding` columns with HNSW cosine indexes
 - **Cache:** Redis 7 (Django's `CACHES` default backend)
-- **Local dev:** Docker Compose runs all four services
+- **Background tasks:** Django 6 `django.tasks`, queued in Postgres by `django-tasks-db` and run by the `worker` service
+- **Embeddings:** Google Gemini (`gemini-embedding-001`, shortened to 768 dims) via `google-genai`
+- **Local dev:** Docker Compose runs all five services
 
 ## Layout
 
 ```
 backend/            Django project
   config/           settings, root urls, wsgi/asgi
-  api/              REST API app (urls mounted at /api/)
+  apps/api/         REST API app (urls mounted at /api/)
+  apps/users/       custom User (email login) + session auth API at /api/auth/
+  apps/events/      Event model (many-to-many with users)
+  apps/tags/        Tag model (many-to-many with events: tag.events / event.tags)
+  apps/panel/       staff-only admin API at /api/panel/ (stats, users, events)
+  apps/ai/          Gemini embedding client; saving a tag/event queues a task that fills its embedding
 frontend/           Vite React app
-  src/App.tsx       landing page
+  src/App.tsx       layout (header, footer) and routes
+  src/pages/        Home (landing), Login, Register
+  src/pages/panel/  admin control panel at /admin (staff only)
+  src/components/   shared UI (form fields, auth card)
+  src/api.ts        fetch helpers with CSRF handling
+  src/auth.ts       useAuth() hook; state lives in AuthProvider.tsx
   src/index.css     design tokens (colors, borders, shadows, fonts)
   src/App.css       component styles
-docker-compose.yml  db, redis, backend, frontend
+docker-compose.yml  db, redis, backend, worker, frontend
 .env.example        copy to .env; all config and host ports live here
 .claude/skills/     team Claude Code skills (ui-ux-pro-max)
 ```
@@ -33,7 +45,7 @@ docker compose up -d --build
 ```
 
 - Frontend: http://localhost:5173 (Vite proxies `/api` to the backend)
-- Backend: http://localhost:5000 (`/admin/`, `/api/health/`)
+- Backend: http://localhost:5000 (`/django-admin/`, `/api/health/`)
 - Postgres and Redis are bound to 127.0.0.1 on the ports in `.env`
 
 If a host port is taken, change the matching `*_HOST_PORT` in `.env`.
@@ -45,6 +57,8 @@ docker compose exec backend python manage.py makemigrations
 docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py createsuperuser
 docker compose exec backend python manage.py test
+docker compose exec backend python manage.py embed_missing   # embed rows with no vector yet
+docker compose logs -f worker                                 # background task output
 
 cd frontend && yarn build    # type-check and build
 cd frontend && yarn lint
@@ -54,7 +68,7 @@ Add backend dependencies with `uv add <pkg>` in `backend/`, then rebuild the bac
 
 ## Configuration
 
-Django settings read from environment variables (`DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `POSTGRES_*`, `REDIS_URL`) with local-dev defaults. Never commit `.env`.
+Django settings read from environment variables (`DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `POSTGRES_*`, `REDIS_URL`, `GEMINI_API_KEY`, `EMBEDDING_MODEL`) with local-dev defaults. Without `GEMINI_API_KEY`, nothing is embedded; run `embed_missing` after adding one. Never commit `.env`.
 
 ## Design system: Soft Brutalism
 
