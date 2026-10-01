@@ -38,8 +38,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.postgres',
     "rest_framework",
     "apps.api",
+    "apps.users",
+    "apps.events",
+    "apps.tags",
+    "apps.panel",
+    "apps.ai",
+    "django_tasks_db",
 ]
 
 MIDDLEWARE = [
@@ -96,6 +103,40 @@ CACHES = {
         'LOCATION': os.environ.get('REDIS_URL', 'redis://localhost:6379/0'),
     }
 }
+
+
+# Auth
+# https://docs.djangoproject.com/en/6.1/topics/auth/customizing/
+
+AUTH_USER_MODEL = 'users.User'
+
+REST_FRAMEWORK = {
+    # The frontend is served from the same origin (Vite proxy), so session cookies + CSRF are enough
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'auth': '10/min',
+    },
+}
+
+
+# Background tasks
+# https://docs.djangoproject.com/en/6.1/topics/tasks/
+# Queued in Postgres and run by the `worker` service (`manage.py db_worker`)
+
+TASKS = {
+    'default': {
+        'BACKEND': 'django_tasks_db.DatabaseBackend',
+    },
+}
+
+
+# Embeddings (Google Gemini)
+# Without a key, nothing is embedded; `manage.py embed_missing` fills the gaps later
+
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+EMBEDDING_MODEL = os.environ.get('EMBEDDING_MODEL', 'gemini-embedding-001')
 
 
 # Password validation

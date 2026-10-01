@@ -1,6 +1,7 @@
 services:
   db:
-    image: postgres:17-alpine
+    # Postgres 17 with the pgvector extension (Debian-based)
+    image: pgvector/pgvector:pg17
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-splitit}
@@ -47,6 +48,24 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  # Runs background tasks (embeddings) queued by the backend
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: ["python", "manage.py", "db_worker"]
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
 
   frontend:
     build: ./frontend
