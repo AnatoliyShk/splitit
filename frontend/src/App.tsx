@@ -1,35 +1,48 @@
 import { useEffect, useState } from 'react'
+import { Link, NavLink, Route, Routes, useLocation } from 'react-router'
 import './App.css'
+import { useAuth } from './auth'
+import Home from './pages/Home'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import EventForm from './pages/panel/EventForm'
+import Events from './pages/panel/Events'
+import Overview from './pages/panel/Overview'
+import PanelLayout from './pages/panel/PanelLayout'
+import Tags from './pages/panel/Tags'
+import Users from './pages/panel/Users'
 
-const features = [
-  {
-    step: '01',
-    title: 'Find events',
-    text: 'Browse concerts, meetups, hikes and game nights happening near you.',
-    tone: 'primary',
-  },
-  {
-    step: '02',
-    title: 'Go together',
-    text: 'Join a group heading to the same event, so you never have to go alone.',
-    tone: 'secondary',
-  },
-  {
-    step: '03',
-    title: 'Make friends',
-    text: 'Meet people who share your interests and keep in touch after the event.',
-    tone: 'primary',
-  },
-]
+function HeaderActions() {
+  const { user, loading, logout } = useAuth()
+  const { pathname } = useLocation()
 
-// Sample data for the hero illustration
-const exampleEvents = [
-  { day: 'Fri', time: '20:00', title: 'Indie night', place: 'The Warehouse', going: 14 },
-  { day: 'Sat', time: '18:00', title: 'Sunset jazz', place: 'Riverside Park', going: 7 },
-  { day: 'Sun', time: '10:00', title: 'Morning hike', place: 'Pine Ridge trail', going: 9 },
-]
+  if (loading) return null
 
-const exampleGroup = ['A', 'B', 'C', 'D']
+  if (user) {
+    return (
+      <div className="header-actions">
+        {user.is_staff && (
+          <NavLink className="btn btn-ghost btn-admin" to="/admin">
+            Admin
+          </NavLink>
+        )}
+        <span className="header-user">{user.name}</span>
+        <button className="btn btn-ghost btn-danger" onClick={() => logout().catch(() => {})}>
+          Log out
+        </button>
+      </div>
+    )
+  }
+
+  // The auth pages have their own Log in / Create account tabs
+  if (pathname === '/login' || pathname === '/register') return null
+
+  return (
+    <Link className="btn btn-ghost" to="/login">
+      Log in
+    </Link>
+  )
+}
 
 export default function App() {
   const [status, setStatus] = useState('loading...')
@@ -44,77 +57,29 @@ export default function App() {
   return (
     <>
       <header className="header">
-        <a className="logo" href="/">
+        <Link className="logo" to="/">
           <span className="logo-mark" aria-hidden="true">
             ÷
           </span>
           Splitit
-        </a>
-        <button className="btn btn-ghost">Log in</button>
+        </Link>
+        <HeaderActions />
       </header>
 
       <main className="main">
-        <section className="hero">
-          <div className="hero-copy">
-            <span className="sticker">Never go alone</span>
-            <h1>
-              Go to events together. Leave with <mark>friends</mark>
-            </h1>
-            <p className="tagline">
-              Find people heading to the same concerts, meetups and trips, and
-              turn one night out into a community.
-            </p>
-            <div className="actions">
-              <button className="btn btn-primary">Find events</button>
-              <button className="btn">Log in</button>
-            </div>
-          </div>
-
-          <figure className="example" aria-label="Example events">
-            <div className="example-head">
-              <span className="example-title">This weekend</span>
-              <span className="chip">Near you</span>
-            </div>
-            <ul className="event-list">
-              {exampleEvents.map((e) => (
-                <li key={e.title}>
-                  <span className="event-day">{e.day}</span>
-                  <span className="event-info">
-                    <strong>{e.title}</strong>
-                    <small>
-                      {e.time} · {e.place}
-                    </small>
-                  </span>
-                  <span className="event-going">{e.going} going</span>
-                </li>
-              ))}
-            </ul>
-            <div className="group">
-              <div className="avatars" aria-hidden="true">
-                {exampleGroup.map((initial) => (
-                  <span className="avatar" key={initial}>
-                    {initial}
-                  </span>
-                ))}
-              </div>
-              <p>
-                <strong>Ana, Ben and 5 others</strong> are going to Sunset jazz
-                together
-              </p>
-            </div>
-            <figcaption>Example</figcaption>
-          </figure>
-        </section>
-
-        <section className="cards" aria-label="How it works">
-          {features.map((f) => (
-            <article className={`card card-${f.tone}`} key={f.title}>
-              <span className="card-step">{f.step}</span>
-              <h2>{f.title}</h2>
-              <p>{f.text}</p>
-            </article>
-          ))}
-        </section>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/admin" element={<PanelLayout />}>
+            <Route index element={<Overview />} />
+            <Route path="users" element={<Users />} />
+            <Route path="events" element={<Events />} />
+            <Route path="events/new" element={<EventForm />} />
+            <Route path="events/:id" element={<EventForm key="edit" />} />
+            <Route path="tags" element={<Tags />} />
+          </Route>
+        </Routes>
       </main>
 
       <footer className="footer">
