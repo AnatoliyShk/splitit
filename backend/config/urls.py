@@ -6,5 +6,9 @@ urlpatterns = [
     path("django-admin/", admin.site.urls),
     path("api/", include("apps.api.urls")),
     path("api/auth/", include("apps.users.urls")),
+    # REST resources nested under a user: /api/users/<uuid>/events/, .../circles/, .../connections/
+    path("api/", include("apps.events.urls")),
+    path("api/", include("apps.circles.urls")),
+    path("api/", include("apps.connections.urls")),
     path("api/panel/", include("apps.panel.urls")),
 ]

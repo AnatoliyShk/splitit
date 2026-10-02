@@ -43,3 +43,53 @@ class EventEmbeddingTests(TestCase):
         )
         self.assertEqual([e.name for e in nearest], ["Same", "Near", "Far"])
         self.assertAlmostEqual(nearest[0].distance, 0.0, places=6)
+
+
+class UserEventsApiTests(TestCase):
+    def setUp(self):
+        from datetime import timedelta
+
+        from apps.tags.models import Tag
+        from apps.users.models import User
+
+        self.me = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana")
+        self.other = User.objects.create_user("ben@example.com", "correct-horse-battery", name="Ben")
+        now = timezone.now()
+        later = Event.objects.create(name="Later", start_datetime=now + timedelta(days=5))
+        sooner = Event.objects.create(name="Sooner", start_datetime=now + timedelta(days=1))
+        not_mine = Event.objects.create(name="Not mine", start_datetime=now)
+        later.users.add(self.me, self.other)
+        sooner.users.add(self.me)
+        not_mine.users.add(self.other)
+        Tag.objects.create(name="Jazz").events.add(later)
+        self.client.force_login(self.me)
+
+    def url(self, user):
+        return f"/api/users/{user.uuid}/events/"
+
+    def test_lists_only_that_users_events_soonest_first(self):
+        data = self.client.get(self.url(self.me)).json()
+        self.assertEqual([e["name"] for e in data], ["Sooner", "Later"])
+        self.assertEqual(data[1]["attendees_count"], 2)
+        self.assertEqual(data[1]["tags"], ["Jazz"])
+
+    def test_requires_login(self):
+        self.client.logout()
+        self.assertEqual(self.client.get(self.url(self.me)).status_code, 403)
+
+    def test_other_users_events_are_hidden(self):
+        self.assertEqual(self.client.get(self.url(self.other)).status_code, 404)
+
+    def test_unknown_or_malformed_uuid_is_404(self):
+        import uuid
+
+        self.me.is_staff = True
+        self.me.save()
+        self.assertEqual(self.client.get(f"/api/users/{uuid.uuid4()}/events/").status_code, 404)
+        self.assertEqual(self.client.get("/api/users/123/events/").status_code, 404)
+
+    def test_staff_can_view_anyones_events(self):
+        self.me.is_staff = True
+        self.me.save()
+        data = self.client.get(self.url(self.other)).json()
+        self.assertEqual([e["name"] for e in data], ["Not mine", "Later"])

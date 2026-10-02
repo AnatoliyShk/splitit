@@ -46,6 +46,8 @@ INSTALLED_APPS = [
     "apps.tags",
     "apps.panel",
     "apps.ai",
+    "apps.circles",
+    "apps.connections",
     "django_tasks_db",
 ]
 
