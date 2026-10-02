@@ -6,7 +6,7 @@ from .models import Tag
 
 @admin.register(Tag)
 class TagAdmin(admin.ModelAdmin):
-    list_display = ("name", "events_count", "created_at")
+    list_display = ("name", "events_count", "has_embedding", "created_at")
     search_fields = ("name",)
     filter_horizontal = ("events",)
 
@@ -16,3 +16,7 @@ class TagAdmin(admin.ModelAdmin):
     @admin.display(description="Events", ordering="events_count")
     def events_count(self, tag):
         return tag.events_count
+
+    @admin.display(description="Embedding", boolean=True)
+    def has_embedding(self, tag):
+        return tag.embedding is not None

@@ -71,15 +71,19 @@ class PanelEventSerializer(serializers.ModelSerializer):
 
 class PanelTagSerializer(serializers.ModelSerializer):
     events_count = serializers.SerializerMethodField()
+    has_embedding = serializers.SerializerMethodField()
 
     class Meta:
         model = Tag
-        fields = ("id", "name", "events_count", "created_at", "updated_at")
+        fields = ("id", "name", "events_count", "has_embedding", "created_at", "updated_at")
 
     def get_events_count(self, tag) -> int:
         # Annotated on list/detail queries; a freshly created tag isn't, so count directly
         count = getattr(tag, "events_count", None)
         return tag.events.count() if count is None else count
+
+    def get_has_embedding(self, tag) -> bool:
+        return tag.embedding is not None
 
     def validate_name(self, value):
         name = value.strip()
