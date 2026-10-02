@@ -4,6 +4,7 @@ import './App.css'
 import { useAuth } from './auth'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import Profile from './pages/Profile'
 import Register from './pages/Register'
 import EventForm from './pages/panel/EventForm'
 import Events from './pages/panel/Events'
@@ -22,11 +23,16 @@ function HeaderActions() {
     return (
       <div className="header-actions">
         {user.is_staff && (
-          <NavLink className="btn btn-ghost btn-admin" to="/admin">
+          <NavLink className="btn btn-ghost" to="/admin">
             Admin
           </NavLink>
         )}
-        <span className="header-user">{user.name}</span>
+        <NavLink className="btn btn-ghost btn-profile" to="/profile" title={`Logged in as ${user.name}`}>
+          <span className="avatar-mini" aria-hidden="true">
+            {user.name.trim().charAt(0).toUpperCase() || '?'}
+          </span>
+          <span className="btn-label">Profile</span>
+        </NavLink>
         <button className="btn btn-ghost btn-danger" onClick={() => logout().catch(() => {})}>
           Log out
         </button>
@@ -61,7 +67,7 @@ export default function App() {
           <span className="logo-mark" aria-hidden="true">
             ÷
           </span>
-          Splitit
+          <span className="logo-text">Splitit</span>
         </Link>
         <HeaderActions />
       </header>
@@ -71,6 +77,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="/admin" element={<PanelLayout />}>
             <Route index element={<Overview />} />
             <Route path="users" element={<Users />} />

@@ -31,6 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await apiPost('/api/auth/logout/')
         setUser(null)
       },
+      setUser,
     }),
     [user, loading],
   )

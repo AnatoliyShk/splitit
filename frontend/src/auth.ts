@@ -8,6 +8,8 @@ export type Auth = {
   login: (email: string, password: string) => Promise<void>
   register: (name: string, email: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  // Replace the cached user after the profile is edited
+  setUser: (user: User) => void
 }
 
 export const AuthContext = createContext<Auth | null>(null)
