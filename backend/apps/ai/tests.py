@@ -2,6 +2,7 @@ from io import StringIO
 from types import SimpleNamespace
 from unittest import mock
 
+from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
 from django.test import TestCase, override_settings
@@ -13,6 +14,8 @@ from apps.tags.models import Tag
 from . import client
 
 IMMEDIATE_TASKS = {"default": {"BACKEND": "django.tasks.backends.immediate.ImmediateBackend"}}
+# Embedding writes invalidate the cached tag list; keep that out of the dev Redis
+LOCMEM_CACHE = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 
 
 def fake_embed_content(*, model, contents, config):
@@ -25,6 +28,8 @@ def fake_embed_content(*, model, contents, config):
 class FakeGeminiMixin:
     def setUp(self):
         super().setUp()
+        self.enterContext(override_settings(CACHES=LOCMEM_CACHE))
+        cache.clear()
         client.get_client.cache_clear()
         self.addCleanup(client.get_client.cache_clear)
         patcher = mock.patch.object(client, "get_client")

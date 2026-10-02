@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 
 from apps.ai.client import BATCH_SIZE, embed_texts
-from apps.ai.embedding import embedded_models, embedding_text
+from apps.ai.embedding import embedded_models, embedding_text, embedding_updated
 
 
 class Command(BaseCommand):
@@ -24,4 +24,6 @@ class Command(BaseCommand):
                 for obj, vector in zip(batch, vectors):
                     model_cls.objects.filter(pk=obj.pk).update(embedding=vector)
                 done += len(batch)
+            if done:
+                embedding_updated.send(sender=model_cls)
             self.stdout.write(f"{model_cls._meta.verbose_name_plural}: embedded {done}")

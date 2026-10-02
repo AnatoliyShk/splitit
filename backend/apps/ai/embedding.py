@@ -1,4 +1,8 @@
 from django.apps import apps
+from django.dispatch import Signal
+
+# Sent with sender=<model> after embeddings are written with update(), which skips post_save
+embedding_updated = Signal()
 
 
 def tag_text(tag):

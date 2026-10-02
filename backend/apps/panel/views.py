@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.core.cache import cache
 from django.db.models import Count, Q
 from django.db.models.functions import Lower
 from django.utils import timezone
@@ -12,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.events.models import Event
+from apps.tags.cache import LIST_TTL, list_cache_key
 from apps.tags.models import Tag
 from apps.users.models import User
 
@@ -105,3 +107,13 @@ class TagViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Tag.objects.annotate(events_count=Count("events")).order_by(Lower("name"))
+
+    def list(self, request, *args, **kwargs):
+        # Permissions are checked before list() runs, so only staff ever see cached pages
+        key = list_cache_key(request.query_params)
+        cached = cache.get(key)
+        if cached is not None:
+            return Response(cached)
+        response = super().list(request, *args, **kwargs)
+        cache.set(key, response.data, LIST_TTL)
+        return response

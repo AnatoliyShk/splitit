@@ -1,17 +1,23 @@
 from datetime import timedelta
 
+from django.core.cache import cache
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from apps.events.models import Event
+from apps.events.models import EMBEDDING_DIMENSIONS, Event
+from apps.ai.embedding import embedding_updated
 from apps.tags.models import Tag
 from apps.users.models import User
 
 PASSWORD = "correct-horse-battery"
 
 
+# The tag list is cached; keep it out of the dev Redis and reset per test
+@override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
 class PanelTestCase(APITestCase):
     def setUp(self):
+        cache.clear()
         self.admin = User.objects.create_user("admin@example.com", PASSWORD, name="Admin", is_staff=True)
         self.member = User.objects.create_user("member@example.com", PASSWORD, name="Member")
         self.client.force_login(self.admin)
@@ -156,6 +162,12 @@ class TagManagementTests(PanelTestCase):
         self.assertEqual(self.client.delete(f"/api/panel/tags/{tag['id']}/").status_code, 204)
         self.assertFalse(Tag.objects.exists())
 
+    def test_list_shows_whether_each_tag_has_an_embedding(self):
+        Tag.objects.create(name="Art", embedding=[1.0] * EMBEDDING_DIMENSIONS)
+        Tag.objects.create(name="Jazz")
+        data = self.client.get("/api/panel/tags/").json()
+        self.assertEqual([(t["name"], t["has_embedding"]) for t in data["results"]], [("Art", True), ("Jazz", False)])
+
     def test_duplicate_name_is_rejected_case_insensitively(self):
         Tag.objects.create(name="Jazz")
         res = self.client.post("/api/panel/tags/", {"name": "JAZZ"}, format="json")
@@ -166,3 +178,59 @@ class TagManagementTests(PanelTestCase):
         tag = Tag.objects.create(name="jazz")
         res = self.client.patch(f"/api/panel/tags/{tag.pk}/", {"name": "Jazz"}, format="json")
         self.assertEqual(res.status_code, 200)
+
+
+class TagListCacheTests(PanelTestCase):
+    def names(self, **params):
+        return [t["name"] for t in self.client.get("/api/panel/tags/", params).json()["results"]]
+
+    def row(self, name):
+        return next(t for t in self.client.get("/api/panel/tags/").json()["results"] if t["name"] == name)
+
+    def test_repeat_requests_are_served_from_cache(self):
+        tag = Tag.objects.create(name="Jazz")
+        self.assertEqual(self.names(), ["Jazz"])
+        # update() sends no signals, so only a cache hit can still show the old name
+        Tag.objects.filter(pk=tag.pk).update(name="Blues")
+        self.assertEqual(self.names(), ["Jazz"])
+        # Another search is its own entry; the same search in another case shares one
+        self.assertEqual(self.names(search="blu"), ["Blues"])
+        Tag.objects.filter(pk=tag.pk).update(name="Folk")
+        self.assertEqual(self.names(search="BLU"), ["Blues"])
+
+    def test_api_writes_show_in_the_next_list(self):
+        self.assertEqual(self.names(), [])
+        with self.captureOnCommitCallbacks(execute=True):
+            tag = self.client.post("/api/panel/tags/", {"name": "Jazz"}, format="json").json()
+        self.assertEqual(self.names(), ["Jazz"])
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.patch(f"/api/panel/tags/{tag['id']}/", {"name": "Blues"}, format="json")
+        self.assertEqual(self.names(), ["Blues"])
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.delete(f"/api/panel/tags/{tag['id']}/")
+        self.assertEqual(self.names(), [])
+
+    def test_event_links_and_event_deletes_refresh_counts(self):
+        tag = Tag.objects.create(name="Jazz")
+        event = Event.objects.create(name="Gig", start_datetime=timezone.now())
+        self.assertEqual(self.row("Jazz")["events_count"], 0)
+        with self.captureOnCommitCallbacks(execute=True):
+            tag.events.add(event)
+        self.assertEqual(self.row("Jazz")["events_count"], 1)
+        with self.captureOnCommitCallbacks(execute=True):
+            event.delete()
+        self.assertEqual(self.row("Jazz")["events_count"], 0)
+
+    def test_embedding_updates_refresh_the_list(self):
+        tag = Tag.objects.create(name="Jazz")
+        self.assertFalse(self.row("Jazz")["has_embedding"])
+        with self.captureOnCommitCallbacks(execute=True):
+            Tag.objects.filter(pk=tag.pk).update(embedding=[1.0] * EMBEDDING_DIMENSIONS)
+            embedding_updated.send(sender=Tag)
+        self.assertTrue(self.row("Jazz")["has_embedding"])
+
+    def test_cached_list_is_still_staff_only(self):
+        Tag.objects.create(name="Jazz")
+        self.assertEqual(self.names(), ["Jazz"])
+        self.client.force_login(self.member)
+        self.assertEqual(self.client.get("/api/panel/tags/").status_code, 403)

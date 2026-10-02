@@ -2,7 +2,7 @@ from django.apps import apps
 from django.tasks import task
 
 from .client import embed_texts
-from .embedding import embedding_text
+from .embedding import embedding_text, embedding_updated
 
 
 @task
@@ -14,3 +14,4 @@ def embed_object(model_label, pk):
     [vector] = embed_texts([embedding_text(obj)])
     # update() skips post_save, so this write doesn't enqueue another task
     model.objects.filter(pk=pk).update(embedding=vector)
+    embedding_updated.send(sender=model)
