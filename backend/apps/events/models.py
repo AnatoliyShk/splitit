@@ -17,6 +17,8 @@ class Event(models.Model):
     )
     # Filled by an embedding model, not by people, so it's hidden from forms and the API
     embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True, blank=True, editable=False)
+    # When attendees' connections were counted (see apps.connections); set once, after the event ends
+    connections_applied_at = models.DateTimeField(null=True, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -42,6 +44,11 @@ class Event(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def ends_at(self):
+        """When the event is over: its end, or its start when it has no end."""
+        return self.end_datetime or self.start_datetime
 
     @property
     def duration(self):
