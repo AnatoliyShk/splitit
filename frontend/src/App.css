@@ -108,12 +108,28 @@ a.btn {
   min-width: 0;
 }
 
-.header-user {
-  overflow: hidden;
-  max-width: 220px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.btn-profile {
+  gap: 8px;
+  padding-left: 7px;
+}
+
+.avatar-mini {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  font-size: 13px;
+  color: var(--on-pastel);
+  background: var(--primary);
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+}
+
+/* Header buttons stay highlighted while you're on their page (Admin, Profile) */
+.header-actions .btn[aria-current='page'] {
+  color: var(--on-pastel);
+  background: var(--secondary);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Hero */
@@ -545,13 +561,6 @@ h1 mark {
   min-height: 44px;
   padding: 0 16px;
   font-size: 14px;
-}
-
-/* Header "Admin" button stays highlighted while inside the panel */
-.btn-admin[aria-current='page'] {
-  color: var(--on-pastel);
-  background: var(--secondary);
-  box-shadow: var(--shadow-sm);
 }
 
 .panel {
@@ -1034,6 +1043,18 @@ h1 mark {
   background: var(--ink);
 }
 
+/* Yes/no marker in tables; ink only, since status stays neutral */
+.check-mark {
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* Responsive */
 
 @media (max-width: 900px) {
@@ -1125,9 +1146,6 @@ h1 mark {
     margin-top: 0;
   }
 
-  .header-user {
-    display: none;
-  }
 }
 
 @media (max-width: 480px) {
@@ -1178,8 +1196,195 @@ h1 mark {
     padding: 0 12px;
   }
 
-  .header-user {
-    max-width: 110px;
+  /* Three header buttons don't fit next to the full logo; keep the mark, hide the word visually */
+  .logo-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* On phones the Profile button is just the avatar; the label stays for screen readers */
+  .btn-profile {
+    padding: 0 6px;
+  }
+
+  .btn-profile .btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+}
+
+/* Profile page */
+
+.profile {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 0 72px;
+}
+
+.profile-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+  padding: 28px 32px;
+  color: var(--on-pastel);
+  background: var(--secondary);
+  border: var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+
+.profile-avatar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 84px;
+  height: 84px;
+  font-family: var(--heading);
+  font-size: 40px;
+  font-weight: 800;
+  background: var(--primary);
+  border: var(--border);
+  border-radius: 50%;
+  box-shadow: var(--shadow-sm);
+}
+
+.profile-id {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-id h1 {
+  overflow-wrap: anywhere;
+  color: var(--on-pastel);
+  font-size: clamp(30px, 4.5vw, 44px);
+}
+
+.profile-id p {
+  font-weight: 500;
+  /* Break long emails only where needed, never mid-word when it fits */
+  overflow-wrap: break-word;
+}
+
+/* Tags on the lilac hero use the dark pastel ink in both themes */
+.profile-hero .tag {
+  border-color: var(--on-pastel);
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  align-items: start;
+  gap: 24px;
+}
+
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  padding: 28px;
+  background: var(--surface);
+  border: var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.profile-events {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.profile-events h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.event-tags {
+  margin-top: 6px;
+}
+
+.input[readonly] {
+  color: var(--text-muted);
+  background: var(--bg);
+  border-style: dashed;
+}
+
+/* Neutral confirmation next to a form's submit button */
+.form .form-actions {
+  align-items: center;
+}
+
+.form-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.form-status::before {
+  content: '✓';
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+}
+
+@media (max-width: 900px) {
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Kept after the base profile rules so these overrides win */
+@media (max-width: 480px) {
+  .profile-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 22px 18px;
+  }
+
+  .profile-avatar {
+    width: 64px;
+    height: 64px;
+    font-size: 30px;
+  }
+
+  .profile-card {
+    padding: 22px 18px;
+  }
+}
+
+/* Smallest phones: Admin, Profile and Log out still fit beside the logo mark */
+@media (max-width: 360px) {
+  .header-actions {
+    gap: 6px;
+  }
+
+  .header .btn-ghost {
+    padding: 0 10px;
+  }
+
+  .header .btn-profile {
+    padding: 0 5px;
   }
 }
 

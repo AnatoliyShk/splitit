@@ -137,6 +137,7 @@ export default function Tags() {
             <tr>
               <th scope="col">Tag</th>
               <th scope="col">Events</th>
+              <th scope="col">Embedding</th>
               <th scope="col">Created</th>
               <th scope="col">
                 <span className="visually-hidden">Actions</span>
@@ -147,7 +148,7 @@ export default function Tags() {
             {data.results.map((t) =>
               editId === t.id ? (
                 <tr key={t.id}>
-                  <td colSpan={4}>
+                  <td colSpan={5}>
                     <form className="inline-form" onSubmit={(e) => rename(e, t)} noValidate>
                       <Field
                         id={`rename-${t.id}`}
@@ -183,6 +184,19 @@ export default function Tags() {
                     <span className="tag-name">{t.name}</span>
                   </td>
                   <td data-label="Events">{t.events_count}</td>
+                  <td data-label="Embedding">
+                    {/* Neutral status in ink: a check mark when the vector exists, a dash while it's missing */}
+                    {t.has_embedding ? (
+                      <svg className="check-mark" viewBox="0 0 24 24" role="img" aria-label="Ready">
+                        <title>Ready</title>
+                        <path d="M4 12.5l5 5L20 6.5" />
+                      </svg>
+                    ) : (
+                      <span className="muted" role="img" aria-label="Missing" title="Missing">
+                        –
+                      </span>
+                    )}
+                  </td>
                   <td data-label="Created">{formatDate(t.created_at)}</td>
                   <td className="row-actions">
                     {confirmId === t.id ? (

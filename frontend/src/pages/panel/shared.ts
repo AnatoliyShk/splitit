@@ -31,6 +31,7 @@ export type PanelTag = {
   id: number
   name: string
   events_count: number
+  has_embedding: boolean
   created_at: string
   updated_at: string
 }
