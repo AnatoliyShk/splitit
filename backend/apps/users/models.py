@@ -1,5 +1,11 @@
+import uuid6
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
+
+
+def new_uuid():
+    """A UUIDv7: time-ordered, so new rows land at the end of the index. Python 3.14+ has uuid.uuid7."""
+    return uuid6.uuid7()
 
 
 class UserManager(BaseUserManager):
@@ -36,6 +42,8 @@ class User(AbstractUser):
     username = None
     first_name = None
     last_name = None
+    # Public identifier for API URLs (/api/users/<uuid>/...); the integer id stays internal
+    uuid = models.UUIDField(default=new_uuid, unique=True, editable=False)
     email = models.EmailField("email address", unique=True)
     name = models.CharField(max_length=150)
 

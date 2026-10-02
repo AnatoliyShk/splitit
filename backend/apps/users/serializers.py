@@ -9,8 +9,40 @@ from .models import User
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ("id", "email", "name", "is_staff", "is_superuser")
+        fields = ("id", "uuid", "email", "name", "is_staff", "is_superuser", "date_joined")
         read_only_fields = fields
+
+
+class ProfileSerializer(serializers.ModelSerializer):
+    """What users may change about themselves; email and access flags stay fixed."""
+
+    class Meta:
+        model = User
+        fields = ("name",)
+        extra_kwargs = {"name": {"error_messages": {"blank": "Enter your name."}}}
+
+    def validate_name(self, value):
+        name = value.strip()
+        if not name:
+            raise serializers.ValidationError("Enter your name.")
+        return name
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_current_password(self, value):
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("Your current password is incorrect.")
+        return value
+
+    def validate_new_password(self, value):
+        try:
+            validate_password(value, self.context["request"].user)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError(list(e.messages))
+        return value
 
 
 class RegisterSerializer(serializers.ModelSerializer):

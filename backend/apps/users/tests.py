@@ -106,3 +106,68 @@ class UserAdminTests(APITestCase):
             },
         )
         self.assertTrue(User.objects.get(email="new@example.com").check_password(PASSWORD))
+
+
+@override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
+class ProfileApiTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user("ana@example.com", PASSWORD, name="Ana")
+        self.client = APIClient(enforce_csrf_checks=True)
+        self.client.force_login(self.user)
+
+    def csrf(self, method, url, data):
+        self.client.get("/api/auth/csrf/")
+        token = self.client.cookies["csrftoken"].value
+        return getattr(self.client, method)(url, data, format="json", HTTP_X_CSRFTOKEN=token)
+
+    def test_me_includes_join_date(self):
+        self.assertIn("date_joined", self.client.get("/api/auth/me/").json()["user"])
+
+    def test_update_name(self):
+        res = self.csrf("patch", "/api/auth/me/", {"name": "  Ana Petrova "})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["user"]["name"], "Ana Petrova")
+
+    def test_blank_name_is_rejected(self):
+        res = self.csrf("patch", "/api/auth/me/", {"name": "   "})
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.json()["name"], ["Enter your name."])
+
+    def test_cannot_change_email_or_access(self):
+        self.csrf("patch", "/api/auth/me/", {"email": "x@example.com", "is_staff": True})
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, "ana@example.com")
+        self.assertFalse(self.user.is_staff)
+
+    def test_update_requires_login(self):
+        self.client.logout()
+        self.assertEqual(self.csrf("patch", "/api/auth/me/", {"name": "X"}).status_code, 403)
+
+    def test_change_password_keeps_session(self):
+        new = "another-strong-pass-42"
+        res = self.csrf("post", "/api/auth/password/", {"current_password": PASSWORD, "new_password": new})
+        self.assertEqual(res.status_code, 204)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(new))
+        self.assertEqual(self.client.get("/api/auth/me/").json()["user"]["email"], "ana@example.com")
+
+    def test_change_password_checks_current_and_strength(self):
+        res = self.csrf("post", "/api/auth/password/", {"current_password": "nope", "new_password": "123"})
+        self.assertEqual(res.status_code, 400)
+        errors = res.json()
+        self.assertEqual(errors["current_password"], ["Your current password is incorrect."])
+        self.assertIn("new_password", errors)
+
+
+class UserUuidTests(APITestCase):
+    def test_users_get_distinct_time_ordered_uuid7s(self):
+        first = User.objects.create_user("a@example.com", PASSWORD, name="A")
+        second = User.objects.create_user("b@example.com", PASSWORD, name="B")
+        self.assertEqual((first.uuid.version, second.uuid.version), (7, 7))
+        self.assertLess(first.uuid, second.uuid)
+
+    def test_me_exposes_uuid(self):
+        user = User.objects.create_user("a@example.com", PASSWORD, name="A")
+        self.client.force_login(user)
+        self.assertEqual(self.client.get("/api/auth/me/").json()["user"]["uuid"], str(user.uuid))
