@@ -18,14 +18,16 @@ Splitit helps people go to events together and find community and friends. Users
 backend/            Django project
   config/           settings, root urls, wsgi/asgi
   apps/api/         REST API app (urls mounted at /api/)
-  apps/users/       custom User (email login) + session auth API at /api/auth/
-  apps/events/      Event model (many-to-many with users)
+  apps/users/       custom User (email login, public UUIDv7 `uuid`) + session auth API at /api/auth/; user_from_url() guards /api/users/<uuid>/ routes
+  apps/events/      Event model (many-to-many with users); GET /api/users/<uuid>/events/
   apps/tags/        Tag model (many-to-many with events: tag.events / event.tags)
   apps/panel/       staff-only admin API at /api/panel/ (stats, users, events)
   apps/ai/          Gemini embedding client; saving a tag/event queues a task that fills its embedding
+  apps/circles/     SocialCircle model (many-to-many with users via Membership.interest); GET /api/users/<uuid>/circles/ (cached per user)
+  apps/connections/ Connection between users who shared events (strength += 1/(attendees-1) per event, counted after it ends by a worker task); `manage.py apply_connections [--rebuild]`
 frontend/           Vite React app
   src/App.tsx       layout (header, footer) and routes
-  src/pages/        Home (landing), Login, Register
+  src/pages/        Home (landing), Login, Register, Profile
   src/pages/panel/  admin control panel at /admin (staff only)
   src/components/   shared UI (form fields, auth card)
   src/api.ts        fetch helpers with CSRF handling
