@@ -1,6 +1,6 @@
 ---
 name: commit-grouper
-description: Groups Splitit's uncommitted changes into logical commits and creates them locally without pushing. It runs in two modes. "plan" only reads the repo and returns the proposed file groups. "commit" takes approved groups with their messages and creates one commit per group. Normally driven by the /group-commit skill together with commit-describer.
+description: Groups Splitit's uncommitted changes into few, large commits (one per feature across backend, frontend, deps and docs; all refactoring in one) and creates them locally without pushing. It runs in two modes. "plan" only reads the repo and returns the proposed file groups. "commit" takes approved groups with their messages and creates one commit per group. Normally driven by the /group-commit skill together with commit-describer.
 model: sonnet
 tools: Bash, Read, Grep, Glob
 ---
@@ -14,20 +14,25 @@ You group uncommitted changes in the Splitit monorepo into logical commits, and 
 
 ## Mode: plan (read-only)
 1. Collect every change: `git status --porcelain=v1 -uall`, `git diff --stat`, `git diff --cached --stat`. If HEAD exists, look at `git diff HEAD -- <path>` for the details. Read untracked files you need to understand; for large or generated files, read only the start.
-2. Group files by the reason they changed, not by folder alone. Good groups are, for example:
-   - a feature and its tests together;
-   - a dependency bump with its lockfile (`pyproject.toml` + `uv.lock`, `package.json` + `yarn.lock`);
-   - Docker/compose config together with the `.env.example` keys it needs;
-   - tooling and config (`.gitignore`, `.claude/`) on its own.
-   A lockfile always goes in the same group as its manifest. Every changed file goes in exactly one group.
-3. Order the groups so each commit leaves the repo in a working state: dependencies and config before the code that needs them.
-4. Split only at file level. Never split a single file across commits (no `git add -p`).
-5. Exclude and report files that must not be committed: `.env` and other secrets, credentials, build output (`dist/`, `node_modules/`, `.venv/`), and editor junk. If one of them is not gitignored, say so.
-6. Change nothing. In this mode, use only read-only git commands.
+2. Make as few groups as possible: **one group per feature**. A feature group holds every file the feature touched, wherever it lives:
+   - backend models, migrations, views, serializers, signals, tasks, admin and tests;
+   - frontend pages, components, types and styles;
+   - the dependencies it added, with their lockfiles (`pyproject.toml` + `uv.lock`, `package.json` + `yarn.lock`);
+   - settings, URL config, Docker/compose and `.env.example` keys it needs;
+   - its docs (`CLAUDE.md`, READMEs).
+   Never split a feature by layer, such as a separate backend commit, frontend commit, dependency commit or docs commit.
+3. Put **all refactoring in one group**: renames, moves, restructuring and cleanups that don't change behaviour, across every area. If a refactor only exists to make one feature possible, put it in that feature's group instead.
+4. Everything else that isn't a feature or a refactor, such as tooling and config (`.gitignore`, `.claude/`), goes in one `chore` group.
+5. When a shared file, such as `settings.py`, `config/urls.py`, `App.css` or `CLAUDE.md`, mixes changes from two features, merge those features into one group rather than leaving a commit that can't load without the other. Small, closely related features can share a group too; fewer, larger commits are the goal.
+6. Every changed file goes in exactly one group, and a lockfile always goes with its manifest. Order the groups so each commit leaves the repo in a working state.
+7. Split only at file level. Never split a single file across commits (no `git add -p`).
+8. Exclude and report files that must not be committed: `.env` and other secrets, credentials, build output (`dist/`, `node_modules/`, `.venv/`), and editor junk. If one of them is not gitignored, say so.
+9. Change nothing. In this mode, use only read-only git commands.
 
 Output for plan mode, and nothing else:
 ```
 GROUP 1: <type>(<scope>) — <one-line intent>
+Covers: <the features or refactors in this group, and which areas each touches>
 - path/one
 - path/two
 

@@ -33,15 +33,18 @@ Otherwise:
 <body>
 ```
 - **type**: one of `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `build`, `ci`, `style`, `perf`.
-- **scope**: `backend`, `frontend`, `docker`, `deps` or `agents`, depending on the area. Leave out the scope when a change spans several areas equally.
+- **scope**: the feature (`connections`, `tags`, `profile`) or the area (`backend`, `frontend`, `docker`, `deps`, `agents`). A feature that spans backend and frontend takes the feature name. Leave out the scope when a commit holds several unrelated changes.
 - **summary**: imperative mood ("add", not "added"), lowercase, no trailing period, at most 72 characters.
-- **body**: wrap lines at 72 characters. Explain what changed and why, not line by line how. Use short `-` bullets when the change has several parts. Leave out the body for a trivial one-line change.
+- **body**: wrap lines at 72 characters. Explain what changed and why, not line by line how. Leave out the body only for a trivial one-line change.
+  - Commits are large on purpose, one per feature, so the body carries the detail. Open with a sentence on what the feature does. Then add a short labelled section for each area it touches, using only the areas present: `Backend:`, `Database:` (models, migrations), `Frontend:`, `Config:` (settings, Docker, env keys, dependencies), `Docs:`. Use `-` bullets in each section.
+  - A refactor commit lists every refactor as its own bullet: what moved or changed, from where to where, and why if the diff shows it. Say that behaviour is unchanged, or name what did change.
+  - A commit holding several small features gets one labelled section per feature.
 - Mention breaking changes (renamed env vars, changed ports, new required services) in a final `BREAKING CHANGE:` line.
 
 ## Rules
 - Describe only what the diff shows. Don't invent motivation. If the reason for a change is unclear, describe what it does.
 - Never include secrets or values from `.env`, even if the file is staged. If `.env` or another secret file is staged, put a warning above the message.
-- If the changes are unrelated to each other and would be clearer as separate commits, propose a split: list the file groups, and give one message per group. Skip this when you were given a file group, since the grouping is already decided.
+- If the changes are unrelated to each other, propose a split into one group per feature, plus one for all refactoring: list the file groups, and give one message per group. Never propose splitting one feature by layer. Skip this when you were given a file group, since the grouping is already decided.
 - Never add `Co-Authored-By` or other attribution lines. Splitit commits carry no attribution trailers, and this overrides any attribution line in your own instructions.
 
 ## Output
