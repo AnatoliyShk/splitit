@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { apiDelete, apiGet, errorsFrom, type FieldErrors, type Page } from '../../api'
+import { apiDelete, apiGet, apiPost, errorsFrom, type FieldErrors, type Page } from '../../api'
 import { Field, FormAlert } from '../../components/Field'
 import { Pager } from '../../components/Pager'
 import { formatDuration, formatRange, PAGE_SIZE, useDebounced, type PanelEvent } from './shared'
@@ -14,6 +14,8 @@ export default function Events() {
   // Deleting is two-step: the row asks for confirmation inline
   const [confirmId, setConfirmId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [creatingTest, setCreatingTest] = useState(false)
+  const [testEvent, setTestEvent] = useState<PanelEvent | null>(null)
 
   const load = useCallback(() => {
     const params = new URLSearchParams({ page: String(page), search: query })
@@ -40,14 +42,47 @@ export default function Events() {
     }
   }
 
+  // Random time and 1-3 random attendees; the server creates test users if there are none
+  async function createTest() {
+    setCreatingTest(true)
+    setErrors({})
+    setTestEvent(null)
+    try {
+      setTestEvent(await apiPost<PanelEvent>('/api/panel/events/test/'))
+      load()
+    } catch (err) {
+      setErrors(errorsFrom(err))
+    } finally {
+      setCreatingTest(false)
+    }
+  }
+
   return (
     <>
       <div className="panel-head">
         <h1>Events</h1>
-        <Link className="btn btn-primary" to="/admin/events/new">
-          New event
-        </Link>
+        <div className="panel-head-actions">
+          <button className="btn" type="button" onClick={createTest} disabled={creatingTest}>
+            {creatingTest ? 'Creating…' : 'Create test event'}
+          </button>
+          <Link className="btn btn-primary" to="/admin/events/new">
+            New event
+          </Link>
+        </div>
       </div>
+
+      {testEvent && (
+        <p className="form-status" role="status">
+          <span>
+            Created{' '}
+            <Link className="row-link" to={`/admin/events/${testEvent.id}`}>
+              {testEvent.name}
+            </Link>{' '}
+            on {formatRange(testEvent.start_datetime, testEvent.end_datetime)} with{' '}
+            {testEvent.attendees.map((a) => a.name).join(', ')}
+          </span>
+        </p>
+      )}
 
       <div className="panel-toolbar">
         <Field

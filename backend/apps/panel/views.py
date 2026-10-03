@@ -1,10 +1,14 @@
+import random
+import uuid
 from datetime import timedelta
 
 from django.core.cache import cache
+from django.db import transaction
 from django.db.models import Count, Q
 from django.db.models.functions import Lower
 from django.utils import timezone
-from rest_framework import mixins, viewsets
+from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import SearchFilter
 from rest_framework.pagination import PageNumberPagination
@@ -87,6 +91,47 @@ class UserViewSet(
         serializer.save()
 
 
+TEST_EVENT_NAMES = [
+    "Jazz night",
+    "Board games",
+    "Morning run",
+    "Pub quiz",
+    "Film club",
+    "Climbing session",
+    "Food market",
+    "Gallery opening",
+]
+TEST_USER_NAMES = ["Alex", "Sam", "Jordan", "Taylor", "Morgan", "Riley", "Casey", "Jamie"]
+
+
+def pick_test_attendees(count):
+    """`count` random non-staff users, creating test accounts when there aren't enough."""
+    users = list(User.objects.filter(is_staff=False, is_active=True).order_by("?")[:count])
+    for _ in range(count - len(users)):
+        # No password: these accounts exist only to fill events and can't log in
+        users.append(
+            User.objects.create_user(
+                f"test-{uuid.uuid4().hex[:8]}@example.com", name=f"{random.choice(TEST_USER_NAMES)} (test)"
+            )
+        )
+    return users
+
+
+def create_test_event():
+    """An event at a random time in the next 30 days with 1-3 random attendees."""
+    # On the quarter hour, so the times look like a real schedule
+    now = timezone.now()
+    quarter = now.replace(minute=now.minute - now.minute % 15, second=0, microsecond=0)
+    start = quarter + timedelta(minutes=15 * random.randint(4, 30 * 24 * 4))
+    end = start + timedelta(minutes=30 * random.randint(2, 12))
+    with transaction.atomic():
+        event = Event.objects.create(
+            name=f"Test: {random.choice(TEST_EVENT_NAMES)}", start_datetime=start, end_datetime=end
+        )
+        event.users.add(*pick_test_attendees(random.randint(1, 3)))
+    return event
+
+
 class EventViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
     serializer_class = PanelEventSerializer
@@ -96,6 +141,12 @@ class EventViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Event.objects.prefetch_related("users").order_by("-start_datetime", "-id")
+
+    @action(detail=False, methods=["post"], url_path="test")
+    def create_test(self, request):
+        """POST /api/panel/events/test/: create a test event (see create_test_event)."""
+        event = create_test_event()
+        return Response(self.get_serializer(event).data, status=status.HTTP_201_CREATED)
 
 
 class TagViewSet(viewsets.ModelViewSet):

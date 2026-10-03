@@ -141,6 +141,32 @@ class EventManagementTests(PanelTestCase):
         )
         self.assertIsNone(res.json()["duration_minutes"])
 
+    def test_create_test_event_with_existing_users(self):
+        res = self.client.post("/api/panel/events/test/")
+        self.assertEqual(res.status_code, 201)
+        event = Event.objects.get(pk=res.json()["id"])
+        self.assertGreater(event.start_datetime, timezone.now())
+        self.assertGreater(event.end_datetime, event.start_datetime)
+        attendees = list(event.users.all())
+        self.assertTrue(1 <= len(attendees) <= 3)
+        # Staff are never picked; missing attendees are made up as test accounts
+        self.assertNotIn(self.admin, attendees)
+        self.assertIn(self.member, attendees)
+
+    def test_create_test_event_creates_users_when_there_are_none(self):
+        self.member.delete()
+        res = self.client.post("/api/panel/events/test/")
+        attendees = res.json()["attendees"]
+        self.assertTrue(1 <= len(attendees) <= 3)
+        created = User.objects.filter(email__startswith="test-")
+        self.assertEqual(created.count(), len(attendees))
+        self.assertFalse(any(u.has_usable_password() for u in created))
+
+    def test_create_test_event_is_staff_only(self):
+        self.client.force_login(self.member)
+        self.assertEqual(self.client.post("/api/panel/events/test/").status_code, 403)
+        self.assertFalse(Event.objects.exists())
+
 
 class TagManagementTests(PanelTestCase):
     def test_list_is_sorted_case_insensitively_with_event_counts(self):

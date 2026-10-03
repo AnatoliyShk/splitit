@@ -601,6 +601,12 @@ h1 mark {
   font-size: clamp(30px, 4vw, 40px);
 }
 
+.panel-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .panel-section {
   display: flex;
   flex-direction: column;
