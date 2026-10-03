@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router'
 import './App.css'
 import { useAuth } from './auth'
+import Explore from './pages/Explore'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Profile from './pages/Profile'
@@ -19,9 +20,20 @@ function HeaderActions() {
 
   if (loading) return null
 
+  const explore = (
+    <NavLink className="btn btn-ghost btn-explore" to="/explore">
+      <svg className="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="m15.5 8.5-2 5-5 2 2-5z" />
+      </svg>
+      <span className="btn-label">Explore</span>
+    </NavLink>
+  )
+
   if (user) {
     return (
       <div className="header-actions">
+        {explore}
         {user.is_staff && (
           <NavLink className="btn btn-ghost" to="/admin">
             Admin
@@ -44,9 +56,12 @@ function HeaderActions() {
   if (pathname === '/login' || pathname === '/register') return null
 
   return (
-    <Link className="btn btn-ghost" to="/login">
-      Log in
-    </Link>
+    <div className="header-actions">
+      {explore}
+      <Link className="btn btn-ghost" to="/login">
+        Log in
+      </Link>
+    </div>
   )
 }
 
@@ -78,6 +93,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/explore" element={<Explore />} />
           <Route path="/admin" element={<PanelLayout />}>
             <Route index element={<Overview />} />
             <Route path="users" element={<Users />} />

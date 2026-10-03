@@ -125,6 +125,20 @@ a.btn {
   border-radius: 50%;
 }
 
+.btn-explore {
+  gap: 8px;
+}
+
+.btn-icon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
 /* Header buttons stay highlighted while you're on their page (Admin, Profile) */
 .header-actions .btn[aria-current='page'] {
   color: var(--on-pastel);
@@ -1211,7 +1225,13 @@ h1 mark {
     padding: 0 6px;
   }
 
-  .btn-profile .btn-label {
+  /* Explore shrinks to its compass icon too */
+  .header .btn-explore {
+    padding: 0 10px;
+  }
+
+  .btn-profile .btn-label,
+  .btn-explore .btn-label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -1415,4 +1435,122 @@ h1 mark {
 
 .notice-card strong {
   color: var(--text);
+}
+
+/* Explore page: one event card at a time, accept or decline */
+
+.explore {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 32px 0 72px;
+}
+
+.explore-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
+.explore-head h1 {
+  font-size: clamp(34px, 5vw, 48px);
+}
+
+.explore-head p {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.explore .form-alert {
+  width: 100%;
+}
+
+.explore-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  min-height: 320px;
+  padding: 32px;
+  background: var(--surface);
+  border: var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+
+.explore-card h2 {
+  font-size: clamp(26px, 4vw, 34px);
+  overflow-wrap: anywhere;
+}
+
+.explore-day {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 4px;
+  font: 800 30px/1 var(--heading);
+  color: var(--on-pastel);
+  background: var(--primary);
+  border: var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+
+.explore-day small {
+  font: 700 12px/1 var(--sans);
+  text-transform: uppercase;
+}
+
+.explore-when {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.explore-going {
+  margin-top: auto;
+  padding-top: 8px;
+  font-weight: 700;
+}
+
+.explore-done {
+  min-height: 0;
+}
+
+.explore-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .explore-card {
+    animation: explore-in 180ms ease-out;
+  }
+}
+
+@keyframes explore-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@media (max-width: 480px) {
+  .explore {
+    padding: 20px 0 56px;
+  }
+
+  .explore-card {
+    min-height: 280px;
+    padding: 24px 20px;
+  }
 }
