@@ -23,11 +23,10 @@ backend/            Django project
   apps/tags/        Tag model (many-to-many with events: tag.events / event.tags)
   apps/panel/       staff-only admin API at /api/panel/ (stats, users, events)
   apps/ai/          Gemini embedding client; saving a tag/event queues a task that fills its embedding
-  apps/circles/     SocialCircle model (many-to-many with users via Membership.interest); GET /api/users/<uuid>/circles/ (cached per user)
-  apps/connections/ Connection between users who shared events (strength += 1/(attendees-1) per event, counted after it ends by a worker task); `manage.py apply_connections [--rebuild]`
+  apps/connections/ Connection between users who shared events (strength += 1/(attendees-1) per event, counted after it ends by a worker task); GET /api/users/<uuid>/connections/ and .../connections/graph/ (network for the profile graph); `manage.py apply_connections [--rebuild]`
 frontend/           Vite React app
   src/App.tsx       layout (header, footer) and routes
-  src/pages/        Home (landing), Login, Register, Profile, Explore (accept/decline upcoming events)
+  src/pages/        Home (landing), Login, Register, Profile, Settings (name/password, linked from Profile), Explore (accept/decline upcoming events)
   src/pages/panel/  admin control panel at /admin (staff only)
   src/components/   shared UI (form fields, auth card)
   src/api.ts        fetch helpers with CSRF handling

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type RefObject, type SubmitEvent } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, Navigate, useLocation } from 'react-router'
-import { apiGet, apiPatch, apiPost, errorsFrom, type FieldErrors, type User } from '../api'
+import { apiGet, errorsFrom, type FieldErrors, type User } from '../api'
 import { useAuth } from '../auth'
-import { Field, FormAlert } from '../components/Field'
+import { FormAlert } from '../components/Field'
 import { formatDate, formatRange } from './panel/shared'
 
 type MyEvent = {
@@ -14,153 +14,10 @@ type MyEvent = {
   tags: string[]
 }
 
-type MyCircle = {
-  id: number
-  name: string
-  interest: number
-}
+// Sigma and graphology are big; load them only when someone has connections to draw
+const ConnectionsGraph = lazy(() => import('../components/ConnectionsGraph'))
 
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'short' })
-
-// After a failed submit, move focus to the first invalid field so it's announced
-function useFocusFirstInvalid(ref: RefObject<HTMLFormElement | null>, errors: FieldErrors) {
-  useEffect(() => {
-    ref.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus()
-  }, [ref, errors])
-}
-
-function DetailsForm({ user }: { user: User }) {
-  const { setUser } = useAuth()
-  const formRef = useRef<HTMLFormElement>(null)
-  const [name, setName] = useState(user.name)
-  const [errors, setErrors] = useState<FieldErrors>({})
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  useFocusFirstInvalid(formRef, errors)
-
-  async function onSubmit(e: SubmitEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setSaving(true)
-    setErrors({})
-    setSaved(false)
-    try {
-      const d = await apiPatch<{ user: User }>('/api/auth/me/', { name })
-      setUser(d.user)
-      setName(d.user.name)
-      setSaved(true)
-    } catch (err) {
-      setErrors(errorsFrom(err))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <section className="profile-card" aria-labelledby="details-title">
-      <h2 id="details-title">Your details</h2>
-      <form ref={formRef} className="form" onSubmit={onSubmit} noValidate>
-        <FormAlert messages={errors.non_field_errors} />
-        <Field
-          id="name"
-          label="Name"
-          autoComplete="name"
-          required
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value)
-            setSaved(false)
-          }}
-          errors={errors.name}
-        />
-        <Field
-          id="email"
-          label="Email"
-          type="email"
-          readOnly
-          value={user.email}
-          hint="Your email is your login. Ask an admin if it needs to change."
-        />
-        <div className="form-actions">
-          {saved && (
-            <p className="form-status" role="status">
-              Saved
-            </p>
-          )}
-          <button className="btn btn-confirm" type="submit" disabled={saving || name.trim() === user.name}>
-            {saving ? 'Saving…' : 'Save changes'}
-          </button>
-        </div>
-      </form>
-    </section>
-  )
-}
-
-function PasswordForm() {
-  const formRef = useRef<HTMLFormElement>(null)
-  const [current, setCurrent] = useState('')
-  const [next, setNext] = useState('')
-  const [errors, setErrors] = useState<FieldErrors>({})
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  useFocusFirstInvalid(formRef, errors)
-
-  async function onSubmit(e: SubmitEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setSaving(true)
-    setErrors({})
-    setSaved(false)
-    try {
-      await apiPost('/api/auth/password/', { current_password: current, new_password: next })
-      setCurrent('')
-      setNext('')
-      setSaved(true)
-    } catch (err) {
-      setErrors(errorsFrom(err))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <section className="profile-card" aria-labelledby="password-title">
-      <h2 id="password-title">Change password</h2>
-      <form ref={formRef} className="form" onSubmit={onSubmit} noValidate>
-        <FormAlert messages={errors.non_field_errors} />
-        <Field
-          id="current_password"
-          label="Current password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={current}
-          onChange={(e) => setCurrent(e.target.value)}
-          errors={errors.current_password}
-        />
-        <Field
-          id="new_password"
-          label="New password"
-          type="password"
-          autoComplete="new-password"
-          required
-          hint="At least 8 characters, not too common and not only numbers."
-          value={next}
-          onChange={(e) => setNext(e.target.value)}
-          errors={errors.new_password}
-        />
-        <div className="form-actions">
-          {saved && (
-            <p className="form-status" role="status">
-              Password updated
-            </p>
-          )}
-          <button className="btn btn-confirm" type="submit" disabled={saving || !current || !next}>
-            {saving ? 'Updating…' : 'Update password'}
-          </button>
-        </div>
-      </form>
-    </section>
-  )
-}
 
 function EventRows({ events }: { events: MyEvent[] }) {
   return (
@@ -247,45 +104,6 @@ function MyEvents({ user }: { user: User }) {
   )
 }
 
-const interestFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 })
-
-function MyCircles({ user }: { user: User }) {
-  const [circles, setCircles] = useState<MyCircle[] | null>(null)
-  const [errors, setErrors] = useState<FieldErrors>({})
-
-  useEffect(() => {
-    // Already sorted by interest, highest first
-    apiGet<MyCircle[]>(`/api/users/${user.uuid}/circles/`)
-      .then(setCircles)
-      .catch((err) => setErrors(errorsFrom(err)))
-  }, [user.uuid])
-
-  return (
-    <section className="profile-card" aria-labelledby="circles-title">
-      <h2 id="circles-title">Your social circles</h2>
-      <FormAlert messages={errors.non_field_errors} />
-      {!circles && !errors.non_field_errors && <p className="muted">Loading…</p>}
-      {circles && circles.length === 0 && (
-        <div className="empty">
-          <p>You're not in any social circles yet.</p>
-        </div>
-      )}
-      {circles && circles.length > 0 && (
-        <ul className="event-list">
-          {circles.map((c) => (
-            <li key={c.id}>
-              <span className="event-info">
-                <strong>{c.name}</strong>
-              </span>
-              <span className="event-going">Interest {interestFormat.format(c.interest)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  )
-}
-
 type MyConnection = {
   uuid: string
   name: string
@@ -318,6 +136,11 @@ function MyConnections({ user }: { user: User }) {
             Find events
           </Link>
         </div>
+      )}
+      {connections && connections.length > 0 && (
+        <Suspense fallback={<div className="connections-graph" aria-hidden="true" />}>
+          <ConnectionsGraph userUuid={user.uuid} />
+        </Suspense>
       )}
       {connections && connections.length > 0 && (
         <ul className="event-list">
@@ -358,15 +181,10 @@ export default function Profile() {
           <span className="tag">Member since {formatDate(user.date_joined)}</span>
           {user.is_staff && <span className="tag">Admin</span>}
         </span>
+        <Link className="btn btn-sm" to="/profile/settings">
+          Settings
+        </Link>
       </div>
-
-      <div className="profile-grid">
-        {/* Keyed by user id so the form resets if a different user logs in */}
-        <DetailsForm key={user.id} user={user} />
-        <PasswordForm />
-      </div>
-
-      <MyCircles user={user} />
 
       <MyConnections user={user} />
 

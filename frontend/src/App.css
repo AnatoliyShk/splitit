@@ -1344,6 +1344,27 @@ h1 mark {
   margin-top: 6px;
 }
 
+.connections-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.connections-figure figcaption {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* Sigma draws into this box; it needs an explicit height */
+.connections-graph {
+  height: 380px;
+  background: var(--bg);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
 .input[readonly] {
   color: var(--text-muted);
   background: var(--bg);
@@ -1396,6 +1417,10 @@ h1 mark {
 
   .profile-card {
     padding: 22px 18px;
+  }
+
+  .connections-graph {
+    height: 300px;
   }
 }
 

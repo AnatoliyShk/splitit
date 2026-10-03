@@ -243,3 +243,53 @@ class UserConnectionsApiTests(APITestCase):
         Connection.objects.update(strength=9.0)
         call_command("apply_connections", "--rebuild", stdout=StringIO())
         self.assertEqual(self.get()[0]["strength"], 1.0)
+
+
+class UserConnectionsGraphApiTests(APITestCase):
+    def setUp(self):
+        self.ana, self.ben, self.cy, self.dee, self.eve = make_users("Ana", "Ben", "Cy", "Dee", "Eve")
+        self.client.force_login(self.ana)
+
+    def url(self, user=None):
+        return f"/api/users/{(user or self.ana).uuid}/connections/graph/"
+
+    def get(self):
+        data = self.client.get(self.url()).json()
+        names = {n["uuid"]: n["name"] for n in data["nodes"]}
+        degrees = {n["name"]: n["degree"] for n in data["nodes"]}
+        edges = {frozenset((names[e["source"]], names[e["target"]])): e["strength"] for e in data["edges"]}
+        return degrees, edges
+
+    def test_requires_login_and_hides_other_users(self):
+        self.assertEqual(self.client.get(self.url(self.ben)).status_code, 404)
+        self.client.logout()
+        self.assertEqual(self.client.get(self.url()).status_code, 403)
+
+    def test_alone(self):
+        self.assertEqual(self.get(), ({"Ana": 0}, {}))
+
+    def test_includes_links_between_connections_and_their_connections(self):
+        apply_event(past_event(self.ana, self.ben, self.cy).pk)  # Ana, Ben, Cy all +0.5
+        apply_event(past_event(self.ben, self.dee).pk)  # Ben–Dee +1; Ana doesn't know Dee
+        apply_event(past_event(self.dee, self.eve).pk)  # two steps from Ana's connections: left out
+        degrees, edges = self.get()
+        self.assertEqual(degrees, {"Ana": 0, "Ben": 1, "Cy": 1, "Dee": 2})
+        self.assertEqual(
+            edges,
+            {
+                frozenset(("Ana", "Ben")): 0.5,
+                frozenset(("Ana", "Cy")): 0.5,
+                frozenset(("Ben", "Cy")): 0.5,
+                frozenset(("Ben", "Dee")): 1.0,
+            },
+        )
+        self.assertNotIn("email", self.client.get(self.url()).json()["nodes"][1])
+
+    def test_keeps_each_connections_strongest_outside_links(self):
+        outsiders = make_users("O1", "O2", "O3", "O4")
+        apply_event(past_event(self.ana, self.ben).pk)
+        for i, o in enumerate(outsiders):
+            for _ in range(i + 1):  # O4 is Ben's strongest outside link, O1 his weakest
+                apply_event(past_event(self.ben, o).pk)
+        degrees, _ = self.get()
+        self.assertEqual({n for n, d in degrees.items() if d == 2}, {"O2", "O3", "O4"})

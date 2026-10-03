@@ -7,6 +7,7 @@ import Home from './pages/Home'
 import Login from './pages/Login'
 import Profile from './pages/Profile'
 import Register from './pages/Register'
+import Settings from './pages/Settings'
 import EventForm from './pages/panel/EventForm'
 import Events from './pages/panel/Events'
 import Overview from './pages/panel/Overview'
@@ -93,6 +94,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/profile/settings" element={<Settings />} />
           <Route path="/explore" element={<Explore />} />
           <Route path="/admin" element={<PanelLayout />}>
             <Route index element={<Overview />} />
