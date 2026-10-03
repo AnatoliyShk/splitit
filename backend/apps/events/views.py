@@ -1,5 +1,7 @@
-from django.db.models import Count
-from rest_framework import serializers
+from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -33,3 +35,37 @@ class UserEventsView(APIView):
             .order_by("start_datetime")
         )
         return Response(UserEventSerializer(events, many=True).data)
+
+
+def upcoming_events():
+    """Events that haven't ended yet (or started, when they have no end)."""
+    now = timezone.now()
+    return Event.objects.filter(Q(end_datetime__gte=now) | Q(end_datetime=None, start_datetime__gte=now))
+
+
+class ExploreEventsView(APIView):
+    """GET /api/events/explore/: upcoming events the requester isn't going to yet, soonest first."""
+
+    permission_classes = [IsAuthenticated]
+    limit = 50
+
+    def get(self, request):
+        events = (
+            upcoming_events()
+            .exclude(users=request.user)
+            .annotate(attendees_count=Count("users"))
+            .prefetch_related("tags")
+            .order_by("start_datetime", "id")[: self.limit]
+        )
+        return Response(UserEventSerializer(events, many=True).data)
+
+
+class JoinEventView(APIView):
+    """POST /api/events/<id>/join/: the requester goes to an upcoming event."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, event_id):
+        event = get_object_or_404(upcoming_events(), id=event_id)
+        event.users.add(request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)

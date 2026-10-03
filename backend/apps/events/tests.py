@@ -93,3 +93,45 @@ class UserEventsApiTests(TestCase):
         self.me.save()
         data = self.client.get(self.url(self.other)).json()
         self.assertEqual([e["name"] for e in data], ["Not mine", "Later"])
+
+
+class ExploreApiTests(TestCase):
+    def setUp(self):
+        from datetime import timedelta
+
+        from apps.users.models import User
+
+        self.me = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana")
+        self.other = User.objects.create_user("ben@example.com", "correct-horse-battery", name="Ben")
+        now = timezone.now()
+        self.later = Event.objects.create(name="Later", start_datetime=now + timedelta(days=5))
+        self.sooner = Event.objects.create(name="Sooner", start_datetime=now + timedelta(days=1))
+        self.running = Event.objects.create(
+            name="Running", start_datetime=now - timedelta(hours=1), end_datetime=now + timedelta(hours=1)
+        )
+        self.mine = Event.objects.create(name="Mine", start_datetime=now + timedelta(days=2))
+        self.past = Event.objects.create(name="Past", start_datetime=now - timedelta(days=1))
+        self.mine.users.add(self.me)
+        self.later.users.add(self.other)
+        self.client.force_login(self.me)
+
+    def test_lists_upcoming_events_im_not_going_to_soonest_first(self):
+        data = self.client.get("/api/events/explore/").json()
+        self.assertEqual([e["name"] for e in data], ["Running", "Sooner", "Later"])
+        self.assertEqual(data[2]["attendees_count"], 1)
+
+    def test_join_adds_me_and_drops_the_event_from_explore(self):
+        res = self.client.post(f"/api/events/{self.sooner.id}/join/")
+        self.assertEqual(res.status_code, 204)
+        self.assertTrue(self.sooner.users.filter(id=self.me.id).exists())
+        names = [e["name"] for e in self.client.get("/api/events/explore/").json()]
+        self.assertNotIn("Sooner", names)
+
+    def test_cannot_join_past_or_unknown_events(self):
+        self.assertEqual(self.client.post(f"/api/events/{self.past.id}/join/").status_code, 404)
+        self.assertEqual(self.client.post("/api/events/999999/join/").status_code, 404)
+
+    def test_requires_login(self):
+        self.client.logout()
+        self.assertEqual(self.client.get("/api/events/explore/").status_code, 403)
+        self.assertEqual(self.client.post(f"/api/events/{self.sooner.id}/join/").status_code, 403)
