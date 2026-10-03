@@ -5,40 +5,62 @@ import { Field, FormAlert } from '../../components/Field'
 import { Pager } from '../../components/Pager'
 import { formatDuration, formatRange, PAGE_SIZE, useDebounced, type PanelEvent } from './shared'
 
+// Not over yet: same rule as the server (an event with no end is over once it starts)
+function isUpcoming(e: PanelEvent) {
+  return new Date(e.end_datetime ?? e.start_datetime).getTime() > Date.now()
+}
+
 export default function Events() {
   const [search, setSearch] = useState('')
   const query = useDebounced(search.trim())
   const [page, setPage] = useState(1)
   const [data, setData] = useState<Page<PanelEvent> | null>(null)
   const [errors, setErrors] = useState<FieldErrors>({})
-  // Deleting is two-step: the row asks for confirmation inline
-  const [confirmId, setConfirmId] = useState<number | null>(null)
-  const [deletingId, setDeletingId] = useState<number | null>(null)
+  // Deleting and finishing are two-step: the row asks for confirmation inline
+  const [confirm, setConfirm] = useState<{ id: number; action: 'delete' | 'finish' } | null>(null)
+  const [busyId, setBusyId] = useState<number | null>(null)
   const [creatingTest, setCreatingTest] = useState(false)
   const [testEvent, setTestEvent] = useState<PanelEvent | null>(null)
 
   const load = useCallback(() => {
     const params = new URLSearchParams({ page: String(page), search: query })
-    apiGet<Page<PanelEvent>>(`/api/panel/events/?${params}`)
+    return apiGet<Page<PanelEvent>>(`/api/panel/events/?${params}`)
       .then(setData)
       .catch((err) => setErrors(errorsFrom(err)))
   }, [page, query])
 
-  useEffect(load, [load])
+  useEffect(() => {
+    load()
+  }, [load])
 
   async function remove(event: PanelEvent) {
-    setDeletingId(event.id)
+    setBusyId(event.id)
     setErrors({})
     try {
       await apiDelete(`/api/panel/events/${event.id}/`)
-      setConfirmId(null)
+      setConfirm(null)
       // Step back a page if this deleted the last row on it
       if (data?.results.length === 1 && page > 1) setPage(page - 1)
       else load()
     } catch (err) {
       setErrors(errorsFrom(err))
     } finally {
-      setDeletingId(null)
+      setBusyId(null)
+    }
+  }
+
+  // Ends the event now; the worker then counts connections between its attendees
+  async function finish(event: PanelEvent) {
+    setBusyId(event.id)
+    setErrors({})
+    try {
+      await apiPost(`/api/panel/events/${event.id}/finish/`)
+      await load()
+      setConfirm(null)
+    } catch (err) {
+      setErrors(errorsFrom(err))
+    } finally {
+      setBusyId(null)
     }
   }
 
@@ -48,8 +70,10 @@ export default function Events() {
     setErrors({})
     setTestEvent(null)
     try {
-      setTestEvent(await apiPost<PanelEvent>('/api/panel/events/test/'))
-      load()
+      const event = await apiPost<PanelEvent>('/api/panel/events/test/')
+      // Refresh first, so the message never points at a row the table doesn't show yet
+      await load()
+      setTestEvent(event)
     } catch (err) {
       setErrors(errorsFrom(err))
     } finally {
@@ -137,26 +161,40 @@ export default function Events() {
                 </td>
                 <td data-label="Going">{e.attendees.length}</td>
                 <td className="row-actions">
-                  {confirmId === e.id ? (
-                    <span className="confirm" role="group" aria-label={`Delete ${e.name}?`}>
-                      <span className="confirm-text">Delete?</span>
-                      <button className="btn btn-sm" onClick={() => setConfirmId(null)} autoFocus>
+                  {confirm?.id === e.id ? (
+                    <span
+                      className="confirm"
+                      role="group"
+                      aria-label={`${confirm.action === 'delete' ? 'Delete' : 'Finish'} ${e.name}?`}
+                    >
+                      <span className="confirm-text">{confirm.action === 'delete' ? 'Delete?' : 'Finish now?'}</span>
+                      <button className="btn btn-sm" onClick={() => setConfirm(null)} autoFocus>
                         Keep
                       </button>
-                      <button
-                        className="btn btn-sm btn-danger"
-                        disabled={deletingId === e.id}
-                        onClick={() => remove(e)}
-                      >
-                        Delete
-                      </button>
+                      {confirm.action === 'delete' ? (
+                        <button className="btn btn-sm btn-danger" disabled={busyId === e.id} onClick={() => remove(e)}>
+                          Delete
+                        </button>
+                      ) : (
+                        <button className="btn btn-sm btn-confirm" disabled={busyId === e.id} onClick={() => finish(e)}>
+                          Finish
+                        </button>
+                      )}
                     </span>
                   ) : (
                     <>
+                      {isUpcoming(e) && (
+                        <button className="btn btn-sm" onClick={() => setConfirm({ id: e.id, action: 'finish' })}>
+                          Finish
+                        </button>
+                      )}
                       <Link className="btn btn-sm" to={`/admin/events/${e.id}`}>
                         Edit
                       </Link>
-                      <button className="btn btn-sm btn-danger" onClick={() => setConfirmId(e.id)}>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => setConfirm({ id: e.id, action: 'delete' })}
+                      >
                         Delete
                       </button>
                     </>

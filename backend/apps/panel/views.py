@@ -9,7 +9,7 @@ from django.db.models.functions import Lower
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.filters import SearchFilter
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAdminUser
@@ -141,6 +141,21 @@ class EventViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Event.objects.prefetch_related("users").order_by("-start_datetime", "-id")
+
+    @action(detail=True, methods=["post"])
+    def finish(self, request, pk=None):
+        """POST /api/panel/events/<id>/finish/: end the event now, so its connections get counted."""
+        event = self.get_object()
+        now = timezone.now()
+        if event.ends_at <= now:
+            raise ValidationError({"non_field_errors": ["This event is already over."]})
+        if event.start_datetime >= now:
+            # Not started yet: move it back so it ends now, keeping its length (an hour if it has none)
+            event.start_datetime = now - (event.duration or timedelta(hours=1))
+        event.end_datetime = now
+        # A full save, so post_save schedules the connections count (see apps.connections.signals)
+        event.save()
+        return Response(self.get_serializer(event).data)
 
     @action(detail=False, methods=["post"], url_path="test")
     def create_test(self, request):

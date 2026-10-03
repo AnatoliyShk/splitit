@@ -141,6 +141,47 @@ class EventManagementTests(PanelTestCase):
         )
         self.assertIsNone(res.json()["duration_minutes"])
 
+    def test_finish_running_event_ends_it_now(self):
+        start = timezone.now() - timedelta(hours=1)
+        event = Event.objects.create(name="Live", start_datetime=start, end_datetime=start + timedelta(hours=3))
+        res = self.client.post(f"/api/panel/events/{event.pk}/finish/")
+        self.assertEqual(res.status_code, 200)
+        event.refresh_from_db()
+        self.assertEqual(event.start_datetime, start)
+        self.assertLessEqual(event.end_datetime, timezone.now())
+
+    def test_finish_future_event_moves_it_to_end_now(self):
+        start = timezone.now() + timedelta(days=2)
+        event = Event.objects.create(name="Soon", start_datetime=start, end_datetime=start + timedelta(hours=2))
+        self.client.post(f"/api/panel/events/{event.pk}/finish/")
+        event.refresh_from_db()
+        self.assertLessEqual(event.end_datetime, timezone.now())
+        self.assertEqual(event.duration, timedelta(hours=2))
+
+    def test_finish_open_ended_future_event_lasts_an_hour(self):
+        event = Event.objects.create(name="Open", start_datetime=timezone.now() + timedelta(days=1))
+        self.client.post(f"/api/panel/events/{event.pk}/finish/")
+        event.refresh_from_db()
+        self.assertEqual(event.duration, timedelta(hours=1))
+
+    @override_settings(TASKS={"default": {"BACKEND": "django.tasks.backends.dummy.DummyBackend"}})
+    def test_finish_queues_the_connections_count_straight_away(self):
+        from django.tasks import default_task_backend
+
+        default_task_backend.clear()
+        event = Event.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(f"/api/panel/events/{event.pk}/finish/")
+        [job] = [r for r in default_task_backend.results if r.task.name == "apply_event_connections"]
+        self.assertEqual(job.args, [event.pk])
+        self.assertIsNone(job.task.run_after)
+
+    def test_finish_ended_event_is_rejected(self):
+        event = Event.objects.create(name="Past", start_datetime=timezone.now() - timedelta(days=1))
+        res = self.client.post(f"/api/panel/events/{event.pk}/finish/")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("non_field_errors", res.json())
+
     def test_create_test_event_with_existing_users(self):
         res = self.client.post("/api/panel/events/test/")
         self.assertEqual(res.status_code, 201)
