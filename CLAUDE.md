@@ -19,7 +19,7 @@ backend/            Django project
   config/           settings, root urls, wsgi/asgi
   apps/api/         REST API app (urls mounted at /api/)
   apps/users/       custom User (email login, public UUIDv7 `uuid`) + session auth API at /api/auth/; user_from_url() guards /api/users/<uuid>/ routes
-  apps/events/      Event model (many-to-many with users); GET /api/users/<uuid>/events/
+  apps/events/      Event model (many-to-many with users); GET /api/users/<uuid>/events/, GET /api/events/explore/, POST /api/events/<id>/join/
   apps/tags/        Tag model (many-to-many with events: tag.events / event.tags)
   apps/panel/       staff-only admin API at /api/panel/ (stats, users, events)
   apps/ai/          Gemini embedding client; saving a tag/event queues a task that fills its embedding
@@ -27,7 +27,7 @@ backend/            Django project
   apps/connections/ Connection between users who shared events (strength += 1/(attendees-1) per event, counted after it ends by a worker task); `manage.py apply_connections [--rebuild]`
 frontend/           Vite React app
   src/App.tsx       layout (header, footer) and routes
-  src/pages/        Home (landing), Login, Register, Profile
+  src/pages/        Home (landing), Login, Register, Profile, Explore (accept/decline upcoming events)
   src/pages/panel/  admin control panel at /admin (staff only)
   src/components/   shared UI (form fields, auth card)
   src/api.ts        fetch helpers with CSRF handling
