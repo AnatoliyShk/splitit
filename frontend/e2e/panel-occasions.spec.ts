@@ -70,7 +70,11 @@ test.describe('panel occasions list', () => {
 
     const jazz = row(page, 'Jazz night')
     await expect(jazz.getByRole('link', { name: 'Jazz night' })).toHaveAttribute('href', '/admin/occasions/10')
-    await expect(jazz).toContainText(/Oct 10, 2099, 6:00\sPM\s–\s9:00\sPM/)
+    // Date over times, with the full range on hover
+    const when = jazz.getByRole('cell').nth(1)
+    await expect(when.locator('time')).toHaveText('Oct 10, 2099')
+    await expect(when).toContainText(/6:00\sPM\s–\s9:00\sPM/)
+    await expect(when.locator('.when')).toHaveAttribute('title', /Oct 10, 2099, 6:00\sPM\s–\s9:00\sPM/)
     await expect(jazz).toContainText('3 h')
     await expect(jazz.getByRole('cell').nth(3)).toHaveText('2')
   })
@@ -81,6 +85,55 @@ test.describe('panel occasions list', () => {
     await expect(row(page, 'Open mic')).toContainText('Open')
     // 1590 minutes = 1 day 2 h 30 min
     await expect(row(page, 'Old picnic')).toContainText('1 day 2 h 30 min')
+  })
+
+  test('a multi-day occasion shows its end day without the year', async ({ page }) => {
+    await openOccasions(page)
+
+    const when = row(page, 'Old picnic').getByRole('cell').nth(1)
+    await expect(when.locator('time')).toHaveText('Jun 1, 2020')
+    await expect(when).toContainText(/10:00\sAM\s–\sJun 2, 12:30\sPM/)
+  })
+
+  test('shows status and every tag on one line under the name, keeping rows the same height', async ({ page }) => {
+    const occasions = seed()
+    occasions[0] = {
+      ...occasions[0],
+      cancelled_at: '2099-10-01T12:00:00Z',
+      tags: ['Jazz', 'Live music', 'Evening', 'Drinks', 'Downtown', 'Late night', 'Free entry'].map((name, i) => ({
+        id: i + 1,
+        name,
+      })),
+    }
+    await openOccasions(page, occasions)
+
+    const meta = row(page, 'Jazz night').getByRole('list', { name: 'Status and tags' })
+    await expect(meta.getByRole('listitem')).toHaveText([
+      'Cancelled',
+      'Jazz',
+      'Live music',
+      'Evening',
+      'Drinks',
+      'Downtown',
+      'Late night',
+      'Free entry',
+    ])
+    await expect(meta).toHaveAttribute('title', 'Cancelled, Jazz, Live music, Evening, Drinks, Downtown, Late night, Free entry')
+    // Below the name, not beside it
+    const name = await row(page, 'Jazz night').getByRole('link', { name: 'Jazz night' }).boundingBox()
+    const metaBox = await meta.boundingBox()
+    expect(metaBox!.y).toBeGreaterThanOrEqual(name!.y + name!.height - 1)
+
+    // A row with no tags or status is as tall as one with many (clientHeight leaves out the last row's missing border)
+    const heights = await Promise.all(
+      ['Jazz night', 'Open mic', 'Old picnic'].map((n) =>
+        row(page, n)
+          .getByRole('cell')
+          .first()
+          .evaluate((td) => td.clientHeight),
+      ),
+    )
+    expect(new Set(heights).size).toBe(1)
   })
 
   test('shows an empty state with a create link when there are no occasions', async ({ page }) => {

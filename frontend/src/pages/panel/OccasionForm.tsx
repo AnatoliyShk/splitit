@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload, errorsFrom, type FieldErrors } from '../../api'
 import { AttendeePicker } from '../../components/AttendeePicker'
 import { Field, FormAlert } from '../../components/Field'
+import { TagPicker } from '../../components/TagPicker'
 import { ImageSlots } from './ImageSlots'
 import {
   formatDate,
@@ -13,6 +14,7 @@ import {
   toLocalInput,
   type Attendee,
   type ImageChanges,
+  type OccasionTag,
   type OccasionImage,
   type PanelOccasion,
   type SavedImages,
@@ -38,6 +40,7 @@ export default function OccasionForm() {
   const [start, setStart] = useState('')
   const [end, setEnd] = useState('')
   const [attendees, setAttendees] = useState<Attendee[]>([])
+  const [tags, setTags] = useState<OccasionTag[]>([])
   const [savedImages, setSavedImages] = useState<SavedImages>({})
   const [imageChanges, setImageChanges] = useState<ImageChanges>({})
   const [imageErrors, setImageErrors] = useState<Record<number, string[]>>({})
@@ -55,6 +58,7 @@ export default function OccasionForm() {
         setStart(toLocalInput(o.start_datetime))
         setEnd(o.end_datetime ? toLocalInput(o.end_datetime) : '')
         setAttendees(o.attendees)
+        setTags(o.tags)
         setSavedImages(savedFrom(o.images))
       })
       .catch((err) => setErrors(errorsFrom(err)))
@@ -117,6 +121,7 @@ export default function OccasionForm() {
       start_datetime: fromLocalInput(start),
       end_datetime: fromLocalInput(end),
       users: attendees.map((a) => a.id),
+      tag_ids: tags.map((t) => t.id),
     }
     const existingId = id ?? createdId
     let occasionId: number
@@ -188,6 +193,7 @@ export default function OccasionForm() {
           />
         </div>
         <AttendeePicker value={attendees} onChange={setAttendees} errors={errors.users} />
+        <TagPicker value={tags} onChange={setTags} errors={errors.tag_ids} />
         <ImageSlots
           saved={savedImages}
           changes={imageChanges}

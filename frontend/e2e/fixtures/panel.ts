@@ -33,6 +33,7 @@ export type PanelOccasion = {
   duration_minutes: number | null
   cancelled_at: string | null
   attendees: Attendee[]
+  tags: { id: number; name: string }[]
   images: { order: number; url: string }[]
   created_at: string
   updated_at: string
@@ -99,6 +100,7 @@ export function panelOccasion(overrides: Partial<PanelOccasion> = {}): PanelOcca
     duration_minutes: 180,
     cancelled_at: null,
     attendees: [],
+    tags: [],
     images: [],
     created_at: '2025-05-01T12:00:00Z',
     updated_at: '2025-05-02T12:00:00Z',

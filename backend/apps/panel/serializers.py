@@ -31,6 +31,12 @@ class AttendeeSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "email")
 
 
+class OccasionTagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ("id", "name")
+
+
 class PanelOccasionImageSerializer(serializers.ModelSerializer):
     url = serializers.SerializerMethodField()
 
@@ -69,6 +75,11 @@ class PanelOccasionSerializer(serializers.ModelSerializer):
         queryset=User.objects.all(), many=True, required=False, write_only=True
     )
     attendees = AttendeeSerializer(source="users", many=True, read_only=True)
+    # Same for tags: written as ids, read back with names
+    tag_ids = serializers.PrimaryKeyRelatedField(
+        source="tags", queryset=Tag.objects.all(), many=True, required=False, write_only=True
+    )
+    tags = serializers.SerializerMethodField()
     # Order 0 is the main image; 1-3 the gallery. Changed through the images endpoints, not here
     images = PanelOccasionImageSerializer(many=True, read_only=True)
     duration_minutes = serializers.SerializerMethodField()
@@ -84,10 +95,17 @@ class PanelOccasionSerializer(serializers.ModelSerializer):
             "cancelled_at",
             "users",
             "attendees",
+            "tag_ids",
+            "tags",
             "images",
             "created_at",
             "updated_at",
         )
+
+    def get_tags(self, occasion) -> list[dict]:
+        # Sorted here rather than in the query, so a just-saved occasion comes back in the same order
+        tags = sorted(occasion.tags.all(), key=lambda t: t.name.lower())
+        return OccasionTagSerializer(tags, many=True).data
 
     def get_duration_minutes(self, occasion) -> int | None:
         duration = occasion.duration

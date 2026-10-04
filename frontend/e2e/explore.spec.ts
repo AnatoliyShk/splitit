@@ -57,6 +57,36 @@ test.describe('browsing', () => {
   })
 })
 
+test.describe('people you know', () => {
+  const known = (...names: string[]) =>
+    names.map((name, i) => ({ uuid: `0190a1b2-0000-7000-8000-00000000000${i}`, name }))
+
+  test('names the attendees the user has a connection with', async ({ page }) => {
+    const deck = [makeOccasion(11, 'Rooftop Yoga', 1, { attendees_count: 2, known_attendees: known('Grace Hopper') })]
+    await mockApi(page, { user: USER, explore: deck })
+    await page.goto('/explore')
+    const card = page.getByRole('article', { name: 'Rooftop Yoga' })
+    await expect(card).toContainText('2 people are going')
+    await expect(card).toContainText('You know 1 of them: Grace Hopper')
+  })
+
+  test('collapses long lists and says when the user knows everyone', async ({ page }) => {
+    const names = known('Alan', 'Barbara', 'Claude', 'Dennis')
+    const deck = [makeOccasion(11, 'Rooftop Yoga', 1, { attendees_count: 4, known_attendees: names })]
+    await mockApi(page, { user: USER, explore: deck })
+    await page.goto('/explore')
+    await expect(page.getByRole('article', { name: 'Rooftop Yoga' })).toContainText(
+      /You know all of them: Alan, Barbara, Claude,? and 1 more/,
+    )
+  })
+
+  test('says nothing when the user knows nobody going', async ({ page }) => {
+    await mockApi(page, { user: USER, explore: occasions })
+    await page.goto('/explore')
+    await expect(page.getByText(/You know/)).toHaveCount(0)
+  })
+})
+
 test.describe('decline', () => {
   test('skips to the next occasion without calling the API', async ({ page }) => {
     const mock = await mockApi(page, { user: USER, explore: occasions })
@@ -237,6 +267,67 @@ test.describe('accept', () => {
     await page.getByRole('button', { name: 'Accept' }).click()
     await expect(page.getByRole('alert')).toHaveText("Can't reach the server. Check your connection and try again.")
     await expect(page.getByRole('article', { name: 'Rooftop Yoga' })).toBeVisible()
+  })
+})
+
+test.describe('cancelled occasions', () => {
+  const explore = 'GET /api/occasions/explore/'
+
+  test('drops an occasion that was cancelled after the deck loaded when joining it fails', async ({ page }) => {
+    let deck = occasions
+    await mockApi(page, {
+      user: USER,
+      handlers: {
+        [explore]: (route) => route.fulfill({ json: { active_occasion: null, occasions: deck } }),
+        [join(11)]: (route) => {
+          deck = occasions.slice(1)
+          return route.fulfill({ status: 404, json: { detail: 'This occasion is no longer available.' } })
+        },
+      },
+    })
+    await page.goto('/explore')
+    await page.getByRole('button', { name: 'Accept' }).click()
+
+    await expect(page.getByRole('alert')).toHaveText('This occasion is no longer available.')
+    await expect(page.getByRole('article', { name: 'Board Game Night' })).toBeVisible()
+    await expect(page.getByText('1 of 2')).toBeVisible()
+  })
+
+  test('refreshes when the user comes back to the page, keeping declined occasions skipped', async ({ page }) => {
+    let deck = occasions
+    await mockApi(page, {
+      user: USER,
+      handlers: { [explore]: (route) => route.fulfill({ json: { active_occasion: null, occasions: deck } }) },
+    })
+    await page.goto('/explore')
+    await page.getByRole('button', { name: 'Decline' }).click()
+    await expect(page.getByRole('article', { name: 'Board Game Night' })).toBeVisible()
+
+    // Board Game Night is cancelled while the tab is in the background
+    deck = [occasions[0], occasions[2]]
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+
+    await expect(page.getByRole('article', { name: 'Hike Day' })).toBeVisible()
+    await expect(page.getByText('2 of 2')).toBeVisible()
+  })
+
+  test('shows the deck again when the active occasion is cancelled', async ({ page }) => {
+    let active: TestOccasion | null = makeOccasion(21, 'Pottery Class', 4)
+    await mockApi(page, {
+      user: USER,
+      handlers: {
+        [explore]: (route) =>
+          route.fulfill({ json: { active_occasion: active, occasions: active ? [] : occasions } }),
+      },
+    })
+    await page.goto('/explore')
+    await expect(page.getByText("You're going to", { exact: true })).toBeVisible()
+
+    active = null
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+
+    await expect(page.getByRole('article', { name: 'Rooftop Yoga' })).toBeVisible()
+    await expect(page.getByText("You're going to", { exact: true })).toHaveCount(0)
   })
 })
 

@@ -8,6 +8,7 @@ import {
   pageOf,
   paginate,
   panelOccasion,
+  panelTag,
   panelUser,
   PNG,
   type Attendee,
@@ -23,9 +24,16 @@ const people: Attendee[] = [
   { id: 4, name: '', email: 'noname@example.com' },
 ]
 
-// Every form test needs the user search (attendee picker) and the occasions list it returns to
+const tags = [
+  panelTag({ id: 1, name: 'Jazz', occasions_count: 3 }),
+  panelTag({ id: 2, name: 'Jazz brunch', occasions_count: 1 }),
+  panelTag({ id: 3, name: 'Hiking', occasions_count: 0 }),
+]
+
+// Every form test needs the user and tag searches (pickers) and the occasions list it returns to
 async function mockCommon(page: Page) {
   await mockStaffSession(page)
+  await mockApi(page, '/api/panel/tags/', { GET: ({ url }) => ({ body: paginate(tags, url, (t) => [t.name]) }) })
   const searches = await mockApi(page, '/api/panel/users/', {
     GET: ({ url }) => ({
       body: paginate(
@@ -80,6 +88,7 @@ test.describe('new occasion', () => {
       start_datetime: '2099-10-10T18:00:00.000Z',
       end_datetime: '2099-10-10T21:30:00.000Z',
       users: [],
+      tag_ids: [],
     })
   })
 
@@ -376,6 +385,69 @@ test.describe('new occasion', () => {
       await expect(page.getByText('No one else matches “ann”.')).toBeVisible()
     })
   })
+
+  test.describe('tag picker', () => {
+    test('searches tags, adds them as chips and sends their ids', async ({ page }) => {
+      await mockCommon(page)
+      const posts = await mockApi(page, '/api/panel/occasions/', {
+        GET: () => ({ body: pageOf([]) }),
+        POST: ({ body }) => ({ status: 201, body: panelOccasion({ ...(body as object) }) }),
+      })
+      await page.goto('/admin/occasions/new')
+      await expect(page.getByText('No tags yet. Search below to add some.')).toBeVisible()
+
+      await page.getByLabel('Add tags').fill('jazz')
+      const results = page.getByRole('list', { name: 'Matching tags' })
+      await expect(results.getByRole('button')).toHaveCount(2)
+      // Each result says how many occasions use it
+      await expect(results.getByRole('button', { name: /Jazz brunch/ })).toContainText('1 occasion')
+      await results.getByRole('button', { name: /^Jazz 3 occasions$/ }).click()
+
+      const chips = page.getByRole('list', { name: 'Selected tags' })
+      await expect(chips.getByRole('listitem')).toHaveCount(1)
+      await expect(page.getByLabel('Add tags')).toHaveValue('')
+      await expect(results).toHaveCount(0)
+
+      // Added tags drop out of the results
+      await page.getByLabel('Add tags').fill('jazz')
+      await expect(results.getByRole('button')).toHaveCount(1)
+      await results.getByRole('button', { name: /Jazz brunch/ }).click()
+      await expect(chips.getByRole('listitem')).toHaveCount(2)
+
+      await page.getByRole('button', { name: 'Remove tag Jazz', exact: true }).click()
+      await expect(chips.getByRole('listitem')).toHaveCount(1)
+
+      await nameInput(page).fill('Brunch')
+      await startsInput(page).fill('2099-10-10T11:00')
+      await page.getByRole('button', { name: 'Create occasion' }).click()
+
+      await expect(page).toHaveURL(/\/admin\/occasions$/)
+      expect(posts.find((c) => c.method === 'POST')!.body).toMatchObject({ tag_ids: [2] })
+    })
+
+    test('says so when no other tag matches', async ({ page }) => {
+      await mockCommon(page)
+      await page.goto('/admin/occasions/new')
+
+      await page.getByLabel('Add tags').fill('zzz')
+
+      await expect(page.getByText('No other tags match “zzz”.')).toBeVisible()
+    })
+
+    test('shows a server error for the tags', async ({ page }) => {
+      await mockCommon(page)
+      await mockApi(page, '/api/panel/occasions/', {
+        POST: () => ({ status: 400, body: { tag_ids: ['Invalid pk "999" - object does not exist.'] } }),
+      })
+      await page.goto('/admin/occasions/new')
+      await nameInput(page).fill('X')
+      await startsInput(page).fill('2099-10-10T18:00')
+      await page.getByRole('button', { name: 'Create occasion' }).click()
+
+      await expect(page.getByText('Invalid pk "999" - object does not exist.')).toBeVisible()
+      await expect(page.getByLabel('Add tags')).toHaveAttribute('aria-invalid', 'true')
+    })
+  })
 })
 
 test.describe('edit occasion', () => {
@@ -385,6 +457,7 @@ test.describe('edit occasion', () => {
     start_datetime: '2099-10-10T18:00:00Z',
     end_datetime: '2099-10-10T21:00:00Z',
     attendees: [attendee(1, 'Ann Lee', 'ann@example.com'), attendee(2, 'Bob Ray', 'bob@example.com')],
+    tags: [{ id: 1, name: 'Jazz' }],
     updated_at: '2025-05-02T12:00:00Z',
   })
 
@@ -400,6 +473,7 @@ test.describe('edit occasion', () => {
     const chips = page.getByRole('list', { name: 'Selected people' })
     await expect(chips).toContainText('Ann Lee')
     await expect(chips).toContainText('Bob Ray')
+    await expect(page.getByRole('list', { name: 'Selected tags' })).toHaveText(/Jazz/)
     await expect(page.getByText('Last updated May 2, 2025')).toBeVisible()
   })
 
@@ -429,6 +503,8 @@ test.describe('edit occasion', () => {
     await page.getByRole('button', { name: 'Remove Bob Ray' }).click()
     await page.getByLabel('Add people').fill('anna')
     await page.getByRole('list', { name: 'Search results' }).getByRole('button', { name: /Anna Fox/ }).click()
+    await page.getByLabel('Add tags').fill('hik')
+    await page.getByRole('list', { name: 'Matching tags' }).getByRole('button', { name: /Hiking/ }).click()
     await page.getByRole('button', { name: 'Save changes' }).click()
 
     await expect(page).toHaveURL(/\/admin\/occasions$/)
@@ -438,6 +514,7 @@ test.describe('edit occasion', () => {
       start_datetime: '2099-10-10T11:00:00.000Z',
       end_datetime: null,
       users: [1, 3],
+      tag_ids: [1, 3],
     })
   })
 

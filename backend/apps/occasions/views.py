@@ -1,11 +1,13 @@
-from django.db.models import Count, Exists, OuterRef
+from django.db.models import Count, Exists, OuterRef, Prefetch, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.connections.models import Connection
 from apps.users.access import user_from_url
+from apps.users.models import User
 
 from .models import MAIN_IMAGE_ORDER, Occasion, OccasionUser
 from .services import AlreadyGoing, active_occasions, join
@@ -48,8 +50,31 @@ class OccasionDetailSerializer(UserOccasionSerializer):
         return [i.image.url for i in occasion.images.all() if i.order != MAIN_IMAGE_ORDER]
 
 
+class KnownAttendeeSerializer(serializers.Serializer):
+    # Public uuid and display name only, never email
+    uuid = serializers.UUIDField()
+    name = serializers.CharField()
+
+
+class ExploreOccasionSerializer(UserOccasionSerializer):
+    # Attendees the requester has a connection with, by name (see with_known_attendees)
+    known_attendees = KnownAttendeeSerializer(many=True, read_only=True)
+
+    class Meta(UserOccasionSerializer.Meta):
+        fields = (*UserOccasionSerializer.Meta.fields, "known_attendees")
+
+
 def with_details(occasions):
     return occasions.annotate(attendees_count=Count("users")).prefetch_related("tags", "images")
+
+
+def with_known_attendees(occasions, user):
+    """Prefetch each occasion's attendees that `user` is connected to into `known_attendees`."""
+    connected = Connection.objects.filter(
+        Q(user_low=OuterRef("pk"), user_high=user) | Q(user_low=user, user_high=OuterRef("pk"))
+    )
+    known = User.objects.filter(Exists(connected)).only("uuid", "name").order_by("name")
+    return occasions.prefetch_related(Prefetch("users", queryset=known, to_attr="known_attendees"))
 
 
 class UserOccasionsView(APIView):
@@ -77,16 +102,19 @@ class ExploreOccasionsView(APIView):
     limit = 50
 
     def get(self, request):
-        active = with_details(active_occasions(request.user)).order_by("start_datetime").first()
+        def details(occasions):
+            return with_known_attendees(with_details(occasions), request.user)
+
+        active = details(active_occasions(request.user)).order_by("start_datetime").first()
         occasions = []
         if active is None:
-            occasions = with_details(Occasion.objects.upcoming().exclude(users=request.user)).order_by(
+            occasions = details(Occasion.objects.upcoming().exclude(users=request.user)).order_by(
                 "start_datetime", "id"
             )[: self.limit]
         return Response(
             {
-                "active_occasion": active and UserOccasionSerializer(active).data,
-                "occasions": UserOccasionSerializer(occasions, many=True).data,
+                "active_occasion": active and ExploreOccasionSerializer(active).data,
+                "occasions": ExploreOccasionSerializer(occasions, many=True).data,
             }
         )
 
@@ -100,7 +128,10 @@ class JoinOccasionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, occasion_id):
-        occasion = get_object_or_404(Occasion.objects.upcoming(), id=occasion_id)
+        occasion = Occasion.objects.upcoming().filter(id=occasion_id).first()
+        if occasion is None:
+            # Cancelled, over or never existed
+            return Response({"detail": "This occasion is no longer available."}, status=status.HTTP_404_NOT_FOUND)
         try:
             join(occasion, request.user)
         except AlreadyGoing as e:

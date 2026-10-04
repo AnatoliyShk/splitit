@@ -19,6 +19,7 @@ export type TestOccasion = {
   attendees_count: number
   tags: string[]
   main_image: string | null
+  known_attendees: { uuid: string; name: string }[]
 }
 
 export type TestConnection = { uuid: string; name: string; strength: number; shared_occasions: number }
@@ -61,6 +62,7 @@ export function makeOccasion(
     attendees_count: 1,
     tags: [],
     main_image: null,
+    known_attendees: [],
     ...overrides,
   }
 }

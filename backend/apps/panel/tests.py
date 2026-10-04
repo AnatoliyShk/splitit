@@ -117,6 +117,34 @@ class OccasionManagementTests(PanelTestCase):
         self.assertEqual(res.status_code, 204)
         self.assertFalse(Occasion.objects.exists())
 
+    def test_tags_are_set_by_id_and_read_back_with_names(self):
+        jazz, blues = Tag.objects.create(name="jazz"), Tag.objects.create(name="Blues")
+        res = self.client.post(
+            "/api/panel/occasions/",
+            {"name": "Gig", "start_datetime": "2026-10-10T18:00:00Z", "tag_ids": [jazz.pk, blues.pk]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        occasion = res.json()
+        self.assertNotIn("tag_ids", occasion)
+        # Sorted case-insensitively, like the tag list
+        self.assertEqual(occasion["tags"], [{"id": blues.pk, "name": "Blues"}, {"id": jazz.pk, "name": "jazz"}])
+
+        res = self.client.patch(f"/api/panel/occasions/{occasion['id']}/", {"tag_ids": [jazz.pk]}, format="json")
+        self.assertEqual(res.json()["tags"], [{"id": jazz.pk, "name": "jazz"}])
+        # Leaving tag_ids out keeps them
+        res = self.client.patch(f"/api/panel/occasions/{occasion['id']}/", {"name": "Gig 2"}, format="json")
+        self.assertEqual(res.json()["tags"], [{"id": jazz.pk, "name": "jazz"}])
+
+    def test_unknown_tag_is_rejected(self):
+        res = self.client.post(
+            "/api/panel/occasions/",
+            {"name": "Gig", "start_datetime": "2026-10-10T18:00:00Z", "tag_ids": [999]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("tag_ids", res.json())
+
     def test_end_not_after_start_is_rejected(self):
         for end in ("2026-10-10T17:00:00Z", "2026-10-10T18:00:00Z"):
             with self.subTest(end=end):

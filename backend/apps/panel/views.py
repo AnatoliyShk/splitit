@@ -17,7 +17,7 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.occasions.models import Occasion, OccasionImage
+from apps.occasions.models import Occasion, OccasionImage, OccasionUser
 from apps.occasions.services import deactivate_finished
 from apps.tags.cache import LIST_TTL, list_cache_key
 from apps.tags.models import Tag
@@ -147,7 +147,7 @@ class OccasionViewSet(viewsets.ModelViewSet):
     search_fields = ["name"]
 
     def get_queryset(self):
-        return Occasion.objects.prefetch_related("users", "images").order_by("-start_datetime", "-id")
+        return Occasion.objects.prefetch_related("users", "tags", "images").order_by("-start_datetime", "-id")
 
     @action(detail=True, methods=["post"])
     def finish(self, request, pk=None):
@@ -174,6 +174,23 @@ class OccasionViewSet(viewsets.ModelViewSet):
         occasion.cancelled_at = now
         occasion.save()
         deactivate_finished()
+        return Response(self.get_serializer(occasion).data)
+
+    @action(detail=True, methods=["post"])
+    def revert_cancel(self, request, pk=None):
+        """POST /api/panel/occasions/<id>/revert_cancel/: undo a cancel while the occasion is still ahead.
+
+        Attendees who joined another occasion since stay with that one; the rest are active here again.
+        """
+        occasion = self.get_object()
+        if occasion.cancelled_at is None:
+            raise ValidationError({"non_field_errors": ["This occasion isn't cancelled."]})
+        if occasion.ends_at <= timezone.now():
+            raise ValidationError({"non_field_errors": ["This occasion is already over."]})
+        occasion.cancelled_at = None
+        occasion.save()
+        busy = OccasionUser.objects.filter(is_active=True).exclude(occasion=occasion).values("user_id")
+        OccasionUser.objects.filter(occasion=occasion).exclude(user_id__in=busy).update(is_active=True)
         return Response(self.get_serializer(occasion).data)
 
     @action(detail=True, methods=["post"], url_path="images", parser_classes=[MultiPartParser])

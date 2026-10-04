@@ -765,10 +765,77 @@ h1 mark {
   border-style: dashed;
 }
 
-/* A status tag after a table row's link */
-.row-tag {
-  margin-left: 8px;
-  vertical-align: middle;
+/* Occasion name with its status and tags on one fixed line below, so rows keep one height */
+.occasion-cell {
+  width: 100%;
+}
+
+.occasion-main {
+  /* Its content doesn't size the column, so a long name is cut off instead of widening the table */
+  contain: inline-size;
+  min-width: 0;
+}
+
+/* The other columns shrink to their content and never wrap into taller rows; the name column gets the rest */
+.occasion-cell ~ td {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.occasion-main .row-link {
+  display: block;
+  padding: 10px 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Fades out at the edge, so cut-off tags read as "more" rather than a broken pill */
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+}
+
+.row-meta::-webkit-scrollbar {
+  display: none;
+}
+
+.row-meta .tag {
+  flex: none;
+  line-height: 20px;
+}
+
+/* Occasion tags are decoration, so they take the secondary fill; status tags stay outlined */
+.tag-topic {
+  color: var(--on-pastel);
+  background: var(--secondary);
+}
+
+/* Date over times, in a fixed box: anything longer is cut off, and the title has the full range */
+.when {
+  display: grid;
+  width: 12rem;
+  height: 44px;
+  align-content: center;
+}
+
+.when > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.when small {
+  font-size: 14px;
+  color: var(--text-muted);
 }
 
 .confirm {
@@ -1094,6 +1161,15 @@ h1 mark {
     text-align: left;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+  }
+
+  .data-table .occasion-cell ~ td {
+    width: 100%;
+  }
+
+  .occasion-main {
+    flex: 1;
+    text-align: left;
   }
 
   .data-table .cell-stack {
@@ -1474,12 +1550,30 @@ h1 mark {
   overflow-wrap: anywhere;
 }
 
+.explore-going .muted {
+  font-weight: 500;
+}
+
+/* Date badge and title side by side */
+.explore-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.explore-title > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .explore-day {
   display: grid;
+  flex: none;
   place-items: center;
   width: 76px;
   height: 76px;
-  margin-bottom: 4px;
   font: 800 30px/1 var(--heading);
   color: var(--on-pastel);
   background: var(--primary);
@@ -1499,6 +1593,8 @@ h1 mark {
 }
 
 .explore-going {
+  display: grid;
+  gap: 4px;
   margin-top: auto;
   padding-top: 8px;
   font-weight: 700;

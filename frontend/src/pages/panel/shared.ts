@@ -16,6 +16,8 @@ export type PanelUser = {
 
 export type Attendee = { id: number; name: string; email: string }
 
+export type OccasionTag = { id: number; name: string }
+
 // Order 0 is the main image (shown on occasion cards); 1-3 are the gallery on the occasion's page
 export type OccasionImage = { order: number; url: string }
 
@@ -48,6 +50,7 @@ export type PanelOccasion = {
   duration_minutes: number | null
   cancelled_at: string | null
   attendees: Attendee[]
+  tags: OccasionTag[]
   images: OccasionImage[]
   created_at: string
   updated_at: string
@@ -100,6 +103,24 @@ export function formatRange(start: string, end: string | null) {
   const sameDay = new Date(start).toDateString() === new Date(end).toDateString()
   // Same day: show the date once, then only the end time
   return `${formatDateTime(start)} – ${sameDay ? timeFormat.format(new Date(end)) : formatDateTime(end)}`
+}
+
+const dayTimeFormat = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+
+// Like formatTimes, but a later end day leaves out the year, to fit a narrow cell (the start date shows it)
+export function formatTimesShort(start: string, end: string | null) {
+  const from = timeFormat.format(new Date(start))
+  if (!end) return from
+  const sameDay = new Date(start).toDateString() === new Date(end).toDateString()
+  return `${from} – ${(sameDay ? timeFormat : dayTimeFormat).format(new Date(end))}`
+}
+
+// For when the date is already shown: times only, plus the end date when it ends on a later day
+export function formatTimes(start: string, end: string | null) {
+  const from = timeFormat.format(new Date(start))
+  if (!end) return from
+  const sameDay = new Date(start).toDateString() === new Date(end).toDateString()
+  return `${from} – ${sameDay ? timeFormat.format(new Date(end)) : formatDateTime(end)}`
 }
 
 export function formatDuration(minutes: number) {

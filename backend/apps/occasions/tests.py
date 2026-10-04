@@ -138,6 +138,37 @@ class ExploreApiTests(TestCase):
         self.assertEqual([o["name"] for o in data["occasions"]], ["Running", "Sooner", "Later"])
         self.assertEqual(data["occasions"][2]["attendees_count"], 1)
 
+    def test_names_the_attendees_i_have_a_connection_with(self):
+        from apps.connections.models import Connection
+        from apps.users.models import User
+
+        # Pairs are stored smaller id first; Eve sits between Cleo and Finn, so she's on both sides
+        cleo = User.objects.create_user("cleo@example.com", "correct-horse-battery", name="Cleo")
+        eve = User.objects.create_user("eve@example.com", "correct-horse-battery", name="Eve")
+        finn = User.objects.create_user("finn@example.com", "correct-horse-battery", name="Finn")
+        self.later.users.add(cleo, finn)
+        Connection.objects.create(user_low=cleo, user_high=eve, strength=1, shared_occasions=1)
+        Connection.objects.create(user_low=eve, user_high=finn, strength=1, shared_occasions=1)
+        # A connection between two other people isn't Eve's
+        Connection.objects.create(user_low=self.other, user_high=cleo, strength=1, shared_occasions=1)
+        self.client.force_login(eve)
+
+        occasions = {o["name"]: o for o in self.explore()["occasions"]}
+        self.assertEqual(occasions["Later"]["attendees_count"], 3)
+        self.assertEqual(
+            occasions["Later"]["known_attendees"],
+            [{"uuid": str(cleo.uuid), "name": "Cleo"}, {"uuid": str(finn.uuid), "name": "Finn"}],
+        )
+        self.assertEqual(occasions["Sooner"]["known_attendees"], [])
+
+    def test_active_occasion_names_the_attendees_i_know(self):
+        from apps.connections.models import Connection
+
+        Connection.objects.create(user_low=self.me, user_high=self.other, strength=1, shared_occasions=1)
+        self.join(self.later)
+        data = self.explore()
+        self.assertEqual(data["active_occasion"]["known_attendees"], [{"uuid": str(self.other.uuid), "name": "Ben"}])
+
     def test_join_makes_the_occasion_active_and_hides_the_rest(self):
         self.assertEqual(self.join(self.sooner).status_code, 204)
         self.assertTrue(OccasionUser.objects.get(occasion=self.sooner, user=self.me).is_active)
@@ -176,7 +207,9 @@ class ExploreApiTests(TestCase):
 
     def test_cannot_join_past_cancelled_or_unknown_occasions(self):
         self.assertEqual(self.join(self.past).status_code, 404)
-        self.assertEqual(self.join(self.cancelled).status_code, 404)
+        res = self.join(self.cancelled)
+        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res.json()["detail"], "This occasion is no longer available.")
         self.assertEqual(self.client.post("/api/occasions/999999/join/").status_code, 404)
 
     def test_requires_login(self):
