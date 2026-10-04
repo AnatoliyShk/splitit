@@ -4,26 +4,26 @@ import { useAuth } from '../auth'
 const features = [
   {
     step: '01',
-    title: 'Find events',
+    title: 'Find occasions',
     text: 'Browse concerts, meetups, hikes and game nights happening near you.',
     tone: 'primary',
   },
   {
     step: '02',
     title: 'Go together',
-    text: 'Join a group heading to the same event, so you never have to go alone.',
+    text: 'Join a group heading to the same occasion, so you never have to go alone.',
     tone: 'secondary',
   },
   {
     step: '03',
     title: 'Make friends',
-    text: 'Meet people who share your interests and keep in touch after the event.',
+    text: 'Meet people who share your interests and keep in touch after the occasion.',
     tone: 'primary',
   },
 ]
 
 // Sample data for the hero illustration
-const exampleEvents = [
+const exampleOccasions = [
   { day: 'Fri', time: '20:00', title: 'Indie night', place: 'The Warehouse', going: 14 },
   { day: 'Sat', time: '18:00', title: 'Sunset jazz', place: 'Riverside Park', going: 7 },
   { day: 'Sun', time: '10:00', title: 'Morning hike', place: 'Pine Ridge trail', going: 9 },
@@ -40,14 +40,14 @@ export default function Home() {
         <div className="hero-copy">
           <span className="sticker">Never go alone</span>
           <h1>
-            Go to events together. Leave with <mark>friends</mark>
+            Go to occasions together. Leave with <mark>friends</mark>
           </h1>
           <p className="tagline">
             Find people heading to the same concerts, meetups and trips, and
             turn one night out into a community.
           </p>
           <div className="actions">
-            <button className="btn btn-primary">Find events</button>
+            <button className="btn btn-primary">Find occasions</button>
             {!loading && !user && (
               <Link className="btn" to="/register">
                 Create account
@@ -56,22 +56,22 @@ export default function Home() {
           </div>
         </div>
 
-        <figure className="example" aria-label="Example events">
+        <figure className="example" aria-label="Example occasions">
           <div className="example-head">
             <span className="example-title">This weekend</span>
             <span className="chip">Near you</span>
           </div>
-          <ul className="event-list">
-            {exampleEvents.map((e) => (
+          <ul className="occasion-list">
+            {exampleOccasions.map((e) => (
               <li key={e.title}>
-                <span className="event-day">{e.day}</span>
-                <span className="event-info">
+                <span className="occasion-day">{e.day}</span>
+                <span className="occasion-info">
                   <strong>{e.title}</strong>
                   <small>
                     {e.time} · {e.place}
                   </small>
                 </span>
-                <span className="event-going">{e.going} going</span>
+                <span className="occasion-going">{e.going} going</span>
               </li>
             ))}
           </ul>

@@ -29,7 +29,7 @@ export default function Register() {
       <title>Create account · Splitit</title>
       <AuthCard
         title="Never go alone"
-        subtitle="Join people heading to the same events as you."
+        subtitle="Join people heading to the same occasions as you."
         errors={errors}
         onSubmit={onSubmit}
       >

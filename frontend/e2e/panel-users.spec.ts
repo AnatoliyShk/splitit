@@ -9,13 +9,13 @@ const me = panelUser({
   email: staffUser.email,
   name: staffUser.name,
   is_staff: true,
-  events_count: 2,
+  occasions_count: 2,
 })
 
 function seed(): PanelUser[] {
   return [
     me,
-    panelUser({ id: 2, email: 'ann@example.com', name: 'Ann Lee', events_count: 3, date_joined: '2025-03-15T09:00:00Z' }),
+    panelUser({ id: 2, email: 'ann@example.com', name: 'Ann Lee', occasions_count: 3, date_joined: '2025-03-15T09:00:00Z' }),
     panelUser({ id: 3, email: 'bob@example.com', name: 'Bob Ray', is_staff: true }),
     panelUser({ id: 4, email: 'cat@example.com', name: 'Cat Dee', is_active: false }),
     panelUser({ id: 5, email: 'root@example.com', name: 'Root Boss', is_staff: true, is_superuser: true }),
@@ -51,7 +51,7 @@ test.describe('panel users', () => {
     await mockStaffSession(page)
   })
 
-  test('lists users with name, email, join date, event count and total', async ({ page }) => {
+  test('lists users with name, email, join date, occasion count and total', async ({ page }) => {
     await openUsers(page)
 
     await expect(page.getByText('6 total')).toBeVisible()

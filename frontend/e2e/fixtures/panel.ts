@@ -20,12 +20,12 @@ export type PanelUser = {
   is_superuser: boolean
   date_joined: string
   last_login: string | null
-  events_count: number
+  occasions_count: number
 }
 
 export type Attendee = { id: number; name: string; email: string }
 
-export type PanelEvent = {
+export type PanelOccasion = {
   id: number
   name: string
   start_datetime: string
@@ -39,7 +39,7 @@ export type PanelEvent = {
 export type PanelTag = {
   id: number
   name: string
-  events_count: number
+  occasions_count: number
   has_embedding: boolean
   created_at: string
   updated_at: string
@@ -79,7 +79,7 @@ export function panelUser(overrides: Partial<PanelUser> = {}): PanelUser {
     is_superuser: false,
     date_joined: '2025-03-15T09:00:00Z',
     last_login: null,
-    events_count: 0,
+    occasions_count: 0,
     ...overrides,
   }
 }
@@ -88,7 +88,7 @@ export function attendee(id: number, name: string, email = `${name.toLowerCase()
   return { id, name, email }
 }
 
-export function panelEvent(overrides: Partial<PanelEvent> = {}): PanelEvent {
+export function panelOccasion(overrides: Partial<PanelOccasion> = {}): PanelOccasion {
   return {
     id: 10,
     name: 'Jazz night',
@@ -106,7 +106,7 @@ export function panelTag(overrides: Partial<PanelTag> = {}): PanelTag {
   return {
     id: 1,
     name: 'Jazz',
-    events_count: 0,
+    occasions_count: 0,
     has_embedding: true,
     created_at: '2025-04-01T08:00:00Z',
     updated_at: '2025-04-01T08:00:00Z',

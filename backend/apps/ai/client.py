@@ -6,7 +6,7 @@ from django.core.exceptions import ImproperlyConfigured
 from google import genai
 from google.genai import types
 
-from apps.events.models import EMBEDDING_DIMENSIONS
+from apps.occasions.models import EMBEDDING_DIMENSIONS
 
 # Texts sent to Gemini per request
 BATCH_SIZE = 100

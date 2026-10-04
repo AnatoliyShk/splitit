@@ -70,7 +70,7 @@ export default function Users() {
             <tr>
               <th scope="col">User</th>
               <th scope="col">Joined</th>
-              <th scope="col">Events</th>
+              <th scope="col">Occasions</th>
               <th scope="col">Access</th>
               <th scope="col">
                 <span className="visually-hidden">Actions</span>
@@ -90,7 +90,7 @@ export default function Users() {
                     <small>{u.email}</small>
                   </td>
                   <td data-label="Joined">{formatDate(u.date_joined)}</td>
-                  <td data-label="Events">{u.events_count}</td>
+                  <td data-label="Occasions">{u.occasions_count}</td>
                   <td data-label="Access">
                     <span className="tags">
                       {isMe && <span className="tag">You</span>}

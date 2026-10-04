@@ -9,13 +9,13 @@ test.describe('Home page content', () => {
   })
 
   test('shows the hero headline and tagline', async ({ page }) => {
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Go to events together\. Leave with friends/)
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Go to occasions together\. Leave with friends/)
     await expect(page.getByText('Never go alone')).toBeVisible()
     await expect(page.getByText(/Find people heading to the same concerts/)).toBeVisible()
   })
 
-  test('lists the example events', async ({ page }) => {
-    const example = page.getByRole('figure', { name: 'Example events' })
+  test('lists the example occasions', async ({ page }) => {
+    const example = page.getByRole('figure', { name: 'Example occasions' })
     await expect(example.getByText('Indie night')).toBeVisible()
     await expect(example.getByText('Sunset jazz', { exact: true })).toBeVisible()
     await expect(example.getByText('Morning hike')).toBeVisible()
@@ -24,7 +24,7 @@ test.describe('Home page content', () => {
 
   test('shows the three how-it-works cards', async ({ page }) => {
     const cards = page.getByRole('region', { name: 'How it works' })
-    await expect(cards.getByRole('heading', { level: 2 })).toHaveText(['Find events', 'Go together', 'Make friends'])
+    await expect(cards.getByRole('heading', { level: 2 })).toHaveText(['Find occasions', 'Go together', 'Make friends'])
   })
 })
 
@@ -45,7 +45,7 @@ test.describe('Home page call to action', () => {
     await mockMe(page, fakeUser)
     await page.goto('/')
 
-    await expect(page.getByRole('button', { name: 'Find events' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Find occasions' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Create account' })).toHaveCount(0)
   })
 })
@@ -151,7 +151,7 @@ test.describe('App shell header', () => {
 
     await page.getByRole('banner').getByRole('link', { name: /Splitit/ }).click()
     await expect(page).toHaveURL(/\/$/)
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('Go to events together')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Go to occasions together')
   })
 })
 

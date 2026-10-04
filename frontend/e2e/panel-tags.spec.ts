@@ -5,9 +5,9 @@ test.use({ timezoneId: 'UTC', locale: 'en-US' })
 
 function seed(): PanelTag[] {
   return [
-    panelTag({ id: 1, name: 'Jazz', events_count: 3, has_embedding: true, created_at: '2025-04-01T08:00:00Z' }),
-    panelTag({ id: 2, name: 'Hiking', events_count: 0, has_embedding: false, created_at: '2025-05-20T08:00:00Z' }),
-    panelTag({ id: 3, name: 'Board games', events_count: 1, has_embedding: false }),
+    panelTag({ id: 1, name: 'Jazz', occasions_count: 3, has_embedding: true, created_at: '2025-04-01T08:00:00Z' }),
+    panelTag({ id: 2, name: 'Hiking', occasions_count: 0, has_embedding: false, created_at: '2025-05-20T08:00:00Z' }),
+    panelTag({ id: 3, name: 'Board games', occasions_count: 1, has_embedding: false }),
   ]
 }
 
@@ -21,7 +21,7 @@ async function openTags(page: Page, tags = seed()) {
       if (tags.some((t) => t.name.toLowerCase() === name.toLowerCase())) {
         return { status: 400, body: { name: ['A tag with this name already exists.'] } }
       }
-      const tag = panelTag({ id: nextId++, name, events_count: 0, has_embedding: false })
+      const tag = panelTag({ id: nextId++, name, occasions_count: 0, has_embedding: false })
       tags.push(tag)
       return { status: 201, body: tag }
     },
@@ -59,7 +59,7 @@ test.describe('panel tags', () => {
   })
 
   test.describe('list', () => {
-    test('lists tags with events count, creation date and total', async ({ page }) => {
+    test('lists tags with occasions count, creation date and total', async ({ page }) => {
       await openTags(page)
 
       await expect(page.getByText('3 total')).toBeVisible()
@@ -73,7 +73,7 @@ test.describe('panel tags', () => {
     test('has the expected column headers', async ({ page }) => {
       await openTags(page)
 
-      for (const name of ['Tag', 'Events', 'Embedding', 'Created']) {
+      for (const name of ['Tag', 'Occasions', 'Embedding', 'Created']) {
         await expect(page.getByRole('columnheader', { name, exact: true })).toBeVisible()
       }
     })
@@ -304,16 +304,16 @@ test.describe('panel tags', () => {
       expect(detail).toHaveLength(0)
     })
 
-    test('the confirmation warns when the tag is used by events', async ({ page }) => {
+    test('the confirmation warns when the tag is used by occasions', async ({ page }) => {
       await openTags(page)
 
       await row(page, 'Jazz').getByRole('button', { name: 'Delete' }).click()
-      await expect(page.getByRole('group', { name: 'Delete Jazz?' }).getByText('Remove from 3 events?')).toBeVisible()
+      await expect(page.getByRole('group', { name: 'Delete Jazz?' }).getByText('Remove from 3 occasions?')).toBeVisible()
       await page.getByRole('button', { name: 'Keep' }).click()
 
       await row(page, 'Board games').getByRole('button', { name: 'Delete' }).click()
       await expect(
-        page.getByRole('group', { name: 'Delete Board games?' }).getByText('Remove from 1 event?'),
+        page.getByRole('group', { name: 'Delete Board games?' }).getByText('Remove from 1 occasion?'),
       ).toBeVisible()
     })
 

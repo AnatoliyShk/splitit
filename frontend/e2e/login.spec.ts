@@ -40,7 +40,7 @@ test.describe('Login page', () => {
     await page.goto('/login')
 
     await expect(page).toHaveURL(/\/$/)
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('Go to events together')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Go to occasions together')
   })
 })
 
@@ -67,7 +67,7 @@ test.describe('Login success', () => {
   })
 
   test('returns to the page that required login', async ({ page }) => {
-    await page.route('**/api/events/explore/', (route) => json(route, 200, []))
+    await page.route('**/api/occasions/explore/', (route) => json(route, 200, []))
     await page.route('**/api/auth/login/', (route) => json(route, 200, { user: fakeUser }))
     await page.goto('/explore')
     await expect(page).toHaveURL(/\/login$/)

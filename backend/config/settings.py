@@ -42,7 +42,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "apps.api",
     "apps.users",
-    "apps.events",
+    "apps.occasions",
     "apps.tags",
     "apps.panel",
     "apps.ai",

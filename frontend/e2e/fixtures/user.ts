@@ -10,7 +10,7 @@ export type TestUser = {
   date_joined: string
 }
 
-export type TestEvent = {
+export type TestOccasion = {
   id: number
   name: string
   start_datetime: string
@@ -19,7 +19,7 @@ export type TestEvent = {
   tags: string[]
 }
 
-export type TestConnection = { uuid: string; name: string; strength: number; shared_events: number }
+export type TestConnection = { uuid: string; name: string; strength: number; shared_occasions: number }
 
 export const USER: TestUser = {
   id: 1,
@@ -42,8 +42,13 @@ export function fromNow(ms: number) {
   return new Date(Date.now() + ms).toISOString()
 }
 
-/** A two-hour event starting `startInDays` from now (negative = in the past). */
-export function makeEvent(id: number, name: string, startInDays: number, overrides: Partial<TestEvent> = {}): TestEvent {
+/** A two-hour occasion starting `startInDays` from now (negative = in the past). */
+export function makeOccasion(
+  id: number,
+  name: string,
+  startInDays: number,
+  overrides: Partial<TestOccasion> = {},
+): TestOccasion {
   const start = Date.now() + startInDays * DAY
   return {
     id,
@@ -66,14 +71,14 @@ export type Mock = {
 export type MockOptions = {
   /** The logged-in user, or null for logged out (GET /api/auth/me/ gives {user: null}). */
   user: TestUser | null
-  /** Response for GET /api/users/<uuid>/events/. A number makes it fail with that status. */
-  events?: TestEvent[] | number
+  /** Response for GET /api/users/<uuid>/occasions/. A number makes it fail with that status. */
+  occasions?: TestOccasion[] | number
   /** Response for GET /api/users/<uuid>/connections/. A number makes it fail with that status. */
   connections?: TestConnection[] | number
   /** Response for GET /api/users/<uuid>/connections/graph/; defaults to 404 (the page hides the graph). */
   graph?: { nodes: unknown[]; edges: unknown[] } | number
-  /** Response for GET /api/events/explore/. A number makes it fail with that status. */
-  explore?: TestEvent[] | number
+  /** Response for GET /api/occasions/explore/. A number makes it fail with that status. */
+  explore?: TestOccasion[] | number
   /** Extra handlers, keyed by "METHOD /api/path/". Take precedence over the defaults. */
   handlers?: Record<string, (route: Route, body: unknown) => Promise<void> | void>
 }
@@ -112,8 +117,8 @@ export async function mockApi(page: Page, options: MockOptions): Promise<Mock> {
     if (method === 'GET') {
       if (pathname === '/api/auth/me/') return json(route, 200, { user: options.user })
       if (pathname === '/api/auth/csrf/') return route.fulfill({ status: 204 })
-      if (pathname === '/api/events/explore/') return respond(route, options.explore)
-      if (uuid && pathname === `/api/users/${uuid}/events/`) return respond(route, options.events)
+      if (pathname === '/api/occasions/explore/') return respond(route, options.explore)
+      if (uuid && pathname === `/api/users/${uuid}/occasions/`) return respond(route, options.occasions)
       if (uuid && pathname === `/api/users/${uuid}/connections/`) return respond(route, options.connections)
       if (uuid && pathname === `/api/users/${uuid}/connections/graph/`) return respond(route, options.graph)
     }

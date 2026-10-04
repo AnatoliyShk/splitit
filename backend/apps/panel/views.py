@@ -16,22 +16,22 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.events.models import Event
+from apps.occasions.models import Occasion
 from apps.tags.cache import LIST_TTL, list_cache_key
 from apps.tags.models import Tag
 from apps.users.models import User
 
-from .serializers import PanelEventSerializer, PanelTagSerializer, PanelUserSerializer
+from .serializers import PanelOccasionSerializer, PanelTagSerializer, PanelUserSerializer
 
 
 class PanelPagination(PageNumberPagination):
     page_size = 20
 
 
-def upcoming_events():
-    """Events that haven't happened yet or are still running (an event with no end is over once it starts)."""
+def upcoming_occasions():
+    """Occasions that haven't happened yet or are still running (one with no end is over once it starts)."""
     now = timezone.now()
-    return Event.objects.filter(Q(start_datetime__gte=now) | Q(end_datetime__gt=now))
+    return Occasion.objects.filter(Q(start_datetime__gte=now) | Q(end_datetime__gt=now))
 
 
 class StatsView(APIView):
@@ -45,21 +45,21 @@ class StatsView(APIView):
             staff=Count("id", filter=Q(is_staff=True)),
             new_this_week=Count("id", filter=Q(date_joined__gte=week_ago)),
         )
-        upcoming = upcoming_events()
-        next_events = upcoming.annotate(attendees_count=Count("users")).order_by("start_datetime")[:5]
+        upcoming = upcoming_occasions()
+        next_occasions = upcoming.annotate(attendees_count=Count("users")).order_by("start_datetime")[:5]
         return Response(
             {
                 "users": users,
-                "events": {"total": Event.objects.count(), "upcoming": upcoming.count()},
-                "next_events": [
+                "occasions": {"total": Occasion.objects.count(), "upcoming": upcoming.count()},
+                "next_occasions": [
                     {
-                        "id": e.id,
-                        "name": e.name,
-                        "start_datetime": e.start_datetime,
-                        "end_datetime": e.end_datetime,
-                        "attendees_count": e.attendees_count,
+                        "id": o.id,
+                        "name": o.name,
+                        "start_datetime": o.start_datetime,
+                        "end_datetime": o.end_datetime,
+                        "attendees_count": o.attendees_count,
                     }
-                    for e in next_events
+                    for o in next_occasions
                 ],
             }
         )
@@ -79,7 +79,7 @@ class UserViewSet(
     http_method_names = ["get", "patch", "head", "options"]
 
     def get_queryset(self):
-        return User.objects.annotate(events_count=Count("events")).order_by("-date_joined")
+        return User.objects.annotate(occasions_count=Count("occasions")).order_by("-date_joined")
 
     def perform_update(self, serializer):
         target = serializer.instance
@@ -91,7 +91,7 @@ class UserViewSet(
         serializer.save()
 
 
-TEST_EVENT_NAMES = [
+TEST_OCCASION_NAMES = [
     "Jazz night",
     "Board games",
     "Morning run",
@@ -108,7 +108,7 @@ def pick_test_attendees(count):
     """`count` random non-staff users, creating test accounts when there aren't enough."""
     users = list(User.objects.filter(is_staff=False, is_active=True).order_by("?")[:count])
     for _ in range(count - len(users)):
-        # No password: these accounts exist only to fill events and can't log in
+        # No password: these accounts exist only to fill occasions and can't log in
         users.append(
             User.objects.create_user(
                 f"test-{uuid.uuid4().hex[:8]}@example.com", name=f"{random.choice(TEST_USER_NAMES)} (test)"
@@ -117,51 +117,51 @@ def pick_test_attendees(count):
     return users
 
 
-def create_test_event():
-    """An event at a random time in the next 30 days with 1-3 random attendees."""
+def create_test_occasion():
+    """An occasion at a random time in the next 30 days with 1-3 random attendees."""
     # On the quarter hour, so the times look like a real schedule
     now = timezone.now()
     quarter = now.replace(minute=now.minute - now.minute % 15, second=0, microsecond=0)
     start = quarter + timedelta(minutes=15 * random.randint(4, 30 * 24 * 4))
     end = start + timedelta(minutes=30 * random.randint(2, 12))
     with transaction.atomic():
-        event = Event.objects.create(
-            name=f"Test: {random.choice(TEST_EVENT_NAMES)}", start_datetime=start, end_datetime=end
+        occasion = Occasion.objects.create(
+            name=f"Test: {random.choice(TEST_OCCASION_NAMES)}", start_datetime=start, end_datetime=end
         )
-        event.users.add(*pick_test_attendees(random.randint(1, 3)))
-    return event
+        occasion.users.add(*pick_test_attendees(random.randint(1, 3)))
+    return occasion
 
 
-class EventViewSet(viewsets.ModelViewSet):
+class OccasionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
-    serializer_class = PanelEventSerializer
+    serializer_class = PanelOccasionSerializer
     pagination_class = PanelPagination
     filter_backends = [SearchFilter]
     search_fields = ["name"]
 
     def get_queryset(self):
-        return Event.objects.prefetch_related("users").order_by("-start_datetime", "-id")
+        return Occasion.objects.prefetch_related("users").order_by("-start_datetime", "-id")
 
     @action(detail=True, methods=["post"])
     def finish(self, request, pk=None):
-        """POST /api/panel/events/<id>/finish/: end the event now, so its connections get counted."""
-        event = self.get_object()
+        """POST /api/panel/occasions/<id>/finish/: end the occasion now, so its connections get counted."""
+        occasion = self.get_object()
         now = timezone.now()
-        if event.ends_at <= now:
-            raise ValidationError({"non_field_errors": ["This event is already over."]})
-        if event.start_datetime >= now:
+        if occasion.ends_at <= now:
+            raise ValidationError({"non_field_errors": ["This occasion is already over."]})
+        if occasion.start_datetime >= now:
             # Not started yet: move it back so it ends now, keeping its length (an hour if it has none)
-            event.start_datetime = now - (event.duration or timedelta(hours=1))
-        event.end_datetime = now
+            occasion.start_datetime = now - (occasion.duration or timedelta(hours=1))
+        occasion.end_datetime = now
         # A full save, so post_save schedules the connections count (see apps.connections.signals)
-        event.save()
-        return Response(self.get_serializer(event).data)
+        occasion.save()
+        return Response(self.get_serializer(occasion).data)
 
     @action(detail=False, methods=["post"], url_path="test")
     def create_test(self, request):
-        """POST /api/panel/events/test/: create a test event (see create_test_event)."""
-        event = create_test_event()
-        return Response(self.get_serializer(event).data, status=status.HTTP_201_CREATED)
+        """POST /api/panel/occasions/test/: create a test occasion (see create_test_occasion)."""
+        occasion = create_test_occasion()
+        return Response(self.get_serializer(occasion).data, status=status.HTTP_201_CREATED)
 
 
 class TagViewSet(viewsets.ModelViewSet):
@@ -172,7 +172,7 @@ class TagViewSet(viewsets.ModelViewSet):
     search_fields = ["name"]
 
     def get_queryset(self):
-        return Tag.objects.annotate(events_count=Count("events")).order_by(Lower("name"))
+        return Tag.objects.annotate(occasions_count=Count("occasions")).order_by(Lower("name"))
 
     def list(self, request, *args, **kwargs):
         # Permissions are checked before list() runs, so only staff ever see cached pages

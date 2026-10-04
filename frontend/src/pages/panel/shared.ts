@@ -11,12 +11,12 @@ export type PanelUser = {
   is_superuser: boolean
   date_joined: string
   last_login: string | null
-  events_count: number
+  occasions_count: number
 }
 
 export type Attendee = { id: number; name: string; email: string }
 
-export type PanelEvent = {
+export type PanelOccasion = {
   id: number
   name: string
   start_datetime: string
@@ -30,7 +30,7 @@ export type PanelEvent = {
 export type PanelTag = {
   id: number
   name: string
-  events_count: number
+  occasions_count: number
   has_embedding: boolean
   created_at: string
   updated_at: string
@@ -38,8 +38,8 @@ export type PanelTag = {
 
 export type Stats = {
   users: { total: number; active: number; staff: number; new_this_week: number }
-  events: { total: number; upcoming: number }
-  next_events: {
+  occasions: { total: number; upcoming: number }
+  next_occasions: {
     id: number
     name: string
     start_datetime: string

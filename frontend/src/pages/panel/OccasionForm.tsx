@@ -9,14 +9,14 @@ import {
   timeZone,
   toLocalInput,
   type Attendee,
-  type PanelEvent,
+  type PanelOccasion,
 } from './shared'
 
-export default function EventForm() {
+export default function OccasionForm() {
   const { id } = useParams()
   const navigate = useNavigate()
   const formRef = useRef<HTMLFormElement>(null)
-  const [event, setEvent] = useState<PanelEvent | null>(null)
+  const [occasion, setOccasion] = useState<PanelOccasion | null>(null)
   const [name, setName] = useState('')
   // Local wall-clock values for the datetime-local inputs
   const [start, setStart] = useState('')
@@ -27,13 +27,13 @@ export default function EventForm() {
 
   useEffect(() => {
     if (!id) return
-    apiGet<PanelEvent>(`/api/panel/events/${id}/`)
-      .then((e) => {
-        setEvent(e)
-        setName(e.name)
-        setStart(toLocalInput(e.start_datetime))
-        setEnd(e.end_datetime ? toLocalInput(e.end_datetime) : '')
-        setAttendees(e.attendees)
+    apiGet<PanelOccasion>(`/api/panel/occasions/${id}/`)
+      .then((o) => {
+        setOccasion(o)
+        setName(o.name)
+        setStart(toLocalInput(o.start_datetime))
+        setEnd(o.end_datetime ? toLocalInput(o.end_datetime) : '')
+        setAttendees(o.attendees)
       })
       .catch((err) => setErrors(errorsFrom(err)))
   }, [id])
@@ -54,27 +54,27 @@ export default function EventForm() {
       users: attendees.map((a) => a.id),
     }
     try {
-      if (id) await apiPatch(`/api/panel/events/${id}/`, body)
-      else await apiPost('/api/panel/events/', body)
-      navigate('/admin/events')
+      if (id) await apiPatch(`/api/panel/occasions/${id}/`, body)
+      else await apiPost('/api/panel/occasions/', body)
+      navigate('/admin/occasions')
     } catch (err) {
       setErrors(errorsFrom(err))
       setSaving(false)
     }
   }
 
-  if (id && !event && !errors.non_field_errors) return <p className="muted">Loading…</p>
+  if (id && !occasion && !errors.non_field_errors) return <p className="muted">Loading…</p>
 
   return (
     <>
       <div className="panel-head">
         <div>
-          <Link className="back-link" to="/admin/events">
-            ← Events
+          <Link className="back-link" to="/admin/occasions">
+            ← Occasions
           </Link>
-          <h1>{id ? 'Edit event' : 'New event'}</h1>
+          <h1>{id ? 'Edit occasion' : 'New occasion'}</h1>
         </div>
-        {event && <span className="muted">Last updated {formatDate(event.updated_at)}</span>}
+        {occasion && <span className="muted">Last updated {formatDate(occasion.updated_at)}</span>}
       </div>
 
       <form ref={formRef} className="form panel-form" onSubmit={onSubmit} noValidate>
@@ -111,11 +111,11 @@ export default function EventForm() {
         </div>
         <AttendeePicker value={attendees} onChange={setAttendees} errors={errors.users} />
         <div className="form-actions">
-          <Link className="btn" to="/admin/events">
+          <Link className="btn" to="/admin/occasions">
             Cancel
           </Link>
           <button className="btn btn-confirm" type="submit" disabled={saving}>
-            {saving ? 'Saving…' : id ? 'Save changes' : 'Create event'}
+            {saving ? 'Saving…' : id ? 'Save changes' : 'Create occasion'}
           </button>
         </div>
       </form>

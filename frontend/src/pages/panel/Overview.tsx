@@ -20,7 +20,7 @@ export default function Overview() {
     { label: 'Users', value: stats.users.total, note: `${stats.users.active} active`, tone: 'primary' },
     { label: 'Admins', value: stats.users.staff, note: 'with panel access', tone: 'secondary' },
     { label: 'New this week', value: stats.users.new_this_week, note: 'sign-ups, last 7 days', tone: 'primary' },
-    { label: 'Events', value: stats.events.total, note: `${stats.events.upcoming} upcoming`, tone: 'secondary' },
+    { label: 'Occasions', value: stats.occasions.total, note: `${stats.occasions.upcoming} upcoming`, tone: 'secondary' },
   ]
 
   return (
@@ -45,40 +45,40 @@ export default function Overview() {
       )}
 
       {stats && (
-        <section className="panel-section" aria-labelledby="next-events">
+        <section className="panel-section" aria-labelledby="next-occasions">
           <div className="panel-head">
-            <h2 id="next-events">Next events</h2>
-            <Link className="btn btn-sm" to="/admin/events">
-              All events
+            <h2 id="next-occasions">Next occasions</h2>
+            <Link className="btn btn-sm" to="/admin/occasions">
+              All occasions
             </Link>
           </div>
-          {stats.next_events.length ? (
-            <ul className="event-list">
-              {stats.next_events.map((e) => (
-                <li key={e.id}>
-                  <Link className="event-row" to={`/admin/events/${e.id}`}>
-                    <span className="event-day event-date">
-                      {new Date(e.start_datetime).getDate()}
-                      <small>{monthFormat.format(new Date(e.start_datetime))}</small>
+          {stats.next_occasions.length ? (
+            <ul className="occasion-list">
+              {stats.next_occasions.map((o) => (
+                <li key={o.id}>
+                  <Link className="occasion-row" to={`/admin/occasions/${o.id}`}>
+                    <span className="occasion-day occasion-date">
+                      {new Date(o.start_datetime).getDate()}
+                      <small>{monthFormat.format(new Date(o.start_datetime))}</small>
                     </span>
-                    <span className="event-info">
-                      <strong>{e.name}</strong>
-                      <small>{formatRange(e.start_datetime, e.end_datetime)}</small>
+                    <span className="occasion-info">
+                      <strong>{o.name}</strong>
+                      <small>{formatRange(o.start_datetime, o.end_datetime)}</small>
                     </span>
-                    <span className="event-going">{e.attendees_count} going</span>
+                    <span className="occasion-going">{o.attendees_count} going</span>
                   </Link>
                 </li>
               ))}
             </ul>
           ) : (
             <div className="empty">
-              <p>No upcoming events.</p>
-              <Link className="btn btn-primary btn-sm" to="/admin/events/new">
-                Create an event
+              <p>No upcoming occasions.</p>
+              <Link className="btn btn-primary btn-sm" to="/admin/occasions/new">
+                Create an occasion
               </Link>
             </div>
           )}
-          <p className="muted">{plural(stats.events.upcoming, 'upcoming event')} in total.</p>
+          <p className="muted">{plural(stats.occasions.upcoming, 'upcoming occasion')} in total.</p>
         </section>
       )}
     </>

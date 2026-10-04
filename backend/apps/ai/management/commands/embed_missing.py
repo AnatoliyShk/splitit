@@ -5,12 +5,12 @@ from apps.ai.embedding import embedded_models, embedding_text, embedding_updated
 
 
 class Command(BaseCommand):
-    help = "Embed every tag and event that has no embedding yet."
+    help = "Embed every tag and occasion that has no embedding yet."
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--model",
-            choices=["tags", "events"],
+            choices=["tags", "occasions"],
             help="Only embed this app's model.",
         )
 

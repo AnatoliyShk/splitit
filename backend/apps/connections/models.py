@@ -8,17 +8,17 @@ class ConnectionQuerySet(models.QuerySet):
 
 
 class Connection(models.Model):
-    """Two users who went to the same events; one row per pair, smaller user id first.
+    """Two users who went to the same occasions; one row per pair, smaller user id first.
 
-    Derived from Event.users and stored for fast reads: `manage.py apply_connections --rebuild`
+    Derived from Occasion.users and stored for fast reads: `manage.py apply_connections --rebuild`
     recomputes it from scratch.
     """
 
     user_low = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="connections_low")
     user_high = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="connections_high")
-    # Each shared event adds 1 / (attendees - 1), so small events bond people more
+    # Each shared occasion adds 1 / (attendees - 1), so small occasions bond people more
     strength = models.FloatField(default=0)
-    shared_events = models.PositiveIntegerField(default=0)
+    shared_occasions = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

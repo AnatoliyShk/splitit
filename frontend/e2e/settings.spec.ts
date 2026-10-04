@@ -11,7 +11,7 @@ test('redirects to the login page when logged out', async ({ page }) => {
 })
 
 test('has a back link to the profile', async ({ page }) => {
-  await mockApi(page, { user: USER, events: [], connections: [] })
+  await mockApi(page, { user: USER, occasions: [], connections: [] })
   await page.goto('/profile/settings')
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible()
   await page.getByRole('link', { name: '← Profile' }).click()

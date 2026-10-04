@@ -1,12 +1,12 @@
 # Splitit
 
-Splitit helps people go to events together and find community and friends. Users discover events, join others who are going, and meet new people around shared interests. Shared costs for an event (tickets, travel, food) can be split within the group.
+Splitit helps people go to occasions together and find community and friends. Users discover occasions, join others who are going, and meet new people around shared interests. Shared costs for an occasion (tickets, travel, food) can be split within the group.
 
 ## Stack
 
 - **Backend:** Django 6 + Django REST Framework, Python 3.12, dependencies managed with uv (`backend/pyproject.toml`, `backend/uv.lock`)
 - **Frontend:** React 19 + TypeScript + Vite, Yarn 4, linted with oxlint
-- **Database:** PostgreSQL 17 with pgvector (`pgvector/pgvector:pg17` image); `events` and `tags` have 768-dim `embedding` columns with HNSW cosine indexes
+- **Database:** PostgreSQL 17 with pgvector (`pgvector/pgvector:pg17` image); `occasions` and `tags` have 768-dim `embedding` columns with HNSW cosine indexes
 - **Cache:** Redis 7 (Django's `CACHES` default backend)
 - **Background tasks:** Django 6 `django.tasks`, queued in Postgres by `django-tasks-db` and run by the `worker` service
 - **Embeddings:** Google Gemini (`gemini-embedding-001`, shortened to 768 dims) via `google-genai`
@@ -19,14 +19,14 @@ backend/            Django project
   config/           settings, root urls, wsgi/asgi
   apps/api/         REST API app (urls mounted at /api/)
   apps/users/       custom User (email login, public UUIDv7 `uuid`) + session auth API at /api/auth/; user_from_url() guards /api/users/<uuid>/ routes
-  apps/events/      Event model (many-to-many with users); GET /api/users/<uuid>/events/, GET /api/events/explore/, POST /api/events/<id>/join/
-  apps/tags/        Tag model (many-to-many with events: tag.events / event.tags)
-  apps/panel/       staff-only admin API at /api/panel/ (stats, users, events)
-  apps/ai/          Gemini embedding client; saving a tag/event queues a task that fills its embedding
-  apps/connections/ Connection between users who shared events (strength += 1/(attendees-1) per event, counted after it ends by a worker task); GET /api/users/<uuid>/connections/ and .../connections/graph/ (network for the profile graph); `manage.py apply_connections [--rebuild]`
+  apps/occasions/   Occasion model (many-to-many with users, directory is `apps/occasions` with app label `occasions`); GET /api/users/<uuid>/occasions/, GET /api/occasions/explore/, POST /api/occasions/<id>/join/
+  apps/tags/        Tag model (many-to-many with occasions: tag.occasions / occasion.tags)
+  apps/panel/       staff-only admin API at /api/panel/ (stats, users, occasions)
+  apps/ai/          Gemini embedding client; saving a tag/occasion queues a task that fills its embedding
+  apps/connections/ Connection between users who shared occasions (strength += 1/(attendees-1) per occasion, counted after it ends by a worker task); GET /api/users/<uuid>/connections/ and .../connections/graph/ (network for the profile graph); `manage.py apply_connections [--rebuild]`
 frontend/           Vite React app
   src/App.tsx       layout (header, footer) and routes
-  src/pages/        Home (landing), Login, Register, Profile, Settings (name/password, linked from Profile), Explore (accept/decline upcoming events)
+  src/pages/        Home (landing), Login, Register, Profile, Settings (name/password, linked from Profile), Explore (accept/decline upcoming occasions)
   src/pages/panel/  admin control panel at /admin (staff only)
   src/components/   shared UI (form fields, auth card)
   src/api.ts        fetch helpers with CSRF handling

@@ -6,16 +6,16 @@ from .models import Tag
 
 @admin.register(Tag)
 class TagAdmin(admin.ModelAdmin):
-    list_display = ("name", "events_count", "has_embedding", "created_at")
+    list_display = ("name", "occasions_count", "has_embedding", "created_at")
     search_fields = ("name",)
-    filter_horizontal = ("events",)
+    filter_horizontal = ("occasions",)
 
     def get_queryset(self, request):
-        return super().get_queryset(request).annotate(events_count=Count("events"))
+        return super().get_queryset(request).annotate(occasions_count=Count("occasions"))
 
-    @admin.display(description="Events", ordering="events_count")
-    def events_count(self, tag):
-        return tag.events_count
+    @admin.display(description="Occasions", ordering="occasions_count")
+    def occasions_count(self, tag):
+        return tag.occasions_count
 
     @admin.display(description="Embedding", boolean=True)
     def has_embedding(self, tag):

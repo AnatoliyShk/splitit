@@ -42,8 +42,8 @@ test.describe('panel access', () => {
       GET: () => ({
         body: {
           users: { total: 1, active: 1, staff: 1, new_this_week: 0 },
-          events: { total: 0, upcoming: 0 },
-          next_events: [],
+          occasions: { total: 0, upcoming: 0 },
+          next_occasions: [],
         },
       }),
     })
@@ -70,7 +70,7 @@ test.describe('panel access', () => {
   test('non-staff user is blocked on every panel sub-page', async ({ page }) => {
     await mockSession(page, memberUser)
 
-    for (const path of ['/admin/users', '/admin/events', '/admin/events/new', '/admin/tags']) {
+    for (const path of ['/admin/users', '/admin/occasions', '/admin/occasions/new', '/admin/tags']) {
       await page.goto(path)
       await expect(page.getByRole('heading', { name: 'Admins only' })).toBeVisible()
       await expect(page.getByRole('navigation', { name: 'Admin sections' })).toHaveCount(0)
@@ -111,8 +111,8 @@ test.describe('panel access', () => {
       GET: () => ({
         body: {
           users: { total: 1, active: 1, staff: 1, new_this_week: 0 },
-          events: { total: 0, upcoming: 0 },
-          next_events: [],
+          occasions: { total: 0, upcoming: 0 },
+          next_occasions: [],
         },
       }),
     })
@@ -121,7 +121,7 @@ test.describe('panel access', () => {
 
     await expect(page).toHaveURL(/\/admin$/)
     const tabs = page.getByRole('navigation', { name: 'Admin sections' })
-    for (const label of ['Overview', 'Users', 'Events', 'Tags']) {
+    for (const label of ['Overview', 'Users', 'Occasions', 'Tags']) {
       await expect(tabs.getByRole('link', { name: label })).toBeVisible()
     }
   })

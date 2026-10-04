@@ -136,7 +136,7 @@ export default function Tags() {
           <thead>
             <tr>
               <th scope="col">Tag</th>
-              <th scope="col">Events</th>
+              <th scope="col">Occasions</th>
               <th scope="col">Embedding</th>
               <th scope="col">Created</th>
               <th scope="col">
@@ -183,7 +183,7 @@ export default function Tags() {
                   <td data-label="Tag">
                     <span className="tag-name">{t.name}</span>
                   </td>
-                  <td data-label="Events">{t.events_count}</td>
+                  <td data-label="Occasions">{t.occasions_count}</td>
                   <td data-label="Embedding">
                     {/* Neutral status in ink: a check mark when the vector exists, a dash while it's missing */}
                     {t.has_embedding ? (
@@ -202,7 +202,7 @@ export default function Tags() {
                     {confirmId === t.id ? (
                       <span className="confirm" role="group" aria-label={`Delete ${t.name}?`}>
                         <span className="confirm-text">
-                          {t.events_count ? `Remove from ${plural(t.events_count, 'event')}?` : 'Delete?'}
+                          {t.occasions_count ? `Remove from ${plural(t.occasions_count, 'occasion')}?` : 'Delete?'}
                         </span>
                         <button className="btn btn-sm" onClick={() => setConfirmId(null)} autoFocus>
                           Keep

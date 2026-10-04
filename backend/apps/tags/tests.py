@@ -4,19 +4,19 @@ from django.test import TestCase
 from django.utils import timezone
 from pgvector.django import CosineDistance
 
-from apps.events.models import EMBEDDING_DIMENSIONS, Event
+from apps.occasions.models import EMBEDDING_DIMENSIONS, Occasion
 from apps.users.models import User
 
 from .models import Tag
 
 
 class TagModelTests(TestCase):
-    def test_links_events_both_ways(self):
+    def test_links_occasions_both_ways(self):
         tag = Tag.objects.create(name="Jazz")
-        event = Event.objects.create(name="Sunset jazz", start_datetime=timezone.now())
-        tag.events.add(event)
-        self.assertEqual(list(event.tags.all()), [tag])
-        self.assertEqual(list(tag.events.all()), [event])
+        occasion = Occasion.objects.create(name="Sunset jazz", start_datetime=timezone.now())
+        tag.occasions.add(occasion)
+        self.assertEqual(list(occasion.tags.all()), [tag])
+        self.assertEqual(list(tag.occasions.all()), [occasion])
 
     def test_name_is_unique_case_insensitively(self):
         Tag.objects.create(name="Jazz")
@@ -28,13 +28,13 @@ class TagModelTests(TestCase):
         with self.assertRaisesMessage(ValidationError, "A tag with this name already exists."):
             Tag(name="JAZZ").full_clean()
 
-    def test_deleting_event_keeps_tag(self):
+    def test_deleting_occasion_keeps_tag(self):
         tag = Tag.objects.create(name="Hiking")
-        event = Event.objects.create(name="Morning hike", start_datetime=timezone.now())
-        tag.events.add(event)
-        event.delete()
+        occasion = Occasion.objects.create(name="Morning hike", start_datetime=timezone.now())
+        tag.occasions.add(occasion)
+        occasion.delete()
         self.assertTrue(Tag.objects.filter(pk=tag.pk).exists())
-        self.assertEqual(tag.events.count(), 0)
+        self.assertEqual(tag.occasions.count(), 0)
 
 
 class TagEmbeddingTests(TestCase):

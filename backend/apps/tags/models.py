@@ -2,13 +2,13 @@ from django.db import models
 from django.db.models.functions import Lower
 from pgvector.django import HnswIndex, VectorField
 
-from apps.events.models import EMBEDDING_DIMENSIONS
+from apps.occasions.models import EMBEDDING_DIMENSIONS
 
 
 class Tag(models.Model):
     name = models.CharField(max_length=50)
-    events = models.ManyToManyField(
-        "events.Event",
+    occasions = models.ManyToManyField(
+        "occasions.Occasion",
         related_name="tags",
         blank=True,
     )

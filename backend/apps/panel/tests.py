@@ -5,7 +5,7 @@ from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from apps.events.models import EMBEDDING_DIMENSIONS, Event
+from apps.occasions.models import EMBEDDING_DIMENSIONS, Occasion
 from apps.ai.embedding import embedding_updated
 from apps.tags.models import Tag
 from apps.users.models import User
@@ -24,7 +24,7 @@ class PanelTestCase(APITestCase):
 
 
 class PermissionTests(PanelTestCase):
-    urls = ("/api/panel/stats/", "/api/panel/users/", "/api/panel/events/", "/api/panel/tags/")
+    urls = ("/api/panel/stats/", "/api/panel/users/", "/api/panel/occasions/", "/api/panel/tags/")
 
     def test_anonymous_is_rejected(self):
         self.client.logout()
@@ -43,23 +43,23 @@ class PermissionTests(PanelTestCase):
 
 
 class StatsTests(PanelTestCase):
-    def test_counts_users_and_upcoming_events(self):
+    def test_counts_users_and_upcoming_occasions(self):
         now = timezone.now()
-        Event.objects.create(name="Past", start_datetime=now - timedelta(days=10))
-        Event.objects.create(
+        Occasion.objects.create(name="Past", start_datetime=now - timedelta(days=10))
+        Occasion.objects.create(
             name="Ended", start_datetime=now - timedelta(hours=3), end_datetime=now - timedelta(hours=1)
         )
-        running = Event.objects.create(
+        running = Occasion.objects.create(
             name="Running", start_datetime=now - timedelta(hours=1), end_datetime=now + timedelta(hours=2)
         )
         running.users.add(self.member)
-        Event.objects.create(name="Soon", start_datetime=now + timedelta(days=3))
+        Occasion.objects.create(name="Soon", start_datetime=now + timedelta(days=3))
 
         data = self.client.get("/api/panel/stats/").json()
         self.assertEqual(data["users"], {"total": 2, "active": 2, "staff": 1, "new_this_week": 2})
-        self.assertEqual(data["events"], {"total": 4, "upcoming": 2})
-        self.assertEqual([e["name"] for e in data["next_events"]], ["Running", "Soon"])
-        self.assertEqual(data["next_events"][0]["attendees_count"], 1)
+        self.assertEqual(data["occasions"], {"total": 4, "upcoming": 2})
+        self.assertEqual([o["name"] for o in data["next_occasions"]], ["Running", "Soon"])
+        self.assertEqual(data["next_occasions"][0]["attendees_count"], 1)
 
 
 class UserManagementTests(PanelTestCase):
@@ -92,10 +92,10 @@ class UserManagementTests(PanelTestCase):
         self.assertEqual(res.status_code, 403)
 
 
-class EventManagementTests(PanelTestCase):
+class OccasionManagementTests(PanelTestCase):
     def test_create_update_delete(self):
         res = self.client.post(
-            "/api/panel/events/",
+            "/api/panel/occasions/",
             {
                 "name": "Trip",
                 "start_datetime": "2026-10-10T18:00:00+03:00",
@@ -105,23 +105,23 @@ class EventManagementTests(PanelTestCase):
             format="json",
         )
         self.assertEqual(res.status_code, 201)
-        event = res.json()
-        self.assertEqual(event["start_datetime"], "2026-10-10T15:00:00Z")  # stored and returned in UTC
-        self.assertEqual(event["duration_minutes"], 2 * 24 * 60 + 150)
-        self.assertEqual(event["attendees"][0]["name"], "Member")
+        occasion = res.json()
+        self.assertEqual(occasion["start_datetime"], "2026-10-10T15:00:00Z")  # stored and returned in UTC
+        self.assertEqual(occasion["duration_minutes"], 2 * 24 * 60 + 150)
+        self.assertEqual(occasion["attendees"][0]["name"], "Member")
 
-        res = self.client.patch(f"/api/panel/events/{event['id']}/", {"users": []}, format="json")
+        res = self.client.patch(f"/api/panel/occasions/{occasion['id']}/", {"users": []}, format="json")
         self.assertEqual(res.json()["attendees"], [])
 
-        res = self.client.delete(f"/api/panel/events/{event['id']}/")
+        res = self.client.delete(f"/api/panel/occasions/{occasion['id']}/")
         self.assertEqual(res.status_code, 204)
-        self.assertFalse(Event.objects.exists())
+        self.assertFalse(Occasion.objects.exists())
 
     def test_end_not_after_start_is_rejected(self):
         for end in ("2026-10-10T17:00:00Z", "2026-10-10T18:00:00Z"):
             with self.subTest(end=end):
                 res = self.client.post(
-                    "/api/panel/events/",
+                    "/api/panel/occasions/",
                     {"name": "Bad", "start_datetime": "2026-10-10T18:00:00Z", "end_datetime": end},
                     format="json",
                 )
@@ -129,99 +129,99 @@ class EventManagementTests(PanelTestCase):
                 self.assertIn("end_datetime", res.json())
 
     def test_partial_update_checks_end_against_stored_start(self):
-        event = Event.objects.create(name="Trip", start_datetime="2026-10-10T18:00:00Z")
+        occasion = Occasion.objects.create(name="Trip", start_datetime="2026-10-10T18:00:00Z")
         res = self.client.patch(
-            f"/api/panel/events/{event.pk}/", {"end_datetime": "2026-10-10T09:00:00Z"}, format="json"
+            f"/api/panel/occasions/{occasion.pk}/", {"end_datetime": "2026-10-10T09:00:00Z"}, format="json"
         )
         self.assertEqual(res.status_code, 400)
 
-    def test_open_ended_event_has_no_duration(self):
+    def test_open_ended_occasion_has_no_duration(self):
         res = self.client.post(
-            "/api/panel/events/", {"name": "Open", "start_datetime": "2026-10-10T18:00:00Z"}, format="json"
+            "/api/panel/occasions/", {"name": "Open", "start_datetime": "2026-10-10T18:00:00Z"}, format="json"
         )
         self.assertIsNone(res.json()["duration_minutes"])
 
-    def test_finish_running_event_ends_it_now(self):
+    def test_finish_running_occasion_ends_it_now(self):
         start = timezone.now() - timedelta(hours=1)
-        event = Event.objects.create(name="Live", start_datetime=start, end_datetime=start + timedelta(hours=3))
-        res = self.client.post(f"/api/panel/events/{event.pk}/finish/")
+        occasion = Occasion.objects.create(name="Live", start_datetime=start, end_datetime=start + timedelta(hours=3))
+        res = self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
         self.assertEqual(res.status_code, 200)
-        event.refresh_from_db()
-        self.assertEqual(event.start_datetime, start)
-        self.assertLessEqual(event.end_datetime, timezone.now())
+        occasion.refresh_from_db()
+        self.assertEqual(occasion.start_datetime, start)
+        self.assertLessEqual(occasion.end_datetime, timezone.now())
 
-    def test_finish_future_event_moves_it_to_end_now(self):
+    def test_finish_future_occasion_moves_it_to_end_now(self):
         start = timezone.now() + timedelta(days=2)
-        event = Event.objects.create(name="Soon", start_datetime=start, end_datetime=start + timedelta(hours=2))
-        self.client.post(f"/api/panel/events/{event.pk}/finish/")
-        event.refresh_from_db()
-        self.assertLessEqual(event.end_datetime, timezone.now())
-        self.assertEqual(event.duration, timedelta(hours=2))
+        occasion = Occasion.objects.create(name="Soon", start_datetime=start, end_datetime=start + timedelta(hours=2))
+        self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
+        occasion.refresh_from_db()
+        self.assertLessEqual(occasion.end_datetime, timezone.now())
+        self.assertEqual(occasion.duration, timedelta(hours=2))
 
-    def test_finish_open_ended_future_event_lasts_an_hour(self):
-        event = Event.objects.create(name="Open", start_datetime=timezone.now() + timedelta(days=1))
-        self.client.post(f"/api/panel/events/{event.pk}/finish/")
-        event.refresh_from_db()
-        self.assertEqual(event.duration, timedelta(hours=1))
+    def test_finish_open_ended_future_occasion_lasts_an_hour(self):
+        occasion = Occasion.objects.create(name="Open", start_datetime=timezone.now() + timedelta(days=1))
+        self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
+        occasion.refresh_from_db()
+        self.assertEqual(occasion.duration, timedelta(hours=1))
 
     @override_settings(TASKS={"default": {"BACKEND": "django.tasks.backends.dummy.DummyBackend"}})
     def test_finish_queues_the_connections_count_straight_away(self):
         from django.tasks import default_task_backend
 
         default_task_backend.clear()
-        event = Event.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
+        occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
         with self.captureOnCommitCallbacks(execute=True):
-            self.client.post(f"/api/panel/events/{event.pk}/finish/")
-        [job] = [r for r in default_task_backend.results if r.task.name == "apply_event_connections"]
-        self.assertEqual(job.args, [event.pk])
+            self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
+        [job] = [r for r in default_task_backend.results if r.task.name == "apply_occasion_connections"]
+        self.assertEqual(job.args, [occasion.pk])
         self.assertIsNone(job.task.run_after)
 
-    def test_finish_ended_event_is_rejected(self):
-        event = Event.objects.create(name="Past", start_datetime=timezone.now() - timedelta(days=1))
-        res = self.client.post(f"/api/panel/events/{event.pk}/finish/")
+    def test_finish_ended_occasion_is_rejected(self):
+        occasion = Occasion.objects.create(name="Past", start_datetime=timezone.now() - timedelta(days=1))
+        res = self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
         self.assertEqual(res.status_code, 400)
         self.assertIn("non_field_errors", res.json())
 
-    def test_create_test_event_with_existing_users(self):
-        res = self.client.post("/api/panel/events/test/")
+    def test_create_test_occasion_with_existing_users(self):
+        res = self.client.post("/api/panel/occasions/test/")
         self.assertEqual(res.status_code, 201)
-        event = Event.objects.get(pk=res.json()["id"])
-        self.assertGreater(event.start_datetime, timezone.now())
-        self.assertGreater(event.end_datetime, event.start_datetime)
-        attendees = list(event.users.all())
+        occasion = Occasion.objects.get(pk=res.json()["id"])
+        self.assertGreater(occasion.start_datetime, timezone.now())
+        self.assertGreater(occasion.end_datetime, occasion.start_datetime)
+        attendees = list(occasion.users.all())
         self.assertTrue(1 <= len(attendees) <= 3)
         # Staff are never picked; missing attendees are made up as test accounts
         self.assertNotIn(self.admin, attendees)
         self.assertIn(self.member, attendees)
 
-    def test_create_test_event_creates_users_when_there_are_none(self):
+    def test_create_test_occasion_creates_users_when_there_are_none(self):
         self.member.delete()
-        res = self.client.post("/api/panel/events/test/")
+        res = self.client.post("/api/panel/occasions/test/")
         attendees = res.json()["attendees"]
         self.assertTrue(1 <= len(attendees) <= 3)
         created = User.objects.filter(email__startswith="test-")
         self.assertEqual(created.count(), len(attendees))
         self.assertFalse(any(u.has_usable_password() for u in created))
 
-    def test_create_test_event_is_staff_only(self):
+    def test_create_test_occasion_is_staff_only(self):
         self.client.force_login(self.member)
-        self.assertEqual(self.client.post("/api/panel/events/test/").status_code, 403)
-        self.assertFalse(Event.objects.exists())
+        self.assertEqual(self.client.post("/api/panel/occasions/test/").status_code, 403)
+        self.assertFalse(Occasion.objects.exists())
 
 
 class TagManagementTests(PanelTestCase):
-    def test_list_is_sorted_case_insensitively_with_event_counts(self):
+    def test_list_is_sorted_case_insensitively_with_occasion_counts(self):
         jazz = Tag.objects.create(name="jazz")
         Tag.objects.create(name="Art")
-        jazz.events.add(Event.objects.create(name="Gig", start_datetime=timezone.now()))
+        jazz.occasions.add(Occasion.objects.create(name="Gig", start_datetime=timezone.now()))
         data = self.client.get("/api/panel/tags/").json()
-        self.assertEqual([(t["name"], t["events_count"]) for t in data["results"]], [("Art", 0), ("jazz", 1)])
+        self.assertEqual([(t["name"], t["occasions_count"]) for t in data["results"]], [("Art", 0), ("jazz", 1)])
 
     def test_create_rename_delete(self):
         res = self.client.post("/api/panel/tags/", {"name": "  Hiking "}, format="json")
         self.assertEqual(res.status_code, 201)
         tag = res.json()
-        self.assertEqual((tag["name"], tag["events_count"]), ("Hiking", 0))
+        self.assertEqual((tag["name"], tag["occasions_count"]), ("Hiking", 0))
 
         res = self.client.patch(f"/api/panel/tags/{tag['id']}/", {"name": "Hikes"}, format="json")
         self.assertEqual(res.json()["name"], "Hikes")
@@ -277,16 +277,16 @@ class TagListCacheTests(PanelTestCase):
             self.client.delete(f"/api/panel/tags/{tag['id']}/")
         self.assertEqual(self.names(), [])
 
-    def test_event_links_and_event_deletes_refresh_counts(self):
+    def test_occasion_links_and_occasion_deletes_refresh_counts(self):
         tag = Tag.objects.create(name="Jazz")
-        event = Event.objects.create(name="Gig", start_datetime=timezone.now())
-        self.assertEqual(self.row("Jazz")["events_count"], 0)
+        occasion = Occasion.objects.create(name="Gig", start_datetime=timezone.now())
+        self.assertEqual(self.row("Jazz")["occasions_count"], 0)
         with self.captureOnCommitCallbacks(execute=True):
-            tag.events.add(event)
-        self.assertEqual(self.row("Jazz")["events_count"], 1)
+            tag.occasions.add(occasion)
+        self.assertEqual(self.row("Jazz")["occasions_count"], 1)
         with self.captureOnCommitCallbacks(execute=True):
-            event.delete()
-        self.assertEqual(self.row("Jazz")["events_count"], 0)
+            occasion.delete()
+        self.assertEqual(self.row("Jazz")["occasions_count"], 0)
 
     def test_embedding_updates_refresh_the_list(self):
         tag = Tag.objects.create(name="Jazz")

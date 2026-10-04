@@ -3,28 +3,28 @@ import { Link } from 'react-router'
 import { apiDelete, apiGet, apiPost, errorsFrom, type FieldErrors, type Page } from '../../api'
 import { Field, FormAlert } from '../../components/Field'
 import { Pager } from '../../components/Pager'
-import { formatDuration, formatRange, PAGE_SIZE, useDebounced, type PanelEvent } from './shared'
+import { formatDuration, formatRange, PAGE_SIZE, useDebounced, type PanelOccasion } from './shared'
 
-// Not over yet: same rule as the server (an event with no end is over once it starts)
-function isUpcoming(e: PanelEvent) {
-  return new Date(e.end_datetime ?? e.start_datetime).getTime() > Date.now()
+// Not over yet: same rule as the server (an occasion with no end is over once it starts)
+function isUpcoming(o: PanelOccasion) {
+  return new Date(o.end_datetime ?? o.start_datetime).getTime() > Date.now()
 }
 
-export default function Events() {
+export default function Occasions() {
   const [search, setSearch] = useState('')
   const query = useDebounced(search.trim())
   const [page, setPage] = useState(1)
-  const [data, setData] = useState<Page<PanelEvent> | null>(null)
+  const [data, setData] = useState<Page<PanelOccasion> | null>(null)
   const [errors, setErrors] = useState<FieldErrors>({})
   // Deleting and finishing are two-step: the row asks for confirmation inline
   const [confirm, setConfirm] = useState<{ id: number; action: 'delete' | 'finish' } | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [creatingTest, setCreatingTest] = useState(false)
-  const [testEvent, setTestEvent] = useState<PanelEvent | null>(null)
+  const [testOccasion, setTestOccasion] = useState<PanelOccasion | null>(null)
 
   const load = useCallback(() => {
     const params = new URLSearchParams({ page: String(page), search: query })
-    return apiGet<Page<PanelEvent>>(`/api/panel/events/?${params}`)
+    return apiGet<Page<PanelOccasion>>(`/api/panel/occasions/?${params}`)
       .then(setData)
       .catch((err) => setErrors(errorsFrom(err)))
   }, [page, query])
@@ -33,11 +33,11 @@ export default function Events() {
     load()
   }, [load])
 
-  async function remove(event: PanelEvent) {
-    setBusyId(event.id)
+  async function remove(occasion: PanelOccasion) {
+    setBusyId(occasion.id)
     setErrors({})
     try {
-      await apiDelete(`/api/panel/events/${event.id}/`)
+      await apiDelete(`/api/panel/occasions/${occasion.id}/`)
       setConfirm(null)
       // Step back a page if this deleted the last row on it
       if (data?.results.length === 1 && page > 1) setPage(page - 1)
@@ -49,12 +49,12 @@ export default function Events() {
     }
   }
 
-  // Ends the event now; the worker then counts connections between its attendees
-  async function finish(event: PanelEvent) {
-    setBusyId(event.id)
+  // Ends the occasion now; the worker then counts connections between its attendees
+  async function finish(occasion: PanelOccasion) {
+    setBusyId(occasion.id)
     setErrors({})
     try {
-      await apiPost(`/api/panel/events/${event.id}/finish/`)
+      await apiPost(`/api/panel/occasions/${occasion.id}/finish/`)
       await load()
       setConfirm(null)
     } catch (err) {
@@ -68,12 +68,12 @@ export default function Events() {
   async function createTest() {
     setCreatingTest(true)
     setErrors({})
-    setTestEvent(null)
+    setTestOccasion(null)
     try {
-      const event = await apiPost<PanelEvent>('/api/panel/events/test/')
+      const occasion = await apiPost<PanelOccasion>('/api/panel/occasions/test/')
       // Refresh first, so the message never points at a row the table doesn't show yet
       await load()
-      setTestEvent(event)
+      setTestOccasion(occasion)
     } catch (err) {
       setErrors(errorsFrom(err))
     } finally {
@@ -84,33 +84,33 @@ export default function Events() {
   return (
     <>
       <div className="panel-head">
-        <h1>Events</h1>
+        <h1>Occasions</h1>
         <div className="panel-head-actions">
           <button className="btn" type="button" onClick={createTest} disabled={creatingTest}>
-            {creatingTest ? 'Creating…' : 'Create test event'}
+            {creatingTest ? 'Creating…' : 'Create test occasion'}
           </button>
-          <Link className="btn btn-primary" to="/admin/events/new">
-            New event
+          <Link className="btn btn-primary" to="/admin/occasions/new">
+            New occasion
           </Link>
         </div>
       </div>
 
-      {testEvent && (
+      {testOccasion && (
         <p className="form-status" role="status">
           <span>
             Created{' '}
-            <Link className="row-link" to={`/admin/events/${testEvent.id}`}>
-              {testEvent.name}
+            <Link className="row-link" to={`/admin/occasions/${testOccasion.id}`}>
+              {testOccasion.name}
             </Link>{' '}
-            on {formatRange(testEvent.start_datetime, testEvent.end_datetime)} with{' '}
-            {testEvent.attendees.map((a) => a.name).join(', ')}
+            on {formatRange(testOccasion.start_datetime, testOccasion.end_datetime)} with{' '}
+            {testOccasion.attendees.map((a) => a.name).join(', ')}
           </span>
         </p>
       )}
 
       <div className="panel-toolbar">
         <Field
-          id="event-search"
+          id="occasion-search"
           label="Search by name"
           type="search"
           value={search}
@@ -125,10 +125,10 @@ export default function Events() {
 
       {data && data.results.length === 0 && (
         <div className="empty">
-          <p>{query ? `No events match “${query}”.` : 'No events yet.'}</p>
+          <p>{query ? `No occasions match “${query}”.` : 'No occasions yet.'}</p>
           {!query && (
-            <Link className="btn btn-primary btn-sm" to="/admin/events/new">
-              Create the first event
+            <Link className="btn btn-primary btn-sm" to="/admin/occasions/new">
+              Create the first occasion
             </Link>
           )}
         </div>
@@ -138,7 +138,7 @@ export default function Events() {
         <table className="data-table">
           <thead>
             <tr>
-              <th scope="col">Event</th>
+              <th scope="col">Occasion</th>
               <th scope="col">When</th>
               <th scope="col">Length</th>
               <th scope="col">Going</th>
@@ -148,52 +148,52 @@ export default function Events() {
             </tr>
           </thead>
           <tbody>
-            {data.results.map((e) => (
-              <tr key={e.id}>
-                <td data-label="Event">
-                  <Link className="row-link" to={`/admin/events/${e.id}`}>
-                    {e.name}
+            {data.results.map((o) => (
+              <tr key={o.id}>
+                <td data-label="Occasion">
+                  <Link className="row-link" to={`/admin/occasions/${o.id}`}>
+                    {o.name}
                   </Link>
                 </td>
-                <td data-label="When">{formatRange(e.start_datetime, e.end_datetime)}</td>
+                <td data-label="When">{formatRange(o.start_datetime, o.end_datetime)}</td>
                 <td data-label="Length">
-                  {e.duration_minutes === null ? 'Open' : formatDuration(e.duration_minutes)}
+                  {o.duration_minutes === null ? 'Open' : formatDuration(o.duration_minutes)}
                 </td>
-                <td data-label="Going">{e.attendees.length}</td>
+                <td data-label="Going">{o.attendees.length}</td>
                 <td className="row-actions">
-                  {confirm?.id === e.id ? (
+                  {confirm?.id === o.id ? (
                     <span
                       className="confirm"
                       role="group"
-                      aria-label={`${confirm.action === 'delete' ? 'Delete' : 'Finish'} ${e.name}?`}
+                      aria-label={`${confirm.action === 'delete' ? 'Delete' : 'Finish'} ${o.name}?`}
                     >
                       <span className="confirm-text">{confirm.action === 'delete' ? 'Delete?' : 'Finish now?'}</span>
                       <button className="btn btn-sm" onClick={() => setConfirm(null)} autoFocus>
                         Keep
                       </button>
                       {confirm.action === 'delete' ? (
-                        <button className="btn btn-sm btn-danger" disabled={busyId === e.id} onClick={() => remove(e)}>
+                        <button className="btn btn-sm btn-danger" disabled={busyId === o.id} onClick={() => remove(o)}>
                           Delete
                         </button>
                       ) : (
-                        <button className="btn btn-sm btn-confirm" disabled={busyId === e.id} onClick={() => finish(e)}>
+                        <button className="btn btn-sm btn-confirm" disabled={busyId === o.id} onClick={() => finish(o)}>
                           Finish
                         </button>
                       )}
                     </span>
                   ) : (
                     <>
-                      {isUpcoming(e) && (
-                        <button className="btn btn-sm" onClick={() => setConfirm({ id: e.id, action: 'finish' })}>
+                      {isUpcoming(o) && (
+                        <button className="btn btn-sm" onClick={() => setConfirm({ id: o.id, action: 'finish' })}>
                           Finish
                         </button>
                       )}
-                      <Link className="btn btn-sm" to={`/admin/events/${e.id}`}>
+                      <Link className="btn btn-sm" to={`/admin/occasions/${o.id}`}>
                         Edit
                       </Link>
                       <button
                         className="btn btn-sm btn-danger"
-                        onClick={() => setConfirm({ id: e.id, action: 'delete' })}
+                        onClick={() => setConfirm({ id: o.id, action: 'delete' })}
                       >
                         Delete
                       </button>

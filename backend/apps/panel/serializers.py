@@ -1,12 +1,12 @@
 from rest_framework import serializers
 
-from apps.events.models import Event
+from apps.occasions.models import Occasion
 from apps.tags.models import Tag
 from apps.users.models import User
 
 
 class PanelUserSerializer(serializers.ModelSerializer):
-    events_count = serializers.IntegerField(read_only=True)
+    occasions_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = User
@@ -19,7 +19,7 @@ class PanelUserSerializer(serializers.ModelSerializer):
             "is_superuser",
             "date_joined",
             "last_login",
-            "events_count",
+            "occasions_count",
         )
         # Admins can only switch access flags; profile data stays the user's own
         read_only_fields = ("id", "email", "name", "is_superuser", "date_joined", "last_login")
@@ -31,7 +31,7 @@ class AttendeeSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "email")
 
 
-class PanelEventSerializer(serializers.ModelSerializer):
+class PanelOccasionSerializer(serializers.ModelSerializer):
     # Write attendees as a list of user ids, read them back with names
     users = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(), many=True, required=False, write_only=True
@@ -40,7 +40,7 @@ class PanelEventSerializer(serializers.ModelSerializer):
     duration_minutes = serializers.SerializerMethodField()
 
     class Meta:
-        model = Event
+        model = Occasion
         fields = (
             "id",
             "name",
@@ -53,8 +53,8 @@ class PanelEventSerializer(serializers.ModelSerializer):
             "updated_at",
         )
 
-    def get_duration_minutes(self, event) -> int | None:
-        duration = event.duration
+    def get_duration_minutes(self, occasion) -> int | None:
+        duration = occasion.duration
         return None if duration is None else int(duration.total_seconds() // 60)
 
     def validate(self, attrs):
@@ -70,17 +70,17 @@ class PanelEventSerializer(serializers.ModelSerializer):
 
 
 class PanelTagSerializer(serializers.ModelSerializer):
-    events_count = serializers.SerializerMethodField()
+    occasions_count = serializers.SerializerMethodField()
     has_embedding = serializers.SerializerMethodField()
 
     class Meta:
         model = Tag
-        fields = ("id", "name", "events_count", "has_embedding", "created_at", "updated_at")
+        fields = ("id", "name", "occasions_count", "has_embedding", "created_at", "updated_at")
 
-    def get_events_count(self, tag) -> int:
+    def get_occasions_count(self, tag) -> int:
         # Annotated on list/detail queries; a freshly created tag isn't, so count directly
-        count = getattr(tag, "events_count", None)
-        return tag.events.count() if count is None else count
+        count = getattr(tag, "occasions_count", None)
+        return tag.occasions.count() if count is None else count
 
     def get_has_embedding(self, tag) -> bool:
         return tag.embedding is not None

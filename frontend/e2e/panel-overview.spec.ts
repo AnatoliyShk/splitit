@@ -6,8 +6,8 @@ test.use({ timezoneId: 'UTC', locale: 'en-US' })
 
 const stats = {
   users: { total: 42, active: 40, staff: 3, new_this_week: 5 },
-  events: { total: 17, upcoming: 2 },
-  next_events: [
+  occasions: { total: 17, upcoming: 2 },
+  next_occasions: [
     {
       id: 7,
       name: 'Rooftop picnic',
@@ -41,8 +41,8 @@ test.describe('panel overview', () => {
     await expect(totals.getByRole('listitem').filter({ hasText: 'Admins' })).toContainText('3')
     await expect(totals.getByRole('listitem').filter({ hasText: 'Admins' })).toContainText('with panel access')
     await expect(totals.getByRole('listitem').filter({ hasText: 'New this week' })).toContainText('5')
-    await expect(totals.getByRole('listitem').filter({ hasText: 'Events' })).toContainText('17')
-    await expect(totals.getByRole('listitem').filter({ hasText: 'Events' })).toContainText('2 upcoming')
+    await expect(totals.getByRole('listitem').filter({ hasText: 'Occasions' })).toContainText('17')
+    await expect(totals.getByRole('listitem').filter({ hasText: 'Occasions' })).toContainText('2 upcoming')
   })
 
   test('shows a loading message until stats arrive', async ({ page }) => {
@@ -62,7 +62,7 @@ test.describe('panel overview', () => {
     await expect(page.getByText('Loading…')).toHaveCount(0)
   })
 
-  test('lists next events with date, time range and attendee count', async ({ page }) => {
+  test('lists next occasions with date, time range and attendee count', async ({ page }) => {
     await mockApi(page, '/api/panel/stats/', { GET: () => ({ body: stats }) })
     await page.goto('/admin')
 
@@ -71,18 +71,18 @@ test.describe('panel overview', () => {
     // Same day: the date is shown once, then only the end time
     await expect(picnic).toContainText(/12:00\sPM\s–\s3:00\sPM/)
     await expect(picnic).toContainText('4 going')
-    await expect(picnic).toHaveAttribute('href', '/admin/events/7')
+    await expect(picnic).toHaveAttribute('href', '/admin/occasions/7')
 
     // No end time: only the start is shown
     const openMic = page.getByRole('link', { name: /Open mic/ })
     await expect(openMic).toContainText('Nov 2, 2099')
     await expect(openMic).toContainText('1 going')
-    await expect(page.getByText('2 upcoming events in total.')).toBeVisible()
+    await expect(page.getByText('2 upcoming occasions in total.')).toBeVisible()
   })
 
-  test('clicking a next event opens its edit form', async ({ page }) => {
+  test('clicking a next occasion opens its edit form', async ({ page }) => {
     await mockApi(page, '/api/panel/stats/', { GET: () => ({ body: stats }) })
-    await mockApi(page, '/api/panel/events/7/', {
+    await mockApi(page, '/api/panel/occasions/7/', {
       GET: () => ({
         body: {
           id: 7,
@@ -99,42 +99,45 @@ test.describe('panel overview', () => {
     await page.goto('/admin')
     await page.getByRole('link', { name: /Rooftop picnic/ }).click()
 
-    await expect(page).toHaveURL(/\/admin\/events\/7$/)
-    await expect(page.getByRole('heading', { name: 'Edit event' })).toBeVisible()
+    await expect(page).toHaveURL(/\/admin\/occasions\/7$/)
+    await expect(page.getByRole('heading', { name: 'Edit occasion' })).toBeVisible()
   })
 
-  test('"All events" link goes to the events list', async ({ page }) => {
+  test('"All occasions" link goes to the occasions list', async ({ page }) => {
     await mockApi(page, '/api/panel/stats/', { GET: () => ({ body: stats }) })
-    await mockApi(page, '/api/panel/events/', {
+    await mockApi(page, '/api/panel/occasions/', {
       GET: () => ({ body: { count: 0, next: null, previous: null, results: [] } }),
     })
     await page.goto('/admin')
-    await page.getByRole('link', { name: 'All events' }).click()
+    await page.getByRole('link', { name: 'All occasions' }).click()
 
-    await expect(page).toHaveURL(/\/admin\/events$/)
-    await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible()
+    await expect(page).toHaveURL(/\/admin\/occasions$/)
+    await expect(page.getByRole('heading', { name: 'Occasions' })).toBeVisible()
   })
 
-  test('with no upcoming events it offers to create one', async ({ page }) => {
+  test('with no upcoming occasions it offers to create one', async ({ page }) => {
     await mockApi(page, '/api/panel/stats/', {
-      GET: () => ({ body: { ...stats, events: { total: 3, upcoming: 0 }, next_events: [] } }),
+      GET: () => ({ body: { ...stats, occasions: { total: 3, upcoming: 0 }, next_occasions: [] } }),
     })
     await page.goto('/admin')
 
-    await expect(page.getByText('No upcoming events.')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Create an event' })).toHaveAttribute('href', '/admin/events/new')
-    await expect(page.getByText('0 upcoming events in total.')).toBeVisible()
+    await expect(page.getByText('No upcoming occasions.')).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Create an occasion' })).toHaveAttribute(
+      'href',
+      '/admin/occasions/new',
+    )
+    await expect(page.getByText('0 upcoming occasions in total.')).toBeVisible()
   })
 
-  test('uses singular wording for a single upcoming event', async ({ page }) => {
+  test('uses singular wording for a single upcoming occasion', async ({ page }) => {
     await mockApi(page, '/api/panel/stats/', {
       GET: () => ({
-        body: { ...stats, events: { total: 3, upcoming: 1 }, next_events: [stats.next_events[0]] },
+        body: { ...stats, occasions: { total: 3, upcoming: 1 }, next_occasions: [stats.next_occasions[0]] },
       }),
     })
     await page.goto('/admin')
 
-    await expect(page.getByText('1 upcoming event in total.')).toBeVisible()
+    await expect(page.getByText('1 upcoming occasion in total.')).toBeVisible()
   })
 
   test('shows an alert when stats fail to load', async ({ page }) => {

@@ -8,7 +8,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events', '0003_event_embedding'),
+        ('occasions', '0001_initial'),
         ('tags', '0001_initial'),
     ]
 

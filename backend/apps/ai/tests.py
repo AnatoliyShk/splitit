@@ -8,7 +8,7 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from apps.events.models import EMBEDDING_DIMENSIONS, Event
+from apps.occasions.models import EMBEDDING_DIMENSIONS, Occasion
 from apps.tags.models import Tag
 
 from . import client
@@ -81,9 +81,9 @@ class EmbedOnSaveTests(FakeGeminiMixin, TestCase):
         self.assertEqual(len(tag.embedding), EMBEDDING_DIMENSIONS)
         self.assertEqual(self.embedded_texts(), ["Jazz"])
 
-    def test_new_event_is_embedded(self):
-        event = self.save(Event(name="Sunset jazz", start_datetime=timezone.now()))
-        self.assertIsNotNone(event.embedding)
+    def test_new_occasion_is_embedded(self):
+        occasion = self.save(Occasion(name="Sunset jazz", start_datetime=timezone.now()))
+        self.assertIsNotNone(occasion.embedding)
         self.assertEqual(self.embedded_texts(), ["Sunset jazz"])
 
     def test_rename_re_embeds_once(self):
@@ -113,19 +113,19 @@ class EmbedMissingCommandTests(FakeGeminiMixin, TestCase):
     def test_fills_only_missing_embeddings(self):
         done = Tag.objects.create(name="Done", embedding=[1.0] * EMBEDDING_DIMENSIONS)
         Tag.objects.create(name="Jazz")
-        Event.objects.create(name="Sunset jazz", start_datetime=timezone.now())
+        Occasion.objects.create(name="Sunset jazz", start_datetime=timezone.now())
 
         out = StringIO()
         call_command("embed_missing", stdout=out)
 
         self.assertCountEqual(self.embedded_texts(), ["Jazz", "Sunset jazz"])
         self.assertFalse(Tag.objects.filter(embedding=None).exists())
-        self.assertFalse(Event.objects.filter(embedding=None).exists())
+        self.assertFalse(Occasion.objects.filter(embedding=None).exists())
         done.refresh_from_db()
         self.assertEqual(done.embedding[0], 1.0)
 
     def test_can_limit_to_one_model(self):
         Tag.objects.create(name="Jazz")
-        Event.objects.create(name="Sunset jazz", start_datetime=timezone.now())
+        Occasion.objects.create(name="Sunset jazz", start_datetime=timezone.now())
         call_command("embed_missing", "--model", "tags", stdout=StringIO())
         self.assertEqual(self.embedded_texts(), ["Jazz"])

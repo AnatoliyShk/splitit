@@ -9,12 +9,12 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from apps.events.models import Event
+from apps.occasions.models import Occasion
 from apps.users.models import User
 
 from . import views
 from .models import Connection
-from .services import apply_event
+from .services import apply_occasion
 
 PASSWORD = "correct-horse-battery"
 LOCMEM_CACHE = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
@@ -25,11 +25,11 @@ def make_users(*names):
     return [User.objects.create_user(f"{n.lower()}@example.com", PASSWORD, name=n) for n in names]
 
 
-def past_event(*users, name="Gig"):
+def past_occasion(*users, name="Gig"):
     start = timezone.now() - timedelta(days=1)
-    event = Event.objects.create(name=name, start_datetime=start, end_datetime=start + timedelta(hours=2))
-    event.users.add(*users)
-    return event
+    occasion = Occasion.objects.create(name=name, start_datetime=start, end_datetime=start + timedelta(hours=2))
+    occasion.users.add(*users)
+    return occasion
 
 
 def strength(a, b):
@@ -60,62 +60,62 @@ class ConnectionModelTests(TestCase):
 
 
 @override_settings(CACHES=LOCMEM_CACHE)
-class ApplyEventTests(TestCase):
+class ApplyOccasionTests(TestCase):
     def setUp(self):
         cache.clear()
         self.ana, self.ben, self.cy, self.dan = make_users("Ana", "Ben", "Cy", "Dan")
 
     def test_every_pair_gets_one_over_attendees_minus_one(self):
-        event = past_event(self.ana, self.ben, self.cy)
-        self.assertTrue(apply_event(event.pk))
+        occasion = past_occasion(self.ana, self.ben, self.cy)
+        self.assertTrue(apply_occasion(occasion.pk))
         self.assertEqual(Connection.objects.count(), 3)
         for a, b in [(self.ana, self.ben), (self.ana, self.cy), (self.ben, self.cy)]:
             c = strength(a, b)
             self.assertAlmostEqual(c.strength, 0.5)
-            self.assertEqual(c.shared_events, 1)
-        event.refresh_from_db()
-        self.assertIsNotNone(event.connections_applied_at)
+            self.assertEqual(c.shared_occasions, 1)
+        occasion.refresh_from_db()
+        self.assertIsNotNone(occasion.connections_applied_at)
 
-    def test_shared_events_add_up(self):
-        apply_event(past_event(self.ana, self.ben, self.cy).pk)  # +0.5
-        apply_event(past_event(self.ana, self.ben).pk)  # +1
+    def test_shared_occasions_add_up(self):
+        apply_occasion(past_occasion(self.ana, self.ben, self.cy).pk)  # +0.5
+        apply_occasion(past_occasion(self.ana, self.ben).pk)  # +1
         c = strength(self.ana, self.ben)
         self.assertAlmostEqual(c.strength, 1.5)
-        self.assertEqual(c.shared_events, 2)
+        self.assertEqual(c.shared_occasions, 2)
 
-    def test_an_event_counts_once(self):
-        event = past_event(self.ana, self.ben)
-        apply_event(event.pk)
-        self.assertFalse(apply_event(event.pk))
+    def test_an_occasion_counts_once(self):
+        occasion = past_occasion(self.ana, self.ben)
+        apply_occasion(occasion.pk)
+        self.assertFalse(apply_occasion(occasion.pk))
         self.assertAlmostEqual(strength(self.ana, self.ben).strength, 1.0)
 
-    def test_events_that_have_not_ended_are_skipped(self):
+    def test_occasions_that_have_not_ended_are_skipped(self):
         start = timezone.now() - timedelta(hours=1)
-        running = Event.objects.create(name="Running", start_datetime=start, end_datetime=start + timedelta(hours=3))
+        running = Occasion.objects.create(name="Running", start_datetime=start, end_datetime=start + timedelta(hours=3))
         running.users.add(self.ana, self.ben)
-        self.assertFalse(apply_event(running.pk))
+        self.assertFalse(apply_occasion(running.pk))
         self.assertFalse(Connection.objects.exists())
 
-    def test_event_without_end_is_over_once_it_starts(self):
-        event = Event.objects.create(name="Meetup", start_datetime=timezone.now() - timedelta(minutes=1))
-        event.users.add(self.ana, self.ben)
-        self.assertTrue(apply_event(event.pk))
+    def test_occasion_without_end_is_over_once_it_starts(self):
+        occasion = Occasion.objects.create(name="Meetup", start_datetime=timezone.now() - timedelta(minutes=1))
+        occasion.users.add(self.ana, self.ben)
+        self.assertTrue(apply_occasion(occasion.pk))
 
     def test_single_attendee_is_just_marked(self):
-        event = past_event(self.ana)
-        self.assertTrue(apply_event(event.pk))
+        occasion = past_occasion(self.ana)
+        self.assertTrue(apply_occasion(occasion.pk))
         self.assertFalse(Connection.objects.exists())
 
     def test_people_who_left_before_it_ended_get_no_connection(self):
-        event = past_event(self.ana, self.ben, self.cy)
-        event.users.remove(self.cy)
-        apply_event(event.pk)
+        occasion = past_occasion(self.ana, self.ben, self.cy)
+        occasion.users.remove(self.cy)
+        apply_occasion(occasion.pk)
         self.assertEqual(Connection.objects.for_user(self.cy).count(), 0)
         self.assertAlmostEqual(strength(self.ana, self.ben).strength, 1.0)
 
-    def test_large_events_are_written_in_batches(self):
+    def test_large_occasions_are_written_in_batches(self):
         crowd = make_users(*[f"Guest{i}" for i in range(50)])  # 1,225 pairs: more than one batch
-        apply_event(past_event(*crowd).pk)
+        apply_occasion(past_occasion(*crowd).pk)
         self.assertEqual(Connection.objects.count(), 50 * 49 // 2)
         self.assertAlmostEqual(strength(crowd[0], crowd[-1]).strength, 1 / 49)
 
@@ -126,30 +126,30 @@ class SchedulingTests(TestCase):
         default_task_backend.clear()
 
     def enqueued(self):
-        return [r for r in default_task_backend.results if r.task.name == "apply_event_connections"]
+        return [r for r in default_task_backend.results if r.task.name == "apply_occasion_connections"]
 
-    def test_saving_an_event_schedules_it_for_when_it_ends(self):
+    def test_saving_an_occasion_schedules_it_for_when_it_ends(self):
         end = timezone.now() + timedelta(days=2)
         with self.captureOnCommitCallbacks(execute=True):
-            event = Event.objects.create(name="Gig", start_datetime=end - timedelta(hours=2), end_datetime=end)
+            occasion = Occasion.objects.create(name="Gig", start_datetime=end - timedelta(hours=2), end_datetime=end)
         [job] = self.enqueued()
-        self.assertEqual(job.args, [event.pk])
+        self.assertEqual(job.args, [occasion.pk])
         self.assertEqual(job.task.run_after, end)
 
-    def test_ended_events_run_straight_away(self):
+    def test_ended_occasions_run_straight_away(self):
         with self.captureOnCommitCallbacks(execute=True):
-            past_event()
+            past_occasion()
         [job] = self.enqueued()
         self.assertIsNone(job.task.run_after)
 
-    def test_counted_events_are_not_scheduled_again(self):
-        event = past_event()
-        apply_event(event.pk)
-        event.refresh_from_db()
+    def test_counted_occasions_are_not_scheduled_again(self):
+        occasion = past_occasion()
+        apply_occasion(occasion.pk)
+        occasion.refresh_from_db()
         default_task_backend.clear()
         with self.captureOnCommitCallbacks(execute=True):
-            event.name = "Renamed"
-            event.save()
+            occasion.name = "Renamed"
+            occasion.save()
         self.assertEqual(self.enqueued(), [])
 
 
@@ -159,25 +159,25 @@ class ApplyConnectionsCommandTests(TestCase):
         cache.clear()
         self.ana, self.ben, self.cy = make_users("Ana", "Ben", "Cy")
 
-    def test_counts_only_ended_uncounted_events(self):
-        counted = past_event(self.ana, self.ben)
-        apply_event(counted.pk)
-        past_event(self.ana, self.ben, self.cy)
-        future = Event.objects.create(name="Later", start_datetime=timezone.now() + timedelta(days=1))
+    def test_counts_only_ended_uncounted_occasions(self):
+        counted = past_occasion(self.ana, self.ben)
+        apply_occasion(counted.pk)
+        past_occasion(self.ana, self.ben, self.cy)
+        future = Occasion.objects.create(name="Later", start_datetime=timezone.now() + timedelta(days=1))
         future.users.add(self.ana, self.ben)
 
         out = StringIO()
         call_command("apply_connections", stdout=out)
-        self.assertIn("1 event(s)", out.getvalue())
+        self.assertIn("1 occasion(s)", out.getvalue())
         self.assertAlmostEqual(strength(self.ana, self.ben).strength, 1.5)
 
     def test_rebuild_reproduces_the_same_totals(self):
-        apply_event(past_event(self.ana, self.ben, self.cy).pk)
-        apply_event(past_event(self.ana, self.ben).pk)
-        before = {(c.user_low_id, c.user_high_id): (c.strength, c.shared_events) for c in Connection.objects.all()}
+        apply_occasion(past_occasion(self.ana, self.ben, self.cy).pk)
+        apply_occasion(past_occasion(self.ana, self.ben).pk)
+        before = {(c.user_low_id, c.user_high_id): (c.strength, c.shared_occasions) for c in Connection.objects.all()}
 
         call_command("apply_connections", "--rebuild", stdout=StringIO())
-        after = {(c.user_low_id, c.user_high_id): (c.strength, c.shared_events) for c in Connection.objects.all()}
+        after = {(c.user_low_id, c.user_high_id): (c.strength, c.shared_occasions) for c in Connection.objects.all()}
         self.assertEqual(after, before)
 
 
@@ -202,13 +202,13 @@ class UserConnectionsApiTests(APITestCase):
         self.assertEqual(self.client.get(self.url(self.ben)).status_code, 404)
 
     def test_strongest_first_from_either_side_without_email(self):
-        apply_event(past_event(self.ana, self.ben, self.cy).pk)  # everyone +0.5
-        apply_event(past_event(self.ana, self.cy).pk)  # Ana–Cy +1
+        apply_occasion(past_occasion(self.ana, self.ben, self.cy).pk)  # everyone +0.5
+        apply_occasion(past_occasion(self.ana, self.cy).pk)  # Ana–Cy +1
         self.assertEqual(
             self.get(),
             [
-                {"uuid": str(self.cy.uuid), "name": "Cy", "strength": 1.5, "shared_events": 2},
-                {"uuid": str(self.ben.uuid), "name": "Ben", "strength": 0.5, "shared_events": 1},
+                {"uuid": str(self.cy.uuid), "name": "Cy", "strength": 1.5, "shared_occasions": 2},
+                {"uuid": str(self.ben.uuid), "name": "Ben", "strength": 0.5, "shared_occasions": 1},
             ],
         )
         self.client.force_login(self.cy)
@@ -216,29 +216,29 @@ class UserConnectionsApiTests(APITestCase):
 
     def test_list_is_capped(self):
         crowd = make_users(*[f"Guest{i}" for i in range(views.LIMIT)])
-        apply_event(past_event(self.ana, *crowd).pk)
+        apply_occasion(past_occasion(self.ana, *crowd).pk)
         self.assertEqual(len(self.get()), views.LIMIT)
 
-    def test_repeat_requests_are_served_from_cache_until_an_event_is_counted(self):
-        apply_event(past_event(self.ana, self.ben).pk)
+    def test_repeat_requests_are_served_from_cache_until_an_occasion_is_counted(self):
+        apply_occasion(past_occasion(self.ana, self.ben).pk)
         self.assertEqual(self.get()[0]["strength"], 1.0)
         # update() sends no signals, so only a cache hit can still show the old value
         Connection.objects.update(strength=9.0)
         self.assertEqual(self.get()[0]["strength"], 1.0)
 
         with self.captureOnCommitCallbacks(execute=True):
-            apply_event(past_event(self.ana, self.ben).pk)
+            apply_occasion(past_occasion(self.ana, self.ben).pk)
         self.assertEqual(self.get()[0]["strength"], 10.0)
 
     def test_deleting_a_user_refreshes_the_other_side(self):
-        apply_event(past_event(self.ana, self.ben).pk)
+        apply_occasion(past_occasion(self.ana, self.ben).pk)
         self.assertEqual(len(self.get()), 1)
         with self.captureOnCommitCallbacks(execute=True):
             self.ben.delete()
         self.assertEqual(self.get(), [])
 
     def test_rebuild_drops_every_cached_list(self):
-        apply_event(past_event(self.ana, self.ben).pk)
+        apply_occasion(past_occasion(self.ana, self.ben).pk)
         self.assertEqual(self.get()[0]["strength"], 1.0)
         Connection.objects.update(strength=9.0)
         call_command("apply_connections", "--rebuild", stdout=StringIO())
@@ -269,9 +269,9 @@ class UserConnectionsGraphApiTests(APITestCase):
         self.assertEqual(self.get(), ({"Ana": 0}, {}))
 
     def test_includes_links_between_connections_and_their_connections(self):
-        apply_event(past_event(self.ana, self.ben, self.cy).pk)  # Ana, Ben, Cy all +0.5
-        apply_event(past_event(self.ben, self.dee).pk)  # Ben–Dee +1; Ana doesn't know Dee
-        apply_event(past_event(self.dee, self.eve).pk)  # two steps from Ana's connections: left out
+        apply_occasion(past_occasion(self.ana, self.ben, self.cy).pk)  # Ana, Ben, Cy all +0.5
+        apply_occasion(past_occasion(self.ben, self.dee).pk)  # Ben–Dee +1; Ana doesn't know Dee
+        apply_occasion(past_occasion(self.dee, self.eve).pk)  # two steps from Ana's connections: left out
         degrees, edges = self.get()
         self.assertEqual(degrees, {"Ana": 0, "Ben": 1, "Cy": 1, "Dee": 2})
         self.assertEqual(
@@ -287,9 +287,9 @@ class UserConnectionsGraphApiTests(APITestCase):
 
     def test_keeps_each_connections_strongest_outside_links(self):
         outsiders = make_users("O1", "O2", "O3", "O4")
-        apply_event(past_event(self.ana, self.ben).pk)
+        apply_occasion(past_occasion(self.ana, self.ben).pk)
         for i, o in enumerate(outsiders):
             for _ in range(i + 1):  # O4 is Ben's strongest outside link, O1 his weakest
-                apply_event(past_event(self.ben, o).pk)
+                apply_occasion(past_occasion(self.ben, o).pk)
         degrees, _ = self.get()
         self.assertEqual({n for n, d in degrees.items() if d == 2}, {"O2", "O3", "O4"})

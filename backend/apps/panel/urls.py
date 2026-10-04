@@ -5,7 +5,7 @@ from . import views
 
 router = SimpleRouter()
 router.register("users", views.UserViewSet, basename="panel-user")
-router.register("events", views.EventViewSet, basename="panel-event")
+router.register("occasions", views.OccasionViewSet, basename="panel-occasion")
 router.register("tags", views.TagViewSet, basename="panel-tag")
 
 urlpatterns = [

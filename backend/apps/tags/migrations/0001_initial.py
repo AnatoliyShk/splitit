@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('events', '0002_event_datetimes'),
+        ('occasions', '0001_initial'),
     ]
 
     operations = [
@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
                 ('name', models.CharField(max_length=50)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('events', models.ManyToManyField(blank=True, related_name='tags', to='events.event')),
+                ('events', models.ManyToManyField(blank=True, related_name='tags', to='occasions.occasion')),
             ],
             options={
                 'constraints': [models.UniqueConstraint(django.db.models.functions.text.Lower('name'), name='tag_name_unique_ci', violation_error_message='A tag with this name already exists.')],

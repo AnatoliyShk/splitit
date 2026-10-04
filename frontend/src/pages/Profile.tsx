@@ -5,7 +5,7 @@ import { useAuth } from '../auth'
 import { FormAlert } from '../components/Field'
 import { formatDate, formatRange } from './panel/shared'
 
-type MyEvent = {
+type MyOccasion = {
   id: number
   name: string
   start_datetime: string
@@ -19,21 +19,21 @@ const ConnectionsGraph = lazy(() => import('../components/ConnectionsGraph'))
 
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'short' })
 
-function EventRows({ events }: { events: MyEvent[] }) {
+function OccasionRows({ occasions }: { occasions: MyOccasion[] }) {
   return (
-    <ul className="event-list">
-      {events.map((e) => (
-        <li key={e.id}>
-          <span className="event-day event-date">
-            {new Date(e.start_datetime).getDate()}
-            <small>{monthFormat.format(new Date(e.start_datetime))}</small>
+    <ul className="occasion-list">
+      {occasions.map((o) => (
+        <li key={o.id}>
+          <span className="occasion-day occasion-date">
+            {new Date(o.start_datetime).getDate()}
+            <small>{monthFormat.format(new Date(o.start_datetime))}</small>
           </span>
-          <span className="event-info">
-            <strong>{e.name}</strong>
-            <small>{formatRange(e.start_datetime, e.end_datetime)}</small>
-            {e.tags.length > 0 && (
-              <span className="tags event-tags">
-                {e.tags.map((t) => (
+          <span className="occasion-info">
+            <strong>{o.name}</strong>
+            <small>{formatRange(o.start_datetime, o.end_datetime)}</small>
+            {o.tags.length > 0 && (
+              <span className="tags occasion-tags">
+                {o.tags.map((t) => (
                   <span className="tag" key={t}>
                     {t}
                   </span>
@@ -41,63 +41,63 @@ function EventRows({ events }: { events: MyEvent[] }) {
               </span>
             )}
           </span>
-          <span className="event-going">{e.attendees_count} going</span>
+          <span className="occasion-going">{o.attendees_count} going</span>
         </li>
       ))}
     </ul>
   )
 }
 
-type SplitEvents = { all: MyEvent[]; upcoming: MyEvent[]; past: MyEvent[] }
+type SplitOccasions = { all: MyOccasion[]; upcoming: MyOccasion[]; past: MyOccasion[] }
 
 // Same rule as the admin overview: upcoming until it ends (or starts, if it has no end)
-function splitByNow(events: MyEvent[]): SplitEvents {
+function splitByNow(occasions: MyOccasion[]): SplitOccasions {
   const now = Date.now()
-  const isUpcoming = (e: MyEvent) => new Date(e.end_datetime ?? e.start_datetime).getTime() >= now
+  const isUpcoming = (o: MyOccasion) => new Date(o.end_datetime ?? o.start_datetime).getTime() >= now
   return {
-    all: events,
-    upcoming: events.filter(isUpcoming),
-    past: events.filter((e) => !isUpcoming(e)).reverse(), // most recent first
+    all: occasions,
+    upcoming: occasions.filter(isUpcoming),
+    past: occasions.filter((o) => !isUpcoming(o)).reverse(), // most recent first
   }
 }
 
-function MyEvents({ user }: { user: User }) {
-  const [data, setData] = useState<SplitEvents | null>(null)
+function MyOccasions({ user }: { user: User }) {
+  const [data, setData] = useState<SplitOccasions | null>(null)
   const [errors, setErrors] = useState<FieldErrors>({})
 
   useEffect(() => {
-    apiGet<MyEvent[]>(`/api/users/${user.uuid}/events/`)
-      .then((events) => setData(splitByNow(events)))
+    apiGet<MyOccasion[]>(`/api/users/${user.uuid}/occasions/`)
+      .then((occasions) => setData(splitByNow(occasions)))
       .catch((err) => setErrors(errorsFrom(err)))
   }, [user.uuid])
 
-  const events = data?.all
+  const occasions = data?.all
   const upcoming = data?.upcoming ?? []
   const past = data?.past ?? []
 
   return (
-    <section className="profile-card" aria-labelledby="events-title">
-      <h2 id="events-title">Your events</h2>
+    <section className="profile-card" aria-labelledby="occasions-title">
+      <h2 id="occasions-title">Your occasions</h2>
       <FormAlert messages={errors.non_field_errors} />
-      {!events && !errors.non_field_errors && <p className="muted">Loading…</p>}
-      {events && events.length === 0 && (
+      {!occasions && !errors.non_field_errors && <p className="muted">Loading…</p>}
+      {occasions && occasions.length === 0 && (
         <div className="empty">
-          <p>You're not going to any events yet.</p>
+          <p>You're not going to any occasions yet.</p>
           <Link className="btn btn-primary btn-sm" to="/">
-            Find events
+            Find occasions
           </Link>
         </div>
       )}
       {upcoming.length > 0 && (
-        <div className="profile-events">
+        <div className="profile-occasions">
           <h3>Upcoming</h3>
-          <EventRows events={upcoming} />
+          <OccasionRows occasions={upcoming} />
         </div>
       )}
       {past.length > 0 && (
-        <div className="profile-events">
+        <div className="profile-occasions">
           <h3>Past</h3>
-          <EventRows events={past} />
+          <OccasionRows occasions={past} />
         </div>
       )}
     </section>
@@ -108,7 +108,7 @@ type MyConnection = {
   uuid: string
   name: string
   strength: number
-  shared_events: number
+  shared_occasions: number
 }
 
 const strengthFormat = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -131,9 +131,9 @@ function MyConnections({ user }: { user: User }) {
       {!connections && !errors.non_field_errors && <p className="muted">Loading…</p>}
       {connections && connections.length === 0 && (
         <div className="empty">
-          <p>Go to an event to start connecting with people.</p>
+          <p>Go to an occasion to start connecting with people.</p>
           <Link className="btn btn-primary btn-sm" to="/">
-            Find events
+            Find occasions
           </Link>
         </div>
       )}
@@ -143,14 +143,16 @@ function MyConnections({ user }: { user: User }) {
         </Suspense>
       )}
       {connections && connections.length > 0 && (
-        <ul className="event-list">
+        <ul className="occasion-list">
           {connections.map((c) => (
             <li key={c.uuid}>
-              <span className="event-info">
+              <span className="occasion-info">
                 <strong>{c.name}</strong>
-                <small>{c.shared_events === 1 ? '1 shared event' : `${c.shared_events} shared events`}</small>
+                <small>
+                  {c.shared_occasions === 1 ? '1 shared occasion' : `${c.shared_occasions} shared occasions`}
+                </small>
               </span>
-              <span className="event-going">Strength {strengthFormat.format(c.strength)}</span>
+              <span className="occasion-going">Strength {strengthFormat.format(c.strength)}</span>
             </li>
           ))}
         </ul>
@@ -188,7 +190,7 @@ export default function Profile() {
 
       <MyConnections user={user} />
 
-      <MyEvents user={user} />
+      <MyOccasions user={user} />
     </section>
   )
 }

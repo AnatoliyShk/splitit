@@ -6,18 +6,18 @@ from pgvector.django import HnswIndex, VectorField
 EMBEDDING_DIMENSIONS = 768
 
 
-class Event(models.Model):
+class Occasion(models.Model):
     name = models.CharField(max_length=255)
     start_datetime = models.DateTimeField(db_index=True)
     end_datetime = models.DateTimeField(null=True, blank=True)
     users = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        related_name="events",
+        related_name="occasions",
         blank=True,
     )
     # Filled by an embedding model, not by people, so it's hidden from forms and the API
     embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True, blank=True, editable=False)
-    # When attendees' connections were counted (see apps.connections); set once, after the event ends
+    # When attendees' connections were counted (see apps.connections); set once, after the occasion ends
     connections_applied_at = models.DateTimeField(null=True, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -26,7 +26,7 @@ class Event(models.Model):
         indexes = [
             # Approximate nearest-neighbour search by cosine distance
             HnswIndex(
-                name="event_embedding_hnsw",
+                name="occasion_embedding_hnsw",
                 fields=["embedding"],
                 m=16,
                 ef_construction=64,
@@ -37,7 +37,7 @@ class Event(models.Model):
             models.CheckConstraint(
                 condition=models.Q(end_datetime__isnull=True)
                 | models.Q(end_datetime__gt=models.F("start_datetime")),
-                name="event_ends_after_start",
+                name="occasion_ends_after_start",
                 violation_error_message="The end must be after the start.",
             ),
         ]
@@ -47,12 +47,12 @@ class Event(models.Model):
 
     @property
     def ends_at(self):
-        """When the event is over: its end, or its start when it has no end."""
+        """When the occasion is over: its end, or its start when it has no end."""
         return self.end_datetime or self.start_datetime
 
     @property
     def duration(self):
-        """How long the event runs (a timedelta), or None when it has no end."""
+        """How long the occasion runs (a timedelta), or None when it has no end."""
         if self.end_datetime is None:
             return None
         return self.end_datetime - self.start_datetime

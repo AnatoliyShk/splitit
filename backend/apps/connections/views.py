@@ -23,7 +23,7 @@ class MyConnectionSerializer(serializers.Serializer):
     uuid = serializers.UUIDField(source="other_user.uuid")
     name = serializers.CharField(source="other_user.name")
     strength = serializers.FloatField()
-    shared_events = serializers.IntegerField()
+    shared_occasions = serializers.IntegerField()
 
 
 class UserConnectionsView(APIView):

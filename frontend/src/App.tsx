@@ -8,8 +8,8 @@ import Login from './pages/Login'
 import Profile from './pages/Profile'
 import Register from './pages/Register'
 import Settings from './pages/Settings'
-import EventForm from './pages/panel/EventForm'
-import Events from './pages/panel/Events'
+import OccasionForm from './pages/panel/OccasionForm'
+import Occasions from './pages/panel/Occasions'
 import Overview from './pages/panel/Overview'
 import PanelLayout from './pages/panel/PanelLayout'
 import Tags from './pages/panel/Tags'
@@ -99,9 +99,9 @@ export default function App() {
           <Route path="/admin" element={<PanelLayout />}>
             <Route index element={<Overview />} />
             <Route path="users" element={<Users />} />
-            <Route path="events" element={<Events />} />
-            <Route path="events/new" element={<EventForm />} />
-            <Route path="events/:id" element={<EventForm key="edit" />} />
+            <Route path="occasions" element={<Occasions />} />
+            <Route path="occasions/new" element={<OccasionForm />} />
+            <Route path="occasions/:id" element={<OccasionForm key="edit" />} />
             <Route path="tags" element={<Tags />} />
           </Route>
         </Routes>

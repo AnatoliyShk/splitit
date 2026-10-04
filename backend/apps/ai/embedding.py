@@ -9,14 +9,14 @@ def tag_text(tag):
     return tag.name
 
 
-def event_text(event):
-    return event.name
+def occasion_text(occasion):
+    return occasion.name
 
 
 # Models with an `embedding` field, and how to turn a row into the text to embed
 EMBEDDED_MODELS = {
     "tags.Tag": tag_text,
-    "events.Event": event_text,
+    "occasions.Occasion": occasion_text,
 }
 
 
