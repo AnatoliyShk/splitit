@@ -74,6 +74,14 @@ Add backend dependencies with `uv add <pkg>` in `backend/`, then rebuild the bac
 
 Django settings read from environment variables (`DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `POSTGRES_*`, `REDIS_URL`, `GEMINI_API_KEY`, `EMBEDDING_MODEL`) with local-dev defaults. Without `GEMINI_API_KEY`, nothing is embedded; run `embed_missing` after adding one. Never commit `.env`.
 
+## Database queries
+
+Write every query with the Django ORM: QuerySets, `F`/`Q` expressions, `annotate`/`aggregate`, `Subquery`/`Exists`, `bulk_create`/`bulk_update`, `update()`/`delete()`. Don't write raw SQL strings: no `cursor.execute()`, `.raw()`, `.extra()` or `RawSQL`.
+
+- An upsert that adds to existing values: `bulk_create(..., ignore_conflicts=True)` for missing rows, then one `update()` with `F()` expressions (see `apps/connections/services.py`).
+- Schema changes go through migrations made by `makemigrations`. Use Django or pgvector operations (e.g. `VectorExtension`, `SeparateDatabaseAndState`) instead of `RunSQL`.
+- If a query really can't be written with the ORM, ask first. Keep it in one function and pass values as query parameters, never by string formatting.
+
 ## Design system: Soft Brutalism
 
 Thick ink borders, hard offset shadows, flat pastel fills, rounded corners, bold type (Bricolage Grotesque for headings, DM Sans for body). All tokens are in `frontend/src/index.css`; use them instead of raw values.
