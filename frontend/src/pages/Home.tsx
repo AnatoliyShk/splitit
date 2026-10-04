@@ -1,5 +1,4 @@
 import { Link } from 'react-router'
-import { useAuth } from '../auth'
 
 const features = [
   {
@@ -22,17 +21,7 @@ const features = [
   },
 ]
 
-// Sample data for the hero illustration
-const exampleOccasions = [
-  { day: 'Fri', time: '20:00', title: 'Indie night', place: 'The Warehouse', going: 14 },
-  { day: 'Sat', time: '18:00', title: 'Sunset jazz', place: 'Riverside Park', going: 7 },
-  { day: 'Sun', time: '10:00', title: 'Morning hike', place: 'Pine Ridge trail', going: 9 },
-]
-
-const exampleGroup = ['A', 'B', 'C', 'D']
-
 export default function Home() {
-  const { user, loading } = useAuth()
 
   return (
     <>
@@ -46,50 +35,24 @@ export default function Home() {
             Find people heading to the same concerts, meetups and trips, and
             turn one night out into a community.
           </p>
-          <div className="actions">
-            <button className="btn btn-primary">Find occasions</button>
-            {!loading && !user && (
-              <Link className="btn" to="/register">
-                Create account
-              </Link>
-            )}
-          </div>
         </div>
 
-        <figure className="example" aria-label="Example occasions">
-          <div className="example-head">
-            <span className="example-title">This weekend</span>
-            <span className="chip">Near you</span>
-          </div>
-          <ul className="occasion-list">
-            {exampleOccasions.map((e) => (
-              <li key={e.title}>
-                <span className="occasion-day">{e.day}</span>
-                <span className="occasion-info">
-                  <strong>{e.title}</strong>
-                  <small>
-                    {e.time} · {e.place}
-                  </small>
-                </span>
-                <span className="occasion-going">{e.going} going</span>
-              </li>
-            ))}
-          </ul>
-          <div className="group">
-            <div className="avatars" aria-hidden="true">
-              {exampleGroup.map((initial) => (
-                <span className="avatar" key={initial}>
-                  {initial}
-                </span>
-              ))}
-            </div>
-            <p>
-              <strong>Ana, Ben and 5 others</strong> are going to Sunset jazz
-              together
-            </p>
-          </div>
-          <figcaption>Example</figcaption>
-        </figure>
+        <section className="explore-promo" aria-labelledby="explore-promo-title">
+          <span className="promo-badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" />
+              <path d="m15.5 8.5-2 5-5 2 2-5z" />
+            </svg>
+          </span>
+          <h2 id="explore-promo-title">Explore occasions</h2>
+          <p>
+            See what's coming up one card at a time. Accept an occasion to save your spot, or decline to see the
+            next one.
+          </p>
+          <Link className="btn btn-primary" to="/explore">
+            Start exploring
+          </Link>
+        </section>
       </section>
 
       <section className="cards" aria-label="How it works">

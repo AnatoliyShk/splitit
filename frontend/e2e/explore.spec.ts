@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { makeOccasion, mockApi, USER, type TestOccasion } from './fixtures/user'
+import { exploreBody, makeOccasion, mockApi, USER, type TestOccasion } from './fixtures/user'
 
 const occasions: TestOccasion[] = [
   makeOccasion(11, 'Rooftop Yoga', 1, { attendees_count: 0, tags: ['wellness'] }),
@@ -70,8 +70,84 @@ test.describe('decline', () => {
   })
 })
 
+test.describe('one occasion at a time', () => {
+  test('explains the rule above the cards', async ({ page }) => {
+    await mockApi(page, { user: USER, explore: occasions })
+    await page.goto('/explore')
+    const rule = page.getByRole('complementary', { name: 'One occasion at a time' })
+    await expect(rule).toBeVisible()
+    await expect(rule).toContainText('Once it ends or is cancelled, you can pick your next one.')
+  })
+
+  test('shows the active occasion instead of the deck', async ({ page }) => {
+    const active = makeOccasion(21, 'Pottery Class', 4, { attendees_count: 4, tags: ['crafts'] })
+    await mockApi(page, { user: USER, active, occasions: [], connections: [] })
+    await page.goto('/explore')
+
+    await expect(page.getByText("You're going to", { exact: true })).toBeVisible()
+    const card = page.getByRole('article', { name: 'Pottery Class' })
+    await expect(card).toBeVisible()
+    await expect(card.getByText('crafts', { exact: true })).toBeVisible()
+    await expect(card).toContainText('You and 3 others are going')
+    await expect(page.getByText(/You can join your next occasion once this one ends .* or if it's cancelled/)).toBeVisible()
+    await expect(page.getByRole('complementary', { name: 'One occasion at a time' })).toBeVisible()
+
+    await expect(page.getByRole('button', { name: 'Accept' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Decline' })).toHaveCount(0)
+    await expect(page.getByText(/\d of \d/)).toHaveCount(0)
+    await page.getByRole('link', { name: 'Your occasions' }).click()
+    await expect(page).toHaveURL(/\/profile$/)
+  })
+
+  test('words a lone attendee as the first one going', async ({ page }) => {
+    await mockApi(page, { user: USER, active: makeOccasion(21, 'Pottery Class', 4, { attendees_count: 1 }) })
+    await page.goto('/explore')
+    await expect(page.getByText("You're the first one going")).toBeVisible()
+  })
+
+  test('says one other person in the singular', async ({ page }) => {
+    await mockApi(page, { user: USER, active: makeOccasion(21, 'Pottery Class', 4, { attendees_count: 2 }) })
+    await page.goto('/explore')
+    await expect(page.getByText('You and 1 other person are going')).toBeVisible()
+  })
+
+  test('a refused join shows the alert and the occasion the user is already going to', async ({ page }) => {
+    const active = makeOccasion(21, 'Pottery Class', 4, { attendees_count: 2 })
+    let refused = false
+    await mockApi(page, {
+      user: USER,
+      handlers: {
+        // Nothing active at first (joined in another tab since); the reload after the 409 sees it
+        'GET /api/occasions/explore/': (route) =>
+          route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify(exploreBody(refused ? { active } : { explore: occasions })),
+          }),
+        [join(11)]: (route) => {
+          refused = true
+          return route.fulfill({
+            status: 409,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              detail: "You're already going to Pottery Class. You can join another occasion once it ends or is cancelled.",
+            }),
+          })
+        },
+      },
+    })
+    await page.goto('/explore')
+    await page.getByRole('button', { name: 'Accept' }).click()
+
+    await expect(page.getByRole('alert')).toHaveText(
+      "You're already going to Pottery Class. You can join another occasion once it ends or is cancelled.",
+    )
+    await expect(page.getByRole('article', { name: 'Pottery Class' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Accept' })).toHaveCount(0)
+  })
+})
+
 test.describe('accept', () => {
-  test('joins the occasion and moves on to the next one', async ({ page }) => {
+  test('joins the occasion and shows it as the one the user is going to', async ({ page }) => {
     const mock = await mockApi(page, {
       user: USER,
       explore: occasions,
@@ -80,9 +156,14 @@ test.describe('accept', () => {
     await page.goto('/explore')
     await page.getByRole('button', { name: 'Accept' }).click()
 
-    await expect(page.getByRole('article', { name: 'Board Game Night' })).toBeVisible()
-    await expect(page.getByText('2 of 3')).toBeVisible()
+    await expect(page.getByText("You're going to", { exact: true })).toBeVisible()
+    const card = page.getByRole('article', { name: 'Rooftop Yoga' })
+    await expect(card).toContainText("You're the first one going")
     await expect(page.getByRole('status')).toHaveText("You're going to Rooftop Yoga")
+    // The rest of the deck is paused
+    await expect(page.getByRole('button', { name: 'Accept' })).toHaveCount(0)
+    await expect(page.getByRole('article', { name: 'Board Game Night' })).toHaveCount(0)
+    await expect(page.getByText('1 of 3')).toHaveCount(0)
     expect(mock.requests).toContain(join(11))
   })
 
@@ -105,8 +186,8 @@ test.describe('accept', () => {
     await expect(page.getByRole('button', { name: 'Joining…' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Decline' })).toBeDisabled()
     release()
-    await expect(page.getByRole('article', { name: 'Board Game Night' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Accept' })).toBeEnabled()
+    await expect(page.getByText("You're going to", { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Accept|Joining/ })).toHaveCount(0)
   })
 
   test('stays on the same occasion and shows an alert when joining fails', async ({ page }) => {
@@ -160,23 +241,18 @@ test.describe('accept', () => {
 })
 
 test.describe('end of the list', () => {
-  test('shows "all caught up" after going through every occasion', async ({ page }) => {
-    const mock = await mockApi(page, {
-      user: USER,
-      explore: occasions,
-      handlers: { [join(12)]: (route) => route.fulfill({ status: 204 }) },
-    })
+  test('shows "all caught up" after declining every occasion', async ({ page }) => {
+    const mock = await mockApi(page, { user: USER, explore: occasions })
     await page.goto('/explore')
     await page.getByRole('button', { name: 'Decline' }).click()
-    await page.getByRole('button', { name: 'Accept' }).click()
+    await page.getByRole('button', { name: 'Decline' }).click()
     await page.getByRole('button', { name: 'Decline' }).click()
 
     await expect(page.getByRole('heading', { name: "You're all caught up" })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Accept' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Decline' })).toHaveCount(0)
     await expect(page.getByText(/\d of 3/)).toHaveCount(0)
-    // Only the accepted occasion was joined
-    expect(mock.requests.filter((r) => r.startsWith('POST'))).toEqual([join(12)])
+    expect(mock.requests.filter((r) => r.startsWith('POST'))).toEqual([])
   })
 
   test('shows the empty state when there are no new occasions', async ({ page }) => {

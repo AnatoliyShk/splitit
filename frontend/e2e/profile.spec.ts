@@ -100,6 +100,22 @@ test.describe('your occasions', () => {
     await expect(row.getByText('social', { exact: true })).toBeVisible()
   })
 
+  test('marks cancelled occasions', async ({ page }) => {
+    await mockApi(page, {
+      user: USER,
+      connections: [],
+      occasions: [
+        makeOccasion(3, 'Board Game Night', 2),
+        makeOccasion(4, 'Hike Day', 9, { cancelled_at: new Date().toISOString(), tags: ['outdoors'] }),
+      ],
+    })
+    await page.goto('/profile')
+    const rows = page.getByRole('region', { name: 'Your occasions' }).getByRole('listitem')
+    await expect(rows.nth(0).getByText('Cancelled', { exact: true })).toHaveCount(0)
+    await expect(rows.nth(1).getByText('Cancelled', { exact: true })).toBeVisible()
+    await expect(rows.nth(1).getByText('outdoors', { exact: true })).toBeVisible()
+  })
+
   test('omits the Past heading when every occasion is upcoming', async ({ page }) => {
     await mockApi(page, { user: USER, connections: [], occasions: [makeOccasion(4, 'Hike Day', 9)] })
     await page.goto('/profile')

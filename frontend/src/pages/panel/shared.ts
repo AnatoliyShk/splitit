@@ -16,13 +16,39 @@ export type PanelUser = {
 
 export type Attendee = { id: number; name: string; email: string }
 
+// Order 0 is the main image (shown on occasion cards); 1-3 are the gallery on the occasion's page
+export type OccasionImage = { order: number; url: string }
+
+// The image slots and upload limits; they match the server
+export const IMAGE_SLOTS = [0, 1, 2, 3] as const
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+// Saved image URLs by slot, as the server has them
+export type SavedImages = Record<number, string>
+// Edits waiting for Save: a File to upload into the slot, or null to empty it
+export type ImageChanges = Record<number, File | null>
+
+export function slotLabel(order: number) {
+  return order === 0 ? 'Main image' : `Gallery ${order}`
+}
+
+/** Checks a picked file the way the server will, so most mistakes show before anything is uploaded. */
+export function imageProblem(file: File) {
+  if (!IMAGE_TYPES.includes(file.type)) return 'Use a JPEG, PNG or WebP image.'
+  if (file.size > MAX_IMAGE_BYTES) return 'The image must be 5 MB or smaller.'
+  return null
+}
+
 export type PanelOccasion = {
   id: number
   name: string
   start_datetime: string
   end_datetime: string | null
   duration_minutes: number | null
+  cancelled_at: string | null
   attendees: Attendee[]
+  images: OccasionImage[]
   created_at: string
   updated_at: string
 }

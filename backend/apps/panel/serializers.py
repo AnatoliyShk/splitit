@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.occasions.models import Occasion
+from apps.occasions.models import MAX_IMAGE_ORDER, Occasion, OccasionImage
 from apps.tags.models import Tag
 from apps.users.models import User
 
@@ -31,12 +31,46 @@ class AttendeeSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "email")
 
 
+class PanelOccasionImageSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OccasionImage
+        fields = ("order", "url")
+
+    def get_url(self, image) -> str:
+        # A site-relative /media/... path, like the public API (ImageField would make it absolute)
+        return image.image.url
+
+
+# Uploads larger than this are refused, so the gallery stays quick to load
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+IMAGE_FORMATS = {"JPEG", "PNG", "WEBP"}
+
+
+class OccasionImageUploadSerializer(serializers.Serializer):
+    """POST body (multipart) for /api/panel/occasions/<id>/images/: the file and the slot it goes in."""
+
+    order = serializers.IntegerField(min_value=0, max_value=MAX_IMAGE_ORDER)
+    image = serializers.ImageField()
+
+    def validate_image(self, value):
+        if value.size > MAX_IMAGE_BYTES:
+            raise serializers.ValidationError("The image must be 5 MB or smaller.")
+        # Pillow has already opened the file to check it's an image; this narrows it to web formats
+        if getattr(getattr(value, "image", None), "format", None) not in IMAGE_FORMATS:
+            raise serializers.ValidationError("Use a JPEG, PNG or WebP image.")
+        return value
+
+
 class PanelOccasionSerializer(serializers.ModelSerializer):
     # Write attendees as a list of user ids, read them back with names
     users = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(), many=True, required=False, write_only=True
     )
     attendees = AttendeeSerializer(source="users", many=True, read_only=True)
+    # Order 0 is the main image; 1-3 the gallery. Changed through the images endpoints, not here
+    images = PanelOccasionImageSerializer(many=True, read_only=True)
     duration_minutes = serializers.SerializerMethodField()
 
     class Meta:
@@ -47,8 +81,10 @@ class PanelOccasionSerializer(serializers.ModelSerializer):
             "start_datetime",
             "end_datetime",
             "duration_minutes",
+            "cancelled_at",
             "users",
             "attendees",
+            "images",
             "created_at",
             "updated_at",
         )

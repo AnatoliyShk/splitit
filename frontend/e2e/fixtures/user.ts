@@ -15,8 +15,10 @@ export type TestOccasion = {
   name: string
   start_datetime: string
   end_datetime: string | null
+  cancelled_at: string | null
   attendees_count: number
   tags: string[]
+  main_image: string | null
 }
 
 export type TestConnection = { uuid: string; name: string; strength: number; shared_occasions: number }
@@ -55,8 +57,10 @@ export function makeOccasion(
     name,
     start_datetime: new Date(start).toISOString(),
     end_datetime: new Date(start + 2 * HOUR).toISOString(),
+    cancelled_at: null,
     attendees_count: 1,
     tags: [],
+    main_image: null,
     ...overrides,
   }
 }
@@ -77,8 +81,10 @@ export type MockOptions = {
   connections?: TestConnection[] | number
   /** Response for GET /api/users/<uuid>/connections/graph/; defaults to 404 (the page hides the graph). */
   graph?: { nodes: unknown[]; edges: unknown[] } | number
-  /** Response for GET /api/occasions/explore/. A number makes it fail with that status. */
+  /** Occasions in GET /api/occasions/explore/. A number makes it fail with that status. */
   explore?: TestOccasion[] | number
+  /** The occasion the user is going to; explore then sends it as `active_occasion` with no other occasions. */
+  active?: TestOccasion
   /** Extra handlers, keyed by "METHOD /api/path/". Take precedence over the defaults. */
   handlers?: Record<string, (route: Route, body: unknown) => Promise<void> | void>
 }
@@ -91,6 +97,13 @@ function respond(route: Route, value: unknown) {
   if (value === undefined) return json(route, 404, { detail: 'Not mocked.' })
   if (typeof value === 'number') return json(route, value, { detail: 'Mocked failure.' })
   return json(route, 200, value)
+}
+
+/** The explore response: `active_occasion` plus the occasions to browse (none while one is active). */
+export function exploreBody({ explore, active }: Pick<MockOptions, 'explore' | 'active'>) {
+  if (typeof explore === 'number') return explore
+  if (explore === undefined && active === undefined) return undefined
+  return { active_occasion: active ?? null, occasions: active ? [] : (explore ?? []) }
 }
 
 /**
@@ -117,7 +130,7 @@ export async function mockApi(page: Page, options: MockOptions): Promise<Mock> {
     if (method === 'GET') {
       if (pathname === '/api/auth/me/') return json(route, 200, { user: options.user })
       if (pathname === '/api/auth/csrf/') return route.fulfill({ status: 204 })
-      if (pathname === '/api/occasions/explore/') return respond(route, options.explore)
+      if (pathname === '/api/occasions/explore/') return respond(route, exploreBody(options))
       if (uuid && pathname === `/api/users/${uuid}/occasions/`) return respond(route, options.occasions)
       if (uuid && pathname === `/api/users/${uuid}/connections/`) return respond(route, options.connections)
       if (uuid && pathname === `/api/users/${uuid}/connections/graph/`) return respond(route, options.graph)

@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
@@ -10,4 +12,5 @@ urlpatterns = [
     path("api/", include("apps.occasions.urls")),
     path("api/", include("apps.connections.urls")),
     path("api/panel/", include("apps.panel.urls")),
-]
+    # Uploaded images; static() serves nothing unless DEBUG is on
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

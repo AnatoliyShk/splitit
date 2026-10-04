@@ -96,6 +96,12 @@ class ApplyOccasionTests(TestCase):
         self.assertFalse(apply_occasion(running.pk))
         self.assertFalse(Connection.objects.exists())
 
+    def test_cancelled_occasions_are_skipped(self):
+        occasion = past_occasion(self.ana, self.ben)
+        Occasion.objects.filter(pk=occasion.pk).update(cancelled_at=timezone.now())
+        self.assertFalse(apply_occasion(occasion.pk))
+        self.assertEqual(Connection.objects.count(), 0)
+
     def test_occasion_without_end_is_over_once_it_starts(self):
         occasion = Occasion.objects.create(name="Meetup", start_datetime=timezone.now() - timedelta(minutes=1))
         occasion.users.add(self.ana, self.ben)

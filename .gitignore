@@ -6,6 +6,8 @@
 __pycache__/
 *.pyc
 staticfiles/
+# Uploaded files (MEDIA_ROOT)
+backend/media/
 
 # Node / Yarn
 node_modules/

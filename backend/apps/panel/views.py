@@ -9,19 +9,26 @@ from django.db.models.functions import Lower
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.filters import SearchFilter
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.occasions.models import Occasion
+from apps.occasions.models import Occasion, OccasionImage
+from apps.occasions.services import deactivate_finished
 from apps.tags.cache import LIST_TTL, list_cache_key
 from apps.tags.models import Tag
 from apps.users.models import User
 
-from .serializers import PanelOccasionSerializer, PanelTagSerializer, PanelUserSerializer
+from .serializers import (
+    OccasionImageUploadSerializer,
+    PanelOccasionSerializer,
+    PanelTagSerializer,
+    PanelUserSerializer,
+)
 
 
 class PanelPagination(PageNumberPagination):
@@ -31,7 +38,7 @@ class PanelPagination(PageNumberPagination):
 def upcoming_occasions():
     """Occasions that haven't happened yet or are still running (one with no end is over once it starts)."""
     now = timezone.now()
-    return Occasion.objects.filter(Q(start_datetime__gte=now) | Q(end_datetime__gt=now))
+    return Occasion.objects.filter(Q(start_datetime__gte=now) | Q(end_datetime__gt=now), cancelled_at=None)
 
 
 class StatsView(APIView):
@@ -140,22 +147,67 @@ class OccasionViewSet(viewsets.ModelViewSet):
     search_fields = ["name"]
 
     def get_queryset(self):
-        return Occasion.objects.prefetch_related("users").order_by("-start_datetime", "-id")
+        return Occasion.objects.prefetch_related("users", "images").order_by("-start_datetime", "-id")
 
     @action(detail=True, methods=["post"])
     def finish(self, request, pk=None):
         """POST /api/panel/occasions/<id>/finish/: end the occasion now, so its connections get counted."""
         occasion = self.get_object()
         now = timezone.now()
-        if occasion.ends_at <= now:
-            raise ValidationError({"non_field_errors": ["This occasion is already over."]})
+        self.check_still_on(occasion, now)
         if occasion.start_datetime >= now:
             # Not started yet: move it back so it ends now, keeping its length (an hour if it has none)
             occasion.start_datetime = now - (occasion.duration or timedelta(hours=1))
         occasion.end_datetime = now
         # A full save, so post_save schedules the connections count (see apps.connections.signals)
         occasion.save()
+        # Free its attendees now rather than when the worker gets to it
+        deactivate_finished()
         return Response(self.get_serializer(occasion).data)
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        """POST /api/panel/occasions/<id>/cancel/: call the occasion off; its attendees can join another one."""
+        occasion = self.get_object()
+        now = timezone.now()
+        self.check_still_on(occasion, now)
+        occasion.cancelled_at = now
+        occasion.save()
+        deactivate_finished()
+        return Response(self.get_serializer(occasion).data)
+
+    @action(detail=True, methods=["post"], url_path="images", parser_classes=[MultiPartParser])
+    def upload_image(self, request, pk=None):
+        """POST /api/panel/occasions/<id>/images/ (multipart: image, order): put an image in a slot.
+
+        Order 0 is the main image, 1-3 the gallery; an image already in that slot is replaced.
+        """
+        occasion = self.get_object()
+        upload = OccasionImageUploadSerializer(data=request.data)
+        upload.is_valid(raise_exception=True)
+        order = upload.validated_data["order"]
+        with transaction.atomic():
+            # The replaced row's file is removed after commit (see apps.occasions.signals)
+            occasion.images.filter(order=order).delete()
+            OccasionImage.objects.create(occasion=occasion, order=order, image=upload.validated_data["image"])
+        # Fetch again so the response lists the new image set
+        return Response(self.get_serializer(self.get_object()).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["delete"], url_path=r"images/(?P<order>\d+)")
+    def delete_image(self, request, pk=None, order=None):
+        """DELETE /api/panel/occasions/<id>/images/<order>/: empty that slot."""
+        occasion = self.get_object()
+        deleted, _ = occasion.images.filter(order=int(order)).delete()
+        if not deleted:
+            raise NotFound("There's no image in that slot.")
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @staticmethod
+    def check_still_on(occasion, now):
+        if occasion.cancelled_at is not None:
+            raise ValidationError({"non_field_errors": ["This occasion was cancelled."]})
+        if occasion.ends_at <= now:
+            raise ValidationError({"non_field_errors": ["This occasion is already over."]})
 
     @action(detail=False, methods=["post"], url_path="test")
     def create_test(self, request):

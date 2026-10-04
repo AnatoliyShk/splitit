@@ -19,14 +19,16 @@ backend/            Django project
   config/           settings, root urls, wsgi/asgi
   apps/api/         REST API app (urls mounted at /api/)
   apps/users/       custom User (email login, public UUIDv7 `uuid`) + session auth API at /api/auth/; user_from_url() guards /api/users/<uuid>/ routes
-  apps/occasions/   Occasion model (many-to-many with users, directory is `apps/occasions` with app label `occasions`); GET /api/users/<uuid>/occasions/, GET /api/occasions/explore/, POST /api/occasions/<id>/join/
+  apps/occasions/   Occasion model (many-to-many with users through OccasionUser, table `occasion_users`, app label `occasions`); GET /api/users/<uuid>/occasions/, GET /api/occasions/explore/, GET /api/occasions/<id>/, POST /api/occasions/<id>/join/
+                    OccasionImage (table `occasion_images`): `order` 0 is the main image (cards, lists), 1-3 the gallery on the occasion page; uploaded in the panel via POST/DELETE /api/panel/occasions/<id>/images/[<order>/]; files live in MEDIA_ROOT (backend/media, git-ignored) and are removed with their row
+                    One occasion at a time: OccasionUser.is_active stays on until the occasion ends or is cancelled (panel Cancel sets `cancelled_at`); join returns 409 while another is active, and explore returns `active_occasion` instead of the deck. A worker task flips is_active off when an occasion ends; `manage.py deactivate_finished` sweeps manually
   apps/tags/        Tag model (many-to-many with occasions: tag.occasions / occasion.tags)
   apps/panel/       staff-only admin API at /api/panel/ (stats, users, occasions)
   apps/ai/          Gemini embedding client; saving a tag/occasion queues a task that fills its embedding
   apps/connections/ Connection between users who shared occasions (strength += 1/(attendees-1) per occasion, counted after it ends by a worker task); GET /api/users/<uuid>/connections/ and .../connections/graph/ (network for the profile graph); `manage.py apply_connections [--rebuild]`
 frontend/           Vite React app
   src/App.tsx       layout (header, footer) and routes
-  src/pages/        Home (landing), Login, Register, Profile, Settings (name/password, linked from Profile), Explore (accept/decline upcoming occasions)
+  src/pages/        Home (landing), Login, Register, Profile, Settings (name/password, linked from Profile), Explore (accept/decline upcoming occasions), OccasionPage (/occasions/:id, main image + gallery; Explore cards and Profile rows link to it)
   src/pages/panel/  admin control panel at /admin (staff only)
   src/components/   shared UI (form fields, auth card)
   src/api.ts        fetch helpers with CSRF handling
@@ -45,7 +47,7 @@ cp .env.example .env         # first time only
 docker compose up -d --build
 ```
 
-- Frontend: http://localhost:5173 (Vite proxies `/api` to the backend)
+- Frontend: http://localhost:5173 (Vite proxies `/api` and `/media` to the backend)
 - Backend: http://localhost:5000 (`/django-admin/`, `/api/health/`)
 - Postgres and Redis are bound to 127.0.0.1 on the ports in `.env`
 
@@ -59,6 +61,7 @@ docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py createsuperuser
 docker compose exec backend python manage.py test
 docker compose exec backend python manage.py embed_missing   # embed rows with no vector yet
+docker compose exec backend python manage.py deactivate_finished  # free attendees of ended/cancelled occasions
 docker compose logs -f worker                                 # background task output
 
 cd frontend && yarn build    # type-check and build

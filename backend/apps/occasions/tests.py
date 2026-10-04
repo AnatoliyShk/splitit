@@ -1,9 +1,13 @@
+from datetime import timedelta
+
 from django.db import DataError, transaction
-from django.test import TestCase
+from django.tasks import default_task_backend
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from pgvector.django import CosineDistance
 
-from .models import EMBEDDING_DIMENSIONS, Occasion
+from .models import EMBEDDING_DIMENSIONS, Occasion, OccasionUser
+from .services import deactivate_finished
 
 
 def one_hot(i):
@@ -47,8 +51,6 @@ class OccasionEmbeddingTests(TestCase):
 
 class UserOccasionsApiTests(TestCase):
     def setUp(self):
-        from datetime import timedelta
-
         from apps.tags.models import Tag
         from apps.users.models import User
 
@@ -95,10 +97,15 @@ class UserOccasionsApiTests(TestCase):
         self.assertEqual([o["name"] for o in data], ["Not mine", "Later"])
 
 
+    def test_cancelled_occasions_say_so(self):
+        Occasion.objects.filter(name="Later").update(cancelled_at=timezone.now())
+        data = self.client.get(self.url(self.me)).json()
+        self.assertIsNone(data[0]["cancelled_at"])
+        self.assertIsNotNone(data[1]["cancelled_at"])
+
+
 class ExploreApiTests(TestCase):
     def setUp(self):
-        from datetime import timedelta
-
         from apps.users.models import User
 
         self.me = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana")
@@ -109,29 +116,192 @@ class ExploreApiTests(TestCase):
         self.running = Occasion.objects.create(
             name="Running", start_datetime=now - timedelta(hours=1), end_datetime=now + timedelta(hours=1)
         )
-        self.mine = Occasion.objects.create(name="Mine", start_datetime=now + timedelta(days=2))
+        self.cancelled = Occasion.objects.create(
+            name="Cancelled", start_datetime=now + timedelta(days=2), cancelled_at=now
+        )
         self.past = Occasion.objects.create(name="Past", start_datetime=now - timedelta(days=1))
-        self.mine.users.add(self.me)
+        # Going to a past occasion doesn't stop me joining new ones
+        self.past.users.add(self.me)
+        deactivate_finished()
         self.later.users.add(self.other)
         self.client.force_login(self.me)
 
+    def explore(self):
+        return self.client.get("/api/occasions/explore/").json()
+
+    def join(self, occasion):
+        return self.client.post(f"/api/occasions/{occasion.id}/join/")
+
     def test_lists_upcoming_occasions_im_not_going_to_soonest_first(self):
-        data = self.client.get("/api/occasions/explore/").json()
-        self.assertEqual([o["name"] for o in data], ["Running", "Sooner", "Later"])
-        self.assertEqual(data[2]["attendees_count"], 1)
+        data = self.explore()
+        self.assertIsNone(data["active_occasion"])
+        self.assertEqual([o["name"] for o in data["occasions"]], ["Running", "Sooner", "Later"])
+        self.assertEqual(data["occasions"][2]["attendees_count"], 1)
 
-    def test_join_adds_me_and_drops_the_occasion_from_explore(self):
-        res = self.client.post(f"/api/occasions/{self.sooner.id}/join/")
-        self.assertEqual(res.status_code, 204)
-        self.assertTrue(self.sooner.users.filter(id=self.me.id).exists())
-        names = [o["name"] for o in self.client.get("/api/occasions/explore/").json()]
-        self.assertNotIn("Sooner", names)
+    def test_join_makes_the_occasion_active_and_hides_the_rest(self):
+        self.assertEqual(self.join(self.sooner).status_code, 204)
+        self.assertTrue(OccasionUser.objects.get(occasion=self.sooner, user=self.me).is_active)
+        data = self.explore()
+        self.assertEqual(data["active_occasion"]["name"], "Sooner")
+        self.assertEqual(data["active_occasion"]["attendees_count"], 1)
+        self.assertEqual(data["occasions"], [])
 
-    def test_cannot_join_past_or_unknown_occasions(self):
-        self.assertEqual(self.client.post(f"/api/occasions/{self.past.id}/join/").status_code, 404)
+    def test_cannot_join_a_second_occasion_while_one_is_active(self):
+        self.join(self.sooner)
+        res = self.join(self.later)
+        self.assertEqual(res.status_code, 409)
+        self.assertIn("You're already going to Sooner", res.json()["detail"])
+        self.assertFalse(self.later.users.filter(id=self.me.id).exists())
+
+    def test_joining_the_active_occasion_again_is_harmless(self):
+        self.join(self.sooner)
+        self.assertEqual(self.join(self.sooner).status_code, 204)
+        self.assertEqual(self.sooner.users.count(), 1)
+
+    def test_can_join_again_once_the_active_occasion_ends(self):
+        self.join(self.running)
+        Occasion.objects.filter(pk=self.running.pk).update(end_datetime=timezone.now() - timedelta(minutes=1))
+        # Before the deactivate job runs, the time check already frees me...
+        self.assertIsNone(self.explore()["active_occasion"])
+        self.assertEqual(self.join(self.sooner).status_code, 204)
+        # ...and the job turns the old attendance off
+        deactivate_finished()
+        self.assertFalse(OccasionUser.objects.get(occasion=self.running, user=self.me).is_active)
+
+    def test_can_join_again_once_the_active_occasion_is_cancelled(self):
+        self.join(self.sooner)
+        Occasion.objects.filter(pk=self.sooner.pk).update(cancelled_at=timezone.now())
+        self.assertIsNone(self.explore()["active_occasion"])
+        self.assertEqual(self.join(self.later).status_code, 204)
+
+    def test_cannot_join_past_cancelled_or_unknown_occasions(self):
+        self.assertEqual(self.join(self.past).status_code, 404)
+        self.assertEqual(self.join(self.cancelled).status_code, 404)
         self.assertEqual(self.client.post("/api/occasions/999999/join/").status_code, 404)
 
     def test_requires_login(self):
         self.client.logout()
         self.assertEqual(self.client.get("/api/occasions/explore/").status_code, 403)
-        self.assertEqual(self.client.post(f"/api/occasions/{self.sooner.id}/join/").status_code, 403)
+        self.assertEqual(self.join(self.sooner).status_code, 403)
+
+
+class DeactivateFinishedTests(TestCase):
+    def setUp(self):
+        from apps.users.models import User
+
+        self.ana = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana")
+        self.ben = User.objects.create_user("ben@example.com", "correct-horse-battery", name="Ben")
+
+    def attend(self, name, **times):
+        occasion = Occasion.objects.create(name=name, **times)
+        occasion.users.add(self.ana, self.ben)
+        return occasion
+
+    def active(self):
+        return set(OccasionUser.objects.filter(is_active=True).values_list("occasion__name", flat=True))
+
+    def test_turns_off_ended_and_cancelled_occasions_for_everyone(self):
+        now = timezone.now()
+        self.attend("Ended", start_datetime=now - timedelta(hours=3), end_datetime=now - timedelta(hours=1))
+        self.attend("Started, no end", start_datetime=now - timedelta(minutes=5))
+        self.attend("Running", start_datetime=now - timedelta(hours=1), end_datetime=now + timedelta(hours=1))
+        self.attend("Ahead", start_datetime=now + timedelta(days=1))
+        self.attend("Called off", start_datetime=now + timedelta(days=1), cancelled_at=now)
+
+        self.assertEqual(deactivate_finished(), 6)
+        self.assertEqual(self.active(), {"Running", "Ahead"})
+        self.assertEqual(deactivate_finished(), 0)
+
+    def test_command_runs_the_sweep(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        self.attend("Ended", start_datetime=timezone.now() - timedelta(days=1))
+        out = StringIO()
+        call_command("deactivate_finished", stdout=out)
+        self.assertIn("Deactivated 2", out.getvalue())
+        self.assertEqual(self.active(), set())
+
+
+@override_settings(TASKS={"default": {"BACKEND": "django.tasks.backends.dummy.DummyBackend"}})
+class DeactivateSchedulingTests(TestCase):
+    def setUp(self):
+        default_task_backend.clear()
+
+    def enqueued(self):
+        return [r for r in default_task_backend.results if r.task.name == "deactivate_finished_attendances"]
+
+    def test_saving_an_occasion_schedules_the_sweep_for_when_it_ends(self):
+        end = timezone.now() + timedelta(days=2)
+        with self.captureOnCommitCallbacks(execute=True):
+            Occasion.objects.create(name="Gig", start_datetime=end - timedelta(hours=2), end_datetime=end)
+        [job] = self.enqueued()
+        self.assertEqual(job.task.run_after, end)
+
+    def test_ended_or_cancelled_occasions_run_straight_away(self):
+        now = timezone.now()
+        with self.captureOnCommitCallbacks(execute=True):
+            Occasion.objects.create(name="Past", start_datetime=now - timedelta(days=1))
+            Occasion.objects.create(name="Off", start_datetime=now + timedelta(days=1), cancelled_at=now)
+        self.assertEqual([job.task.run_after for job in self.enqueued()], [None, None])
+
+
+class OccasionImagesApiTests(TestCase):
+    def setUp(self):
+        import tempfile
+
+        from django.core.files.base import ContentFile
+
+        from apps.users.models import User
+
+        from .models import OccasionImage
+
+        self.enterContext(override_settings(MEDIA_ROOT=self.enterContext(tempfile.TemporaryDirectory())))
+        self.me = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana")
+        self.occasion = Occasion.objects.create(name="Gig", start_datetime=timezone.now() + timedelta(days=1))
+        self.plain = Occasion.objects.create(name="Plain", start_datetime=timezone.now() + timedelta(days=2))
+        for order in (2, 0, 1):
+            OccasionImage.objects.create(occasion=self.occasion, order=order, image=ContentFile(b"x", f"{order}.png"))
+        self.client.force_login(self.me)
+
+    def test_previews_carry_the_main_image(self):
+        data = self.client.get("/api/occasions/explore/").json()["occasions"]
+        self.assertRegex(data[0]["main_image"], rf"^/media/occasions/{self.occasion.pk}/\w+\.png$")
+        self.assertIsNone(data[1]["main_image"])
+
+    def test_detail_has_the_gallery_in_order_without_the_main_image(self):
+        data = self.client.get(f"/api/occasions/{self.occasion.pk}/").json()
+        self.assertEqual(data["name"], "Gig")
+        self.assertIsNotNone(data["main_image"])
+        self.assertEqual(len(data["gallery"]), 2)
+        self.assertNotIn(data["main_image"], data["gallery"])
+        orders = dict(self.occasion.images.values_list("image", "order"))
+        self.assertEqual([orders[url.removeprefix("/media/")] for url in data["gallery"]], [1, 2])
+
+    def test_detail_says_whether_im_going(self):
+        self.assertFalse(self.client.get(f"/api/occasions/{self.occasion.pk}/").json()["is_going"])
+        self.occasion.users.add(self.me)
+        data = self.client.get(f"/api/occasions/{self.occasion.pk}/").json()
+        self.assertTrue(data["is_going"])
+        self.assertEqual(data["attendees_count"], 1)
+
+    def test_detail_without_images(self):
+        data = self.client.get(f"/api/occasions/{self.plain.pk}/").json()
+        self.assertIsNone(data["main_image"])
+        self.assertEqual(data["gallery"], [])
+
+    def test_detail_requires_login_and_a_real_occasion(self):
+        self.assertEqual(self.client.get("/api/occasions/999999/").status_code, 404)
+        self.client.logout()
+        self.assertEqual(self.client.get(f"/api/occasions/{self.occasion.pk}/").status_code, 403)
+
+    def test_order_is_unique_and_capped_at_3(self):
+        from django.core.files.base import ContentFile
+        from django.db import IntegrityError
+
+        from .models import OccasionImage
+
+        for order in (0, 4):
+            with self.assertRaises(IntegrityError), transaction.atomic():
+                OccasionImage.objects.create(occasion=self.occasion, order=order, image=ContentFile(b"x", "a.png"))

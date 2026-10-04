@@ -11,7 +11,9 @@ from .tasks import apply_occasion_connections
 
 def schedule(occasion_id):
     # Read the saved row: the instance may hold unparsed values (e.g. ISO strings) or be stale
-    occasion = Occasion.objects.filter(pk=occasion_id, connections_applied_at__isnull=True).first()
+    occasion = Occasion.objects.filter(
+        pk=occasion_id, connections_applied_at__isnull=True, cancelled_at__isnull=True
+    ).first()
     if occasion is None:
         return
     task = apply_occasion_connections

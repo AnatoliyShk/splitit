@@ -10,8 +10,10 @@ type MyOccasion = {
   name: string
   start_datetime: string
   end_datetime: string | null
+  cancelled_at: string | null
   attendees_count: number
   tags: string[]
+  main_image: string | null
 }
 
 // Sigma and graphology are big; load them only when someone has connections to draw
@@ -24,24 +26,31 @@ function OccasionRows({ occasions }: { occasions: MyOccasion[] }) {
     <ul className="occasion-list">
       {occasions.map((o) => (
         <li key={o.id}>
-          <span className="occasion-day occasion-date">
-            {new Date(o.start_datetime).getDate()}
-            <small>{monthFormat.format(new Date(o.start_datetime))}</small>
-          </span>
-          <span className="occasion-info">
-            <strong>{o.name}</strong>
-            <small>{formatRange(o.start_datetime, o.end_datetime)}</small>
-            {o.tags.length > 0 && (
-              <span className="tags occasion-tags">
-                {o.tags.map((t) => (
-                  <span className="tag" key={t}>
-                    {t}
-                  </span>
-                ))}
+          <Link className="occasion-row" to={`/occasions/${o.id}`}>
+            {o.main_image ? (
+              <img className="occasion-day occasion-thumb" src={o.main_image} alt="" />
+            ) : (
+              <span className="occasion-day occasion-date">
+                {new Date(o.start_datetime).getDate()}
+                <small>{monthFormat.format(new Date(o.start_datetime))}</small>
               </span>
             )}
-          </span>
-          <span className="occasion-going">{o.attendees_count} going</span>
+            <span className="occasion-info">
+              <strong>{o.name}</strong>
+              <small>{formatRange(o.start_datetime, o.end_datetime)}</small>
+              {(o.cancelled_at || o.tags.length > 0) && (
+                <span className="tags occasion-tags">
+                  {o.cancelled_at && <span className="tag tag-off">Cancelled</span>}
+                  {o.tags.map((t) => (
+                    <span className="tag" key={t}>
+                      {t}
+                    </span>
+                  ))}
+                </span>
+              )}
+            </span>
+            <span className="occasion-going">{o.attendees_count} going</span>
+          </Link>
         </li>
       ))}
     </ul>

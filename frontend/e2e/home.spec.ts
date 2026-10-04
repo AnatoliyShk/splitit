@@ -14,12 +14,16 @@ test.describe('Home page content', () => {
     await expect(page.getByText(/Find people heading to the same concerts/)).toBeVisible()
   })
 
-  test('lists the example occasions', async ({ page }) => {
-    const example = page.getByRole('figure', { name: 'Example occasions' })
-    await expect(example.getByText('Indie night')).toBeVisible()
-    await expect(example.getByText('Sunset jazz', { exact: true })).toBeVisible()
-    await expect(example.getByText('Morning hike')).toBeVisible()
-    await expect(example.getByText('14 going')).toBeVisible()
+  test('shows the Explore block instead of example occasions', async ({ page }) => {
+    const promo = page.getByRole('region', { name: 'Explore occasions' })
+    await expect(promo.getByText(/Accept an occasion to save your spot/)).toBeVisible()
+    await expect(promo.getByRole('link', { name: 'Start exploring' })).toHaveAttribute('href', '/explore')
+    await expect(page.getByText('This weekend')).toHaveCount(0)
+  })
+
+  test('Start exploring sends a logged-out visitor to log in first', async ({ page }) => {
+    await page.getByRole('link', { name: 'Start exploring' }).click()
+    await expect(page).toHaveURL(/\/login$/)
   })
 
   test('shows the three how-it-works cards', async ({ page }) => {

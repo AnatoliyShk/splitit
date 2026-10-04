@@ -5,6 +5,7 @@ import { useAuth } from './auth'
 import Explore from './pages/Explore'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import OccasionPage from './pages/OccasionPage'
 import Profile from './pages/Profile'
 import Register from './pages/Register'
 import Settings from './pages/Settings'
@@ -96,6 +97,7 @@ export default function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/profile/settings" element={<Settings />} />
           <Route path="/explore" element={<Explore />} />
+          <Route path="/occasions/:id" element={<OccasionPage />} />
           <Route path="/admin" element={<PanelLayout />}>
             <Route index element={<Overview />} />
             <Route path="users" element={<Users />} />

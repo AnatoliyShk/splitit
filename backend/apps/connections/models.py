@@ -25,6 +25,7 @@ class Connection(models.Model):
     objects = ConnectionQuerySet.as_manager()
 
     class Meta:
+        db_table = "connections"
         constraints = [
             # One row per pair: (A, B) and (B, A) can't both exist
             models.CheckConstraint(

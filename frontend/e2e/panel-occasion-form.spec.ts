@@ -3,11 +3,13 @@ import {
   attendee,
   deferred,
   mockApi,
+  mockMedia,
   mockStaffSession,
   pageOf,
   paginate,
   panelOccasion,
   panelUser,
+  PNG,
   type Attendee,
 } from './fixtures/panel'
 
@@ -481,5 +483,190 @@ test.describe('edit occasion', () => {
     await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0)
     gate.resolve()
     await expect(nameInput(page)).toHaveValue('Jazz night')
+  })
+})
+
+test.describe('images', () => {
+  const existing = panelOccasion({
+    id: 10,
+    name: 'Jazz night',
+    images: [
+      { order: 0, url: '/media/occasions/10/main.png' },
+      { order: 1, url: '/media/occasions/10/one.png' },
+    ],
+  })
+  const png = (name = 'photo.png') => ({ name, mimeType: 'image/png', buffer: PNG })
+  const slot = (page: Page, label: string) => page.getByRole('group', { name: label, exact: true })
+
+  async function openEdit(page: Page) {
+    await mockCommon(page)
+    await mockMedia(page)
+    await mockApi(page, '/api/panel/occasions/10/', {
+      GET: () => ({ body: existing }),
+      PATCH: () => ({ body: existing }),
+    })
+    const uploads = await mockApi(page, '/api/panel/occasions/10/images/', {
+      POST: () => ({ status: 201, body: existing }),
+    })
+    const deletes = await mockApi(page, /^\/api\/panel\/occasions\/10\/images\/\d+\/$/, {
+      DELETE: () => ({ body: existing }),
+    })
+    await page.goto('/admin/occasions/10')
+    await expect(nameInput(page)).toHaveValue('Jazz night')
+    return { uploads, deletes }
+  }
+
+  test('shows saved images in their slots and empty slots as such', async ({ page }) => {
+    await openEdit(page)
+
+    await expect(slot(page, 'Main image').getByRole('img', { name: 'Main image preview' })).toHaveAttribute(
+      'src',
+      '/media/occasions/10/main.png',
+    )
+    await expect(slot(page, 'Gallery 1').getByRole('img')).toBeVisible()
+    await expect(slot(page, 'Gallery 2').getByText('No image')).toBeVisible()
+    await expect(slot(page, 'Gallery 3').getByText('No image')).toBeVisible()
+    await expect(page.getByText('Changes are saved with the form.')).toBeVisible()
+  })
+
+  test('nothing is uploaded until the form is saved', async ({ page }) => {
+    const { uploads } = await openEdit(page)
+
+    await page.getByLabel('Add gallery 2').setInputFiles(png())
+    await expect(slot(page, 'Gallery 2').getByText('Unsaved')).toBeVisible()
+    await expect(slot(page, 'Gallery 2').getByRole('img', { name: 'Gallery 2 preview' })).toHaveAttribute(
+      'src',
+      /^blob:/,
+    )
+    expect(uploads).toHaveLength(0)
+  })
+
+  test('saving uploads a new image into its slot as multipart', async ({ page }) => {
+    const { uploads, deletes } = await openEdit(page)
+
+    await page.getByLabel('Replace main image').setInputFiles(png('cover.png'))
+    await page.getByRole('button', { name: 'Save changes' }).click()
+
+    await expect(page).toHaveURL(/\/admin\/occasions$/)
+    expect(uploads).toHaveLength(1)
+    expect(uploads[0].raw).toMatch(/name="order"\r\n\r\n0\r\n/)
+    expect(uploads[0].raw).toContain('filename="cover.png"')
+    expect(deletes).toHaveLength(0)
+  })
+
+  test('saving deletes a removed image', async ({ page }) => {
+    const { uploads, deletes } = await openEdit(page)
+
+    await page.getByRole('button', { name: 'Remove gallery 1' }).click()
+    await expect(slot(page, 'Gallery 1').getByText('No image')).toBeVisible()
+    await page.getByRole('button', { name: 'Save changes' }).click()
+
+    await expect(page).toHaveURL(/\/admin\/occasions$/)
+    expect(deletes.map((c) => c.url.pathname)).toEqual(['/api/panel/occasions/10/images/1/'])
+    expect(uploads).toHaveLength(0)
+  })
+
+  test('Undo puts the saved image back', async ({ page }) => {
+    const { uploads, deletes } = await openEdit(page)
+
+    await page.getByRole('button', { name: 'Remove main image' }).click()
+    await page.getByRole('button', { name: 'Undo main image change' }).click()
+    await expect(slot(page, 'Main image').getByRole('img')).toHaveAttribute('src', '/media/occasions/10/main.png')
+    await expect(slot(page, 'Main image').getByText('Unsaved')).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await expect(page).toHaveURL(/\/admin\/occasions$/)
+    expect(uploads).toHaveLength(0)
+    expect(deletes).toHaveLength(0)
+  })
+
+  test('removing a picked file from an empty slot just clears it', async ({ page }) => {
+    await openEdit(page)
+
+    await page.getByLabel('Add gallery 3').setInputFiles(png())
+    await page.getByRole('button', { name: 'Remove gallery 3' }).click()
+    await expect(slot(page, 'Gallery 3').getByText('No image')).toBeVisible()
+    await expect(slot(page, 'Gallery 3').getByText('Unsaved')).toHaveCount(0)
+  })
+
+  test('refuses files that are not JPEG, PNG or WebP before uploading', async ({ page }) => {
+    const { uploads } = await openEdit(page)
+
+    await page.getByLabel('Add gallery 2').setInputFiles({ name: 'anim.gif', mimeType: 'image/gif', buffer: PNG })
+    await expect(slot(page, 'Gallery 2').getByText('Use a JPEG, PNG or WebP image.')).toBeVisible()
+    await expect(slot(page, 'Gallery 2').getByText('No image')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await expect(page).toHaveURL(/\/admin\/occasions$/)
+    expect(uploads).toHaveLength(0)
+  })
+
+  test('refuses images over 5 MB before uploading', async ({ page }) => {
+    await openEdit(page)
+
+    await page.getByLabel('Add gallery 2').setInputFiles({
+      name: 'huge.png',
+      mimeType: 'image/png',
+      buffer: Buffer.alloc(5 * 1024 * 1024 + 1),
+    })
+    await expect(slot(page, 'Gallery 2').getByText('The image must be 5 MB or smaller.')).toBeVisible()
+  })
+
+  test('a new occasion is created first, then its images go to the new id', async ({ page }) => {
+    await mockCommon(page)
+    const posts = await mockApi(page, '/api/panel/occasions/', {
+      GET: () => ({ body: pageOf([]) }),
+      POST: ({ body }) => ({ status: 201, body: panelOccasion({ id: 77, ...(body as object) }) }),
+    })
+    const uploads = await mockApi(page, '/api/panel/occasions/77/images/', {
+      POST: () => ({ status: 201, body: panelOccasion({ id: 77 }) }),
+    })
+    await page.goto('/admin/occasions/new')
+
+    await nameInput(page).fill('Board game night')
+    await startsInput(page).fill('2099-10-10T18:00')
+    await page.getByLabel('Add main image').setInputFiles(png('main.png'))
+    await page.getByLabel('Add gallery 1').setInputFiles(png('one.png'))
+    await page.getByRole('button', { name: 'Create occasion' }).click()
+
+    await expect(page).toHaveURL(/\/admin\/occasions$/)
+    expect(posts.filter((c) => c.method === 'POST')).toHaveLength(1)
+    expect(uploads.map((c) => c.raw!.match(/name="order"\r\n\r\n(\d)/)![1])).toEqual(['0', '1'])
+  })
+
+  test('a failed upload keeps the form open, and saving again updates the created occasion', async ({ page }) => {
+    await mockCommon(page)
+    const posts = await mockApi(page, '/api/panel/occasions/', {
+      GET: () => ({ body: pageOf([]) }),
+      POST: ({ body }) => ({ status: 201, body: panelOccasion({ id: 77, ...(body as object) }) }),
+    })
+    const patches = await mockApi(page, '/api/panel/occasions/77/', {
+      PATCH: ({ body }) => ({ body: panelOccasion({ id: 77, ...(body as object) }) }),
+    })
+    let fail = true
+    await mockApi(page, '/api/panel/occasions/77/images/', {
+      POST: () =>
+        fail
+          ? { status: 400, body: { image: ['Upload a valid image.'] } }
+          : { status: 201, body: panelOccasion({ id: 77, images: [{ order: 0, url: '/media/x.png' }] }) },
+    })
+    await page.goto('/admin/occasions/new')
+
+    await nameInput(page).fill('Board game night')
+    await startsInput(page).fill('2099-10-10T18:00')
+    await page.getByLabel('Add main image').setInputFiles(png())
+    await page.getByRole('button', { name: 'Create occasion' }).click()
+
+    await expect(page.getByRole('alert')).toHaveText(
+      'The occasion was saved, but some images weren’t. Fix them and save again.',
+    )
+    await expect(slot(page, 'Main image').getByText('Upload a valid image.')).toBeVisible()
+    await expect(page).toHaveURL(/\/admin\/occasions\/new$/)
+
+    fail = false
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await expect(page).toHaveURL(/\/admin\/occasions$/)
+    expect(posts.filter((c) => c.method === 'POST')).toHaveLength(1)
+    expect(patches).toHaveLength(1)
   })
 })

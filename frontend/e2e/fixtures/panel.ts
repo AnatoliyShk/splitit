@@ -31,7 +31,9 @@ export type PanelOccasion = {
   start_datetime: string
   end_datetime: string | null
   duration_minutes: number | null
+  cancelled_at: string | null
   attendees: Attendee[]
+  images: { order: number; url: string }[]
   created_at: string
   updated_at: string
 }
@@ -95,7 +97,9 @@ export function panelOccasion(overrides: Partial<PanelOccasion> = {}): PanelOcca
     start_datetime: '2099-10-10T18:00:00Z',
     end_datetime: '2099-10-10T21:00:00Z',
     duration_minutes: 180,
+    cancelled_at: null,
     attendees: [],
+    images: [],
     created_at: '2025-05-01T12:00:00Z',
     updated_at: '2025-05-02T12:00:00Z',
     ...overrides,
@@ -137,7 +141,8 @@ export function paginate<T>(items: T[], url: URL, searchText: (item: T) => strin
 // ---------- API mocking ----------
 
 export type Reply = { status?: number; body?: unknown }
-export type ApiCall = { method: string; url: URL; body: any }
+// `body` is the parsed JSON body; `raw` is the body as text (for multipart uploads)
+export type ApiCall = { method: string; url: URL; body: any; raw: string | null }
 type Handler = (call: ApiCall) => Reply | Promise<Reply>
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE'
 
@@ -168,7 +173,7 @@ export async function mockApi(
       } catch {
         body = null
       }
-      const call = { method, url: new URL(request.url()), body }
+      const call = { method, url: new URL(request.url()), body, raw: request.postData() }
       calls.push(call)
       const reply = await handler(call)
       const status = reply.status ?? 200
@@ -200,6 +205,17 @@ export async function mockSession(page: Page, user: SessionUser | null, health: 
   await page.route('**/api/auth/csrf/', (route) =>
     route.fulfill({ status: 204, headers: { 'set-cookie': 'csrftoken=test-token; Path=/' } }),
   )
+}
+
+// A 1x1 PNG: a real image for file inputs and /media responses
+export const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+  'base64',
+)
+
+// Uploaded images (/media/...) answer with the PNG instead of reaching Django
+export async function mockMedia(page: Page) {
+  await page.route('**/media/**', (route) => route.fulfill({ contentType: 'image/png', body: PNG }))
 }
 
 // Logged in as an admin, ready to open /admin pages

@@ -244,6 +244,50 @@ test.describe('panel occasions list', () => {
     })
   })
 
+  test.describe('cancel', () => {
+    test('only upcoming occasions have a Cancel button', async ({ page }) => {
+      await openOccasions(page)
+
+      await expect(row(page, 'Jazz night').getByRole('button', { name: 'Cancel', exact: true })).toBeVisible()
+      await expect(row(page, 'Open mic').getByRole('button', { name: 'Cancel', exact: true })).toBeVisible()
+      await expect(row(page, 'Old picnic').getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0)
+    })
+
+    test('cancelling asks for confirmation, then marks the row cancelled', async ({ page }) => {
+      const { occasions } = await openOccasions(page)
+      const cancels = await mockApi(page, '/api/panel/occasions/10/cancel/', {
+        POST: () => {
+          occasions[0].cancelled_at = '2026-01-01T00:00:00Z'
+          return { body: occasions[0] }
+        },
+      })
+
+      await row(page, 'Jazz night').getByRole('button', { name: 'Cancel', exact: true }).click()
+      const confirm = page.getByRole('group', { name: 'Cancel Jazz night?' })
+      await expect(confirm.getByText('Cancel it?')).toBeVisible()
+      expect(cancels).toHaveLength(0)
+      await confirm.getByRole('button', { name: 'Cancel occasion' }).click()
+
+      // After reload it's tagged and can't be finished or cancelled again
+      await expect(page.getByRole('group', { name: 'Cancel Jazz night?' })).toHaveCount(0)
+      await expect(row(page, 'Jazz night').getByText('Cancelled', { exact: true })).toBeVisible()
+      await expect(row(page, 'Jazz night').getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0)
+      await expect(row(page, 'Jazz night').getByRole('button', { name: 'Finish' })).toHaveCount(0)
+      expect(cancels).toHaveLength(1)
+    })
+
+    test('Keep closes the confirmation without cancelling', async ({ page }) => {
+      await openOccasions(page)
+      const cancels = await mockApi(page, '/api/panel/occasions/10/cancel/', { POST: () => ({ body: {} }) })
+
+      await row(page, 'Jazz night').getByRole('button', { name: 'Cancel', exact: true }).click()
+      await page.getByRole('group', { name: 'Cancel Jazz night?' }).getByRole('button', { name: 'Keep' }).click()
+
+      await expect(row(page, 'Jazz night').getByRole('button', { name: 'Cancel', exact: true })).toBeVisible()
+      expect(cancels).toHaveLength(0)
+    })
+  })
+
   test.describe('create test occasion', () => {
     const created = panelOccasion({
       id: 99,

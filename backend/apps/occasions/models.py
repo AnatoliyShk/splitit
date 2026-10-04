@@ -1,9 +1,30 @@
+import uuid
+from pathlib import Path
+
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
+from django.utils import timezone
 from pgvector.django import HnswIndex, VectorField
 
 # Size of the vectors stored in `embedding` columns (shared with tags)
 EMBEDDING_DIMENSIONS = 768
+
+
+class OccasionQuerySet(models.QuerySet):
+    def upcoming(self):
+        """Not cancelled and not over yet: still ahead or running (one with no end is over once it starts)."""
+        now = timezone.now()
+        return self.filter(
+            Q(end_datetime__gte=now) | Q(end_datetime=None, start_datetime__gte=now), cancelled_at=None
+        )
+
+    def finished(self):
+        """Over or cancelled: the opposite of upcoming()."""
+        now = timezone.now()
+        return self.filter(
+            Q(cancelled_at__isnull=False) | Q(end_datetime__lt=now) | Q(end_datetime=None, start_datetime__lt=now)
+        )
 
 
 class Occasion(models.Model):
@@ -12,6 +33,7 @@ class Occasion(models.Model):
     end_datetime = models.DateTimeField(null=True, blank=True)
     users = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
+        through="OccasionUser",
         related_name="occasions",
         blank=True,
     )
@@ -19,10 +41,15 @@ class Occasion(models.Model):
     embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True, blank=True, editable=False)
     # When attendees' connections were counted (see apps.connections); set once, after the occasion ends
     connections_applied_at = models.DateTimeField(null=True, blank=True, editable=False)
+    # Set by the panel's Cancel action; a cancelled occasion can't be joined and isn't counted for connections
+    cancelled_at = models.DateTimeField(null=True, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = OccasionQuerySet.as_manager()
+
     class Meta:
+        db_table = "occasions"
         indexes = [
             # Approximate nearest-neighbour search by cosine distance
             HnswIndex(
@@ -56,3 +83,69 @@ class Occasion(models.Model):
         if self.end_datetime is None:
             return None
         return self.end_datetime - self.start_datetime
+
+    def is_applyable(self, now=None):
+        """Whether its connections can be counted now: it is over, not cancelled and not applied yet."""
+        return (
+            self.cancelled_at is None
+            and self.connections_applied_at is None
+            and self.ends_at <= (now or timezone.now())
+        )
+
+
+class OccasionUser(models.Model):
+    """One user going to one occasion: the row behind Occasion.users."""
+
+    occasion = models.ForeignKey(Occasion, on_delete=models.CASCADE, related_name="attendances")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="attendances")
+    # On while the occasion is ahead or running; a user can join only while none of theirs is active.
+    # Turned off for every attendee once it ends or is cancelled (see services.deactivate_finished)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "occasion_users"
+        # Matches the table Django created when this was an automatic many-to-many
+        unique_together = [("occasion", "user")]
+
+    def __str__(self):
+        return f"{self.user} → {self.occasion}"
+
+
+# Order 0 is the main image (shown on previews); 1..GALLERY_SIZE are the gallery on the occasion's page
+MAIN_IMAGE_ORDER = 0
+GALLERY_SIZE = 3
+MAX_IMAGE_ORDER = MAIN_IMAGE_ORDER + GALLERY_SIZE
+
+
+def image_path(image, filename):
+    """occasions/<occasion id>/<random hex>.<ext>: random, so a replaced image never hits a stale cache."""
+    ext = Path(filename).suffix.lower()
+    return f"occasions/{image.occasion_id}/{uuid.uuid4().hex}{ext}"
+
+
+class OccasionImage(models.Model):
+    """One picture of an occasion, in a fixed slot: `order` 0 is the main image, 1-3 the gallery."""
+
+    occasion = models.ForeignKey(Occasion, on_delete=models.CASCADE, related_name="images")
+    image = models.ImageField(upload_to=image_path)
+    order = models.PositiveSmallIntegerField(default=MAIN_IMAGE_ORDER)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "occasion_images"
+        ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(fields=["occasion", "order"], name="occasion_image_order_unique"),
+            models.CheckConstraint(
+                condition=Q(order__lte=MAX_IMAGE_ORDER),
+                name="occasion_image_order_range",
+                violation_error_message=f"The order must be between 0 and {MAX_IMAGE_ORDER}.",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.occasion} #{self.order}"
+
+    @property
+    def is_main(self):
+        return self.order == MAIN_IMAGE_ORDER

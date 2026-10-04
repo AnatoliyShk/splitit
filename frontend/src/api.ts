@@ -79,6 +79,17 @@ export const apiPost = <T>(path: string, body?: unknown) => apiSend<T>('POST', p
 export const apiPatch = <T>(path: string, body: unknown) => apiSend<T>('PATCH', path, body)
 export const apiDelete = (path: string) => apiSend<null>('DELETE', path)
 
+// multipart/form-data (file uploads): no Content-Type header, so the browser adds one with the boundary
+export async function apiUpload<T>(path: string, body: FormData): Promise<T> {
+  const res = await fetch(path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'X-CSRFToken': await csrfToken() },
+    body,
+  })
+  return handle<T>(res)
+}
+
 export function errorsFrom(err: unknown): FieldErrors {
   if (err instanceof ApiError) return err.errors
   return { non_field_errors: ["Can't reach the server. Check your connection and try again."] }

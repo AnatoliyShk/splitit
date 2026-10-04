@@ -11,6 +11,7 @@ class Tag(models.Model):
         "occasions.Occasion",
         related_name="tags",
         blank=True,
+        db_table="tag_occasions",
     )
     # Filled by an embedding model, not by people, so it's hidden from forms and the API
     embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True, blank=True, editable=False)
@@ -18,6 +19,7 @@ class Tag(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = "tags"
         indexes = [
             # Approximate nearest-neighbour search by cosine distance
             HnswIndex(

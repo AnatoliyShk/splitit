@@ -5,7 +5,7 @@ from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from apps.occasions.models import EMBEDDING_DIMENSIONS, Occasion
+from apps.occasions.models import EMBEDDING_DIMENSIONS, Occasion, OccasionUser
 from apps.ai.embedding import embedding_updated
 from apps.tags.models import Tag
 from apps.users.models import User
@@ -182,6 +182,42 @@ class OccasionManagementTests(PanelTestCase):
         self.assertEqual(res.status_code, 400)
         self.assertIn("non_field_errors", res.json())
 
+    def test_finish_frees_its_attendees_straight_away(self):
+        occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
+        occasion.users.add(self.member)
+        self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
+        self.assertFalse(OccasionUser.objects.get(occasion=occasion, user=self.member).is_active)
+
+    def test_cancel_marks_it_cancelled_and_frees_its_attendees(self):
+        occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
+        occasion.users.add(self.member)
+        res = self.client.post(f"/api/panel/occasions/{occasion.pk}/cancel/")
+        self.assertEqual(res.status_code, 200)
+        self.assertIsNotNone(res.json()["cancelled_at"])
+        self.assertFalse(OccasionUser.objects.get(occasion=occasion, user=self.member).is_active)
+        # Still listed, with its attendees, but no longer upcoming
+        self.assertEqual(res.json()["attendees"][0]["id"], self.member.pk)
+        self.assertEqual(self.client.get("/api/panel/stats/").json()["occasions"]["upcoming"], 0)
+
+    def test_cancel_or_finish_twice_is_rejected(self):
+        occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
+        self.client.post(f"/api/panel/occasions/{occasion.pk}/cancel/")
+        for action in ("cancel", "finish"):
+            res = self.client.post(f"/api/panel/occasions/{occasion.pk}/{action}/")
+            self.assertEqual(res.status_code, 400)
+            self.assertEqual(res.json()["non_field_errors"], ["This occasion was cancelled."])
+
+    def test_cancel_ended_occasion_is_rejected(self):
+        occasion = Occasion.objects.create(name="Past", start_datetime=timezone.now() - timedelta(days=1))
+        res = self.client.post(f"/api/panel/occasions/{occasion.pk}/cancel/")
+        self.assertEqual(res.status_code, 400)
+        self.assertIsNone(Occasion.objects.get(pk=occasion.pk).cancelled_at)
+
+    def test_cancel_is_staff_only(self):
+        occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
+        self.client.force_login(self.member)
+        self.assertEqual(self.client.post(f"/api/panel/occasions/{occasion.pk}/cancel/").status_code, 403)
+
     def test_create_test_occasion_with_existing_users(self):
         res = self.client.post("/api/panel/occasions/test/")
         self.assertEqual(res.status_code, 201)
@@ -301,3 +337,106 @@ class TagListCacheTests(PanelTestCase):
         self.assertEqual(self.names(), ["Jazz"])
         self.client.force_login(self.member)
         self.assertEqual(self.client.get("/api/panel/tags/").status_code, 403)
+
+
+def image_file(name="photo.png", fmt="PNG", size=(4, 3)):
+    """A tiny real image, as an upload."""
+    from io import BytesIO
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image
+
+    buffer = BytesIO()
+    Image.new("RGB", size, "yellow").save(buffer, fmt)
+    return SimpleUploadedFile(name, buffer.getvalue(), content_type=f"image/{fmt.lower()}")
+
+
+class OccasionImageTests(PanelTestCase):
+    def setUp(self):
+        import tempfile
+
+        super().setUp()
+        # Uploads land in a throwaway folder, never the dev media directory
+        self.media = self.enterContext(tempfile.TemporaryDirectory())
+        self.enterContext(override_settings(MEDIA_ROOT=self.media))
+        self.occasion = Occasion.objects.create(name="Gig", start_datetime=timezone.now() + timedelta(days=1))
+        self.url = f"/api/panel/occasions/{self.occasion.pk}/images/"
+
+    def upload(self, order, file=None):
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.client.post(self.url, {"order": order, "image": file or image_file()}, format="multipart")
+
+    def stored_files(self):
+        from pathlib import Path
+
+        return sorted(p.name for p in Path(self.media).rglob("*") if p.is_file())
+
+    def test_upload_fills_a_slot_and_returns_the_images(self):
+        res = self.upload(0)
+        self.assertEqual(res.status_code, 201)
+        [image] = res.json()["images"]
+        self.assertEqual(image["order"], 0)
+        self.assertRegex(image["url"], rf"^/media/occasions/{self.occasion.pk}/[0-9a-f]{{32}}\.png$")
+        self.assertEqual(len(self.stored_files()), 1)
+
+    def test_images_come_back_in_order(self):
+        for order in (2, 0, 1):
+            self.upload(order)
+        data = self.client.get(f"/api/panel/occasions/{self.occasion.pk}/").json()
+        self.assertEqual([i["order"] for i in data["images"]], [0, 1, 2])
+
+    def test_uploading_to_a_taken_slot_replaces_the_image_and_its_file(self):
+        first = self.upload(1).json()["images"][0]["url"]
+        second = self.upload(1).json()["images"]
+        self.assertEqual(len(second), 1)
+        self.assertNotEqual(second[0]["url"], first)
+        self.assertEqual(self.stored_files(), [second[0]["url"].rsplit("/", 1)[1]])
+
+    def test_delete_empties_the_slot_and_removes_the_file(self):
+        self.upload(0)
+        self.upload(3)
+        with self.captureOnCommitCallbacks(execute=True):
+            res = self.client.delete(f"{self.url}3/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual([i["order"] for i in res.json()["images"]], [0])
+        self.assertEqual(len(self.stored_files()), 1)
+        self.assertEqual(self.client.delete(f"{self.url}3/").status_code, 404)
+
+    def test_deleting_the_occasion_removes_its_files(self):
+        self.upload(0)
+        self.upload(1)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.delete(f"/api/panel/occasions/{self.occasion.pk}/")
+        self.assertEqual(self.stored_files(), [])
+
+    def test_order_must_be_a_slot_from_0_to_3(self):
+        for order in (-1, 4):
+            res = self.upload(order)
+            self.assertEqual(res.status_code, 400)
+            self.assertIn("order", res.json())
+        self.assertEqual(self.stored_files(), [])
+
+    def test_rejects_files_that_are_not_web_images(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        res = self.upload(0, SimpleUploadedFile("notes.png", b"not an image", content_type="image/png"))
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("image", res.json())
+        res = self.upload(0, image_file("photo.gif", "GIF"))
+        self.assertEqual(res.json()["image"], ["Use a JPEG, PNG or WebP image."])
+
+    def test_rejects_images_over_5_mb(self):
+        from apps.panel import serializers
+
+        original = serializers.MAX_IMAGE_BYTES
+        serializers.MAX_IMAGE_BYTES = 10
+        try:
+            res = self.upload(0)
+        finally:
+            serializers.MAX_IMAGE_BYTES = original
+        self.assertEqual(res.json()["image"], ["The image must be 5 MB or smaller."])
+
+    def test_images_are_staff_only(self):
+        self.client.force_login(self.member)
+        self.assertEqual(self.upload(0).status_code, 403)
+        self.assertEqual(self.client.delete(f"{self.url}0/").status_code, 403)

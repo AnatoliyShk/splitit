@@ -5,9 +5,18 @@ import { Field, FormAlert } from '../../components/Field'
 import { Pager } from '../../components/Pager'
 import { formatDuration, formatRange, PAGE_SIZE, useDebounced, type PanelOccasion } from './shared'
 
-// Not over yet: same rule as the server (an occasion with no end is over once it starts)
+// Not over or cancelled yet: same rule as the server (an occasion with no end is over once it starts)
 function isUpcoming(o: PanelOccasion) {
-  return new Date(o.end_datetime ?? o.start_datetime).getTime() > Date.now()
+  return !o.cancelled_at && new Date(o.end_datetime ?? o.start_datetime).getTime() > Date.now()
+}
+
+type RowAction = 'delete' | 'finish' | 'cancel'
+
+// What each two-step action asks, and the button that carries it out
+const CONFIRM: Record<RowAction, { question: string; group: string; button: string; className: string }> = {
+  delete: { question: 'Delete?', group: 'Delete', button: 'Delete', className: 'btn-danger' },
+  finish: { question: 'Finish now?', group: 'Finish', button: 'Finish', className: 'btn-confirm' },
+  cancel: { question: 'Cancel it?', group: 'Cancel', button: 'Cancel occasion', className: 'btn-danger' },
 }
 
 export default function Occasions() {
@@ -16,8 +25,8 @@ export default function Occasions() {
   const [page, setPage] = useState(1)
   const [data, setData] = useState<Page<PanelOccasion> | null>(null)
   const [errors, setErrors] = useState<FieldErrors>({})
-  // Deleting and finishing are two-step: the row asks for confirmation inline
-  const [confirm, setConfirm] = useState<{ id: number; action: 'delete' | 'finish' } | null>(null)
+  // Deleting, finishing and cancelling are two-step: the row asks for confirmation inline
+  const [confirm, setConfirm] = useState<{ id: number; action: RowAction } | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [creatingTest, setCreatingTest] = useState(false)
   const [testOccasion, setTestOccasion] = useState<PanelOccasion | null>(null)
@@ -49,12 +58,13 @@ export default function Occasions() {
     }
   }
 
-  // Ends the occasion now; the worker then counts connections between its attendees
-  async function finish(occasion: PanelOccasion) {
+  // finish: ends the occasion now; the worker then counts connections between its attendees.
+  // cancel: calls it off; no connections are counted. Either way its attendees can join another occasion
+  async function endEarly(occasion: PanelOccasion, action: 'finish' | 'cancel') {
     setBusyId(occasion.id)
     setErrors({})
     try {
-      await apiPost(`/api/panel/occasions/${occasion.id}/finish/`)
+      await apiPost(`/api/panel/occasions/${occasion.id}/${action}/`)
       await load()
       setConfirm(null)
     } catch (err) {
@@ -154,6 +164,7 @@ export default function Occasions() {
                   <Link className="row-link" to={`/admin/occasions/${o.id}`}>
                     {o.name}
                   </Link>
+                  {o.cancelled_at && <span className="tag tag-off row-tag">Cancelled</span>}
                 </td>
                 <td data-label="When">{formatRange(o.start_datetime, o.end_datetime)}</td>
                 <td data-label="Length">
@@ -162,31 +173,30 @@ export default function Occasions() {
                 <td data-label="Going">{o.attendees.length}</td>
                 <td className="row-actions">
                   {confirm?.id === o.id ? (
-                    <span
-                      className="confirm"
-                      role="group"
-                      aria-label={`${confirm.action === 'delete' ? 'Delete' : 'Finish'} ${o.name}?`}
-                    >
-                      <span className="confirm-text">{confirm.action === 'delete' ? 'Delete?' : 'Finish now?'}</span>
+                    <span className="confirm" role="group" aria-label={`${CONFIRM[confirm.action].group} ${o.name}?`}>
+                      <span className="confirm-text">{CONFIRM[confirm.action].question}</span>
                       <button className="btn btn-sm" onClick={() => setConfirm(null)} autoFocus>
                         Keep
                       </button>
-                      {confirm.action === 'delete' ? (
-                        <button className="btn btn-sm btn-danger" disabled={busyId === o.id} onClick={() => remove(o)}>
-                          Delete
-                        </button>
-                      ) : (
-                        <button className="btn btn-sm btn-confirm" disabled={busyId === o.id} onClick={() => finish(o)}>
-                          Finish
-                        </button>
-                      )}
+                      <button
+                        className={`btn btn-sm ${CONFIRM[confirm.action].className}`}
+                        disabled={busyId === o.id}
+                        onClick={() => (confirm.action === 'delete' ? remove(o) : endEarly(o, confirm.action))}
+                      >
+                        {CONFIRM[confirm.action].button}
+                      </button>
                     </span>
                   ) : (
                     <>
                       {isUpcoming(o) && (
-                        <button className="btn btn-sm" onClick={() => setConfirm({ id: o.id, action: 'finish' })}>
-                          Finish
-                        </button>
+                        <>
+                          <button className="btn btn-sm" onClick={() => setConfirm({ id: o.id, action: 'finish' })}>
+                            Finish
+                          </button>
+                          <button className="btn btn-sm" onClick={() => setConfirm({ id: o.id, action: 'cancel' })}>
+                            Cancel
+                          </button>
+                        </>
                       )}
                       <Link className="btn btn-sm" to={`/admin/occasions/${o.id}`}>
                         Edit
