@@ -1,6 +1,7 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, Navigate, useLocation } from 'react-router'
-import { apiGet, errorsFrom, type FieldErrors, type User } from '../api'
+import { apiGet, errorsFrom, type User } from '../api'
 import { useAuth } from '../auth'
 import { FormAlert } from '../components/Field'
 import { formatDate, formatRange } from './panel/shared'
@@ -71,14 +72,12 @@ function splitByNow(occasions: MyOccasion[]): SplitOccasions {
 }
 
 function MyOccasions({ user }: { user: User }) {
-  const [data, setData] = useState<SplitOccasions | null>(null)
-  const [errors, setErrors] = useState<FieldErrors>({})
-
-  useEffect(() => {
-    apiGet<MyOccasion[]>(`/api/users/${user.uuid}/occasions/`)
-      .then((occasions) => setData(splitByNow(occasions)))
-      .catch((err) => setErrors(errorsFrom(err)))
-  }, [user.uuid])
+  const { data, error } = useQuery({
+    queryKey: ['users', user.uuid, 'occasions'],
+    queryFn: () => apiGet<MyOccasion[]>(`/api/users/${user.uuid}/occasions/`),
+    select: splitByNow,
+  })
+  const errors = error ? errorsFrom(error) : {}
 
   const occasions = data?.all
   const upcoming = data?.upcoming ?? []
@@ -123,15 +122,12 @@ type MyConnection = {
 const strengthFormat = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 function MyConnections({ user }: { user: User }) {
-  const [connections, setConnections] = useState<MyConnection[] | null>(null)
-  const [errors, setErrors] = useState<FieldErrors>({})
-
-  useEffect(() => {
-    // Already sorted by strength, strongest first
-    apiGet<MyConnection[]>(`/api/users/${user.uuid}/connections/`)
-      .then(setConnections)
-      .catch((err) => setErrors(errorsFrom(err)))
-  }, [user.uuid])
+  // Already sorted by strength, strongest first
+  const { data: connections, error } = useQuery({
+    queryKey: ['users', user.uuid, 'connections'],
+    queryFn: () => apiGet<MyConnection[]>(`/api/users/${user.uuid}/connections/`),
+  })
+  const errors = error ? errorsFrom(error) : {}
 
   return (
     <section className="profile-card" aria-labelledby="connections-title">

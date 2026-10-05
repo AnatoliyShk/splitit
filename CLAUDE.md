@@ -5,7 +5,7 @@ Splitit helps people go to occasions together and find community and friends. Us
 ## Stack
 
 - **Backend:** Django 6 + Django REST Framework, Python 3.12, dependencies managed with uv (`backend/pyproject.toml`, `backend/uv.lock`)
-- **Frontend:** React 19 + TypeScript + Vite, Yarn 4, linted with oxlint
+- **Frontend:** React 19 + TypeScript + Vite, Yarn 4, linted with oxlint; server data fetched with TanStack Query (`src/queryClient.ts`)
 - **Database:** PostgreSQL 17 with pgvector (`pgvector/pgvector:pg17` image); `occasions` and `tags` have 768-dim `embedding` columns with HNSW cosine indexes
 - **Cache:** Redis 7 (Django's `CACHES` default backend)
 - **Background tasks:** Django 6 `django.tasks`, queued in Postgres by `django-tasks-db` and run by the `worker` service
