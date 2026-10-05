@@ -1,7 +1,7 @@
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
+from django.views.static import serve
 
 urlpatterns = [
     # /admin is the React control panel; Django's built-in admin lives here instead
@@ -12,5 +12,6 @@ urlpatterns = [
     path("api/", include("apps.occasions.urls")),
     path("api/", include("apps.connections.urls")),
     path("api/panel/", include("apps.panel.urls")),
-    # Uploaded images; static() serves nothing unless DEBUG is on
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    # Uploaded images, served by Django itself (fine at this scale; MEDIA_ROOT should be on a volume in production)
+    re_path(r"^media/(?P<path>.*)$", serve, {"document_root": settings.MEDIA_ROOT}),
+]
