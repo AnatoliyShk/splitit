@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { apiGet, apiPost, type User } from './api'
+import { apiGet, apiPost } from './api'
+import type { User } from './types/users'
 import { AuthContext, type Auth } from './auth'
 
 type UserResponse = { user: User | null }

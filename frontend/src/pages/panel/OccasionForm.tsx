@@ -4,6 +4,7 @@ import { apiDelete, apiGet, apiPatch, apiPost, apiUpload, errorsFrom, type Field
 import { AttendeePicker } from '../../components/AttendeePicker'
 import { Field, FormAlert } from '../../components/Field'
 import { TagPicker } from '../../components/TagPicker'
+import type { Tag } from '../../types/tags'
 import { ImageSlots } from './ImageSlots'
 import {
   formatDate,
@@ -14,7 +15,6 @@ import {
   toLocalInput,
   type Attendee,
   type ImageChanges,
-  type OccasionTag,
   type OccasionImage,
   type PanelOccasion,
   type SavedImages,
@@ -40,7 +40,7 @@ export default function OccasionForm() {
   const [start, setStart] = useState('')
   const [end, setEnd] = useState('')
   const [attendees, setAttendees] = useState<Attendee[]>([])
-  const [tags, setTags] = useState<OccasionTag[]>([])
+  const [tags, setTags] = useState<Tag[]>([])
   const [savedImages, setSavedImages] = useState<SavedImages>({})
   const [imageChanges, setImageChanges] = useState<ImageChanges>({})
   const [imageErrors, setImageErrors] = useState<Record<number, string[]>>({})

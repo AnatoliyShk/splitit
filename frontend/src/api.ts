@@ -1,13 +1,3 @@
-export type User = {
-  id: number
-  uuid: string // public id used in /api/users/<uuid>/... URLs
-  email: string
-  name: string
-  is_staff: boolean
-  is_superuser: boolean
-  date_joined: string
-}
-
 // DRF PageNumberPagination response
 export type Page<T> = { count: number; next: string | null; previous: string | null; results: T[] }
 

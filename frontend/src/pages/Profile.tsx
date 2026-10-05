@@ -1,28 +1,20 @@
 import { lazy, Suspense } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, Navigate, useLocation } from 'react-router'
-import { apiGet, errorsFrom, type User } from '../api'
+import { apiGet, errorsFrom } from '../api'
 import { useAuth } from '../auth'
 import { FormAlert } from '../components/Field'
+import type { Connection } from '../types/connections'
+import type { UserOccasion } from '../types/occasions'
+import type { User } from '../types/users'
 import { formatDate, formatRange } from './panel/shared'
-
-type MyOccasion = {
-  id: number
-  name: string
-  start_datetime: string
-  end_datetime: string | null
-  cancelled_at: string | null
-  attendees_count: number
-  tags: string[]
-  main_image: string | null
-}
 
 // Sigma and graphology are big; load them only when someone has connections to draw
 const ConnectionsGraph = lazy(() => import('../components/ConnectionsGraph'))
 
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'short' })
 
-function OccasionRows({ occasions }: { occasions: MyOccasion[] }) {
+function OccasionRows({ occasions }: { occasions: UserOccasion[] }) {
   return (
     <ul className="occasion-list">
       {occasions.map((o) => (
@@ -58,12 +50,12 @@ function OccasionRows({ occasions }: { occasions: MyOccasion[] }) {
   )
 }
 
-type SplitOccasions = { all: MyOccasion[]; upcoming: MyOccasion[]; past: MyOccasion[] }
+type SplitOccasions = Record<'all' | 'upcoming' | 'past', UserOccasion[]>
 
 // Same rule as the admin overview: upcoming until it ends (or starts, if it has no end)
-function splitByNow(occasions: MyOccasion[]): SplitOccasions {
+function splitByNow(occasions: UserOccasion[]): SplitOccasions {
   const now = Date.now()
-  const isUpcoming = (o: MyOccasion) => new Date(o.end_datetime ?? o.start_datetime).getTime() >= now
+  const isUpcoming = (o: UserOccasion) => new Date(o.end_datetime ?? o.start_datetime).getTime() >= now
   return {
     all: occasions,
     upcoming: occasions.filter(isUpcoming),
@@ -74,7 +66,7 @@ function splitByNow(occasions: MyOccasion[]): SplitOccasions {
 function MyOccasions({ user }: { user: User }) {
   const { data, error } = useQuery({
     queryKey: ['users', user.uuid, 'occasions'],
-    queryFn: () => apiGet<MyOccasion[]>(`/api/users/${user.uuid}/occasions/`),
+    queryFn: () => apiGet<UserOccasion[]>(`/api/users/${user.uuid}/occasions/`),
     select: splitByNow,
   })
   const errors = error ? errorsFrom(error) : {}
@@ -112,20 +104,13 @@ function MyOccasions({ user }: { user: User }) {
   )
 }
 
-type MyConnection = {
-  uuid: string
-  name: string
-  strength: number
-  shared_occasions: number
-}
-
 const strengthFormat = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 function MyConnections({ user }: { user: User }) {
   // Already sorted by strength, strongest first
   const { data: connections, error } = useQuery({
     queryKey: ['users', user.uuid, 'connections'],
-    queryFn: () => apiGet<MyConnection[]>(`/api/users/${user.uuid}/connections/`),
+    queryFn: () => apiGet<Connection[]>(`/api/users/${user.uuid}/connections/`),
   })
   const errors = error ? errorsFrom(error) : {}
 

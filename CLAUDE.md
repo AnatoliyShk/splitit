@@ -32,6 +32,7 @@ frontend/           Vite React app
   src/pages/panel/  admin control panel at /admin (staff only)
   src/components/   shared UI (form fields, auth card)
   src/api.ts        fetch helpers with CSRF handling
+  src/types/        API response types shared across pages, one file per backend app (users, occasions, tags, connections); types used by one file stay in it, panel-only types in pages/panel/shared.ts
   src/auth.ts       useAuth() hook; state lives in AuthProvider.tsx
   src/index.css     design tokens (colors, borders, shadows, fonts)
   src/App.css       component styles

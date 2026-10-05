@@ -3,21 +3,8 @@ import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-route
 import { ApiError, apiGet, errorsFrom, type FieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { FormAlert } from '../components/Field'
+import type { OccasionDetail } from '../types/occasions'
 import { formatRange } from './panel/shared'
-
-type OccasionDetail = {
-  id: number
-  name: string
-  start_datetime: string
-  end_datetime: string | null
-  cancelled_at: string | null
-  attendees_count: number
-  tags: string[]
-  main_image: string | null
-  // Up to 3 image URLs, in order, without the main image
-  gallery: string[]
-  is_going: boolean
-}
 
 export default function OccasionPage() {
   const { id } = useParams()

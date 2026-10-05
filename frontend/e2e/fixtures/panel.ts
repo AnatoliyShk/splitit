@@ -1,52 +1,10 @@
 import type { Page, Request } from '@playwright/test'
+import type { User } from '../../src/types/users'
+import type { Attendee, PanelOccasion, PanelTag, PanelUser } from '../../src/pages/panel/shared'
 
-// Shapes mirror frontend/src/api.ts and frontend/src/pages/panel/shared.ts
-export type SessionUser = {
-  id: number
-  uuid: string
-  email: string
-  name: string
-  is_staff: boolean
-  is_superuser: boolean
-  date_joined: string
-}
+export type { Attendee, PanelOccasion, PanelTag, PanelUser }
 
-export type PanelUser = {
-  id: number
-  email: string
-  name: string
-  is_active: boolean
-  is_staff: boolean
-  is_superuser: boolean
-  date_joined: string
-  last_login: string | null
-  occasions_count: number
-}
-
-export type Attendee = { id: number; name: string; email: string }
-
-export type PanelOccasion = {
-  id: number
-  name: string
-  start_datetime: string
-  end_datetime: string | null
-  duration_minutes: number | null
-  cancelled_at: string | null
-  attendees: Attendee[]
-  tags: { id: number; name: string }[]
-  images: { order: number; url: string }[]
-  created_at: string
-  updated_at: string
-}
-
-export type PanelTag = {
-  id: number
-  name: string
-  occasions_count: number
-  has_embedding: boolean
-  created_at: string
-  updated_at: string
-}
+export type SessionUser = User
 
 // ---------- data builders ----------
 

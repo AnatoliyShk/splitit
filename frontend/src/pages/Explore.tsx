@@ -3,19 +3,8 @@ import { Link, Navigate, useLocation } from 'react-router'
 import { ApiError, apiGet, apiPost, errorsFrom, type FieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { FormAlert } from '../components/Field'
+import type { ExploreOccasion, KnownAttendee } from '../types/occasions'
 import { formatDateTime, formatTimes } from './panel/shared'
-
-type ExploreOccasion = {
-  id: number
-  name: string
-  start_datetime: string
-  end_datetime: string | null
-  attendees_count: number
-  tags: string[]
-  main_image: string | null
-  // Attendees the user has a connection with
-  known_attendees: { uuid: string; name: string }[]
-}
 
 // A user goes to one occasion at a time: while `active_occasion` is set, `occasions` is empty
 type ExploreData = { active_occasion: ExploreOccasion | null; occasions: ExploreOccasion[] }
@@ -36,7 +25,7 @@ const listFormat = new Intl.ListFormat(undefined, { type: 'conjunction' })
 // Names shown on a card before the rest collapse into "N more"
 const KNOWN_SHOWN = 3
 
-function knownText(known: ExploreOccasion['known_attendees'], others: number) {
+function knownText(known: KnownAttendee[], others: number) {
   if (known.length === 0) return null
   const names = known.slice(0, KNOWN_SHOWN).map((k) => k.name)
   const rest = known.length - names.length

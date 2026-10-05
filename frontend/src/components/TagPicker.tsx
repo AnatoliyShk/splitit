@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { apiGet, type Page } from '../api'
-import { plural, useDebounced, type OccasionTag, type PanelTag } from '../pages/panel/shared'
+import { plural, useDebounced, type PanelTag } from '../pages/panel/shared'
+import type { Tag } from '../types/tags'
 
 type TagPickerProps = {
-  value: OccasionTag[]
-  onChange: (tags: OccasionTag[]) => void
+  value: Tag[]
+  onChange: (tags: Tag[]) => void
   errors?: string[]
 }
 

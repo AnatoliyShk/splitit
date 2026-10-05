@@ -4,12 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import Sigma from 'sigma'
 import type { NodeHoverDrawingFunction, NodeLabelDrawingFunction } from 'sigma/rendering'
 import { apiGet } from '../api'
-
-// GET /api/users/<uuid>/connections/graph/; degree 0 is the user, 1 their connections, 2 people only those know
-type Network = {
-  nodes: { uuid: string; name: string; degree: 0 | 1 | 2 }[]
-  edges: { source: string; target: string; strength: number }[]
-}
+import type { Network } from '../types/connections'
 
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)')
 

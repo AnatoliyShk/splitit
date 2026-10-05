@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import type { Network } from '../src/types/connections'
 import { ADMIN, makeOccasion, mockApi, USER, type TestConnection } from './fixtures/user'
 
 const connections: TestConnection[] = [
@@ -6,7 +7,7 @@ const connections: TestConnection[] = [
   { uuid: '0190a1b2-0000-7000-8000-000000000002', name: 'Alan Turing', strength: 0.5, shared_occasions: 1 },
 ]
 
-const graph = {
+const graph: Network = {
   nodes: [
     { uuid: USER.uuid, name: USER.name, degree: 0 },
     { uuid: connections[0].uuid, name: 'Grace Hopper', degree: 1 },

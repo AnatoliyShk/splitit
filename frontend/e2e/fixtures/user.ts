@@ -1,28 +1,14 @@
 import type { Page, Route } from '@playwright/test'
+import type { Connection, Network } from '../../src/types/connections'
+import type { ExploreOccasion } from '../../src/types/occasions'
+import type { User } from '../../src/types/users'
 
-export type TestUser = {
-  id: number
-  uuid: string
-  email: string
-  name: string
-  is_staff: boolean
-  is_superuser: boolean
-  date_joined: string
-}
+export type TestUser = User
 
-export type TestOccasion = {
-  id: number
-  name: string
-  start_datetime: string
-  end_datetime: string | null
-  cancelled_at: string | null
-  attendees_count: number
-  tags: string[]
-  main_image: string | null
-  known_attendees: { uuid: string; name: string }[]
-}
+// Explore cards carry every field the other public occasion lists use
+export type TestOccasion = ExploreOccasion
 
-export type TestConnection = { uuid: string; name: string; strength: number; shared_occasions: number }
+export type TestConnection = Connection
 
 export const USER: TestUser = {
   id: 1,
@@ -82,7 +68,7 @@ export type MockOptions = {
   /** Response for GET /api/users/<uuid>/connections/. A number makes it fail with that status. */
   connections?: TestConnection[] | number
   /** Response for GET /api/users/<uuid>/connections/graph/; defaults to 404 (the page hides the graph). */
-  graph?: { nodes: unknown[]; edges: unknown[] } | number
+  graph?: Network | number
   /** Occasions in GET /api/occasions/explore/. A number makes it fail with that status. */
   explore?: TestOccasion[] | number
   /** The occasion the user is going to; explore then sends it as `active_occasion` with no other occasions. */

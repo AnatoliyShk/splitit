@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import type { OccasionCore, UserOccasion } from '../../types/occasions'
+import type { Tag } from '../../types/tags'
 
 export const PAGE_SIZE = 20 // matches PanelPagination on the backend
 
@@ -15,8 +17,6 @@ export type PanelUser = {
 }
 
 export type Attendee = { id: number; name: string; email: string }
-
-export type OccasionTag = { id: number; name: string }
 
 // Order 0 is the main image (shown on occasion cards); 1-3 are the gallery on the occasion's page
 export type OccasionImage = { order: number; url: string }
@@ -42,23 +42,17 @@ export function imageProblem(file: File) {
   return null
 }
 
-export type PanelOccasion = {
-  id: number
-  name: string
-  start_datetime: string
-  end_datetime: string | null
+export type PanelOccasion = OccasionCore & {
+  cancelled_at: UserOccasion['cancelled_at']
   duration_minutes: number | null
-  cancelled_at: string | null
   attendees: Attendee[]
-  tags: OccasionTag[]
+  tags: Tag[]
   images: OccasionImage[]
   created_at: string
   updated_at: string
 }
 
-export type PanelTag = {
-  id: number
-  name: string
+export type PanelTag = Tag & {
   occasions_count: number
   has_embedding: boolean
   created_at: string
@@ -68,13 +62,7 @@ export type PanelTag = {
 export type Stats = {
   users: { total: number; active: number; staff: number; new_this_week: number }
   occasions: { total: number; upcoming: number }
-  next_occasions: {
-    id: number
-    name: string
-    start_datetime: string
-    end_datetime: string | null
-    attendees_count: number
-  }[]
+  next_occasions: (OccasionCore & Pick<UserOccasion, 'attendees_count'>)[]
 }
 
 // The API sends ISO datetimes in UTC; everything below shows them in the viewer's time zone
