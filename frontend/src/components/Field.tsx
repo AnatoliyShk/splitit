@@ -31,8 +31,8 @@ export function Field({ id, label, hint, errors, ...input }: FieldProps) {
       )}
       {hasErrors && (
         <ul className="field-errors" id={errorId}>
-          {errors!.map((e) => (
-            <li key={e}>{e}</li>
+          {errors!.map((message) => (
+            <li key={message}>{message}</li>
           ))}
         </ul>
       )}
@@ -44,8 +44,8 @@ export function FormAlert({ messages }: { messages?: string[] }) {
   if (!messages?.length) return null
   return (
     <div className="form-alert" role="alert">
-      {messages.map((m) => (
-        <p key={m}>{m}</p>
+      {messages.map((message) => (
+        <p key={message}>{message}</p>
       ))}
     </div>
   )

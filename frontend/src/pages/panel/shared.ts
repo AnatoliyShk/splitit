@@ -121,9 +121,9 @@ export function formatDuration(minutes: number) {
 
 // <input type="datetime-local"> holds local wall time with no zone ("2026-10-10T18:00")
 export function toLocalInput(iso: string) {
-  const d = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const date = new Date(iso)
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 // ...and the API wants an absolute time, so send it as UTC ISO
@@ -131,15 +131,15 @@ export function fromLocalInput(value: string) {
   return value ? new Date(value).toISOString() : null
 }
 
-export function plural(n: number, word: string) {
-  return `${n} ${word}${n === 1 ? '' : 's'}`
+export function plural(count: number, word: string) {
+  return `${count} ${word}${count === 1 ? '' : 's'}`
 }
 
 export function useDebounced<T>(value: T, delay = 250) {
   const [debounced, setDebounced] = useState(value)
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay)
-    return () => clearTimeout(t)
+    const timeoutId = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(timeoutId)
   }, [value, delay])
   return debounced
 }

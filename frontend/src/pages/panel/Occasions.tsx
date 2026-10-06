@@ -1,15 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useState } from "react";
 import { Link } from "react-router";
 import {
   apiDelete,
   apiGet,
   apiPost,
-  errorsFrom,
-  type FieldErrors,
+  useFieldErrors,
   type Page,
 } from "../../api";
 import { Field, FormAlert } from "../../components/Field";
 import { Pager } from "../../components/Pager";
+import { listQueryString, queryKeys } from "../../queryClient";
 import {
   formatDate,
   formatDuration,
@@ -21,15 +27,19 @@ import {
 } from "./shared";
 
 // Not over or cancelled yet: same rule as the server (an occasion with no end is over once it starts)
-function isUpcoming(o: PanelOccasion) {
+function isUpcoming(occasion: PanelOccasion) {
   return (
-    !o.cancelled_at &&
-    new Date(o.end_datetime ?? o.start_datetime).getTime() > Date.now()
+    !occasion.cancelled_at &&
+    new Date(occasion.end_datetime ?? occasion.start_datetime).getTime() >
+      Date.now()
   );
 }
 
-function hasEnded(o: PanelOccasion) {
-  return new Date(o.end_datetime ?? o.start_datetime).getTime() <= Date.now();
+function hasEnded(occasion: PanelOccasion) {
+  return (
+    new Date(occasion.end_datetime ?? occasion.start_datetime).getTime() <=
+    Date.now()
+  );
 }
 
 type RowAction = "delete" | "finish" | "cancel" | "revert_cancel";
@@ -66,84 +76,83 @@ const CONFIRM: Record<
 };
 
 export default function Occasions() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const query = useDebounced(search.trim());
+  const searchQuery = useDebounced(search.trim());
   const [page, setPage] = useState(1);
-  const [data, setData] = useState<Page<PanelOccasion> | null>(null);
-  const [errors, setErrors] = useState<FieldErrors>({});
+  const listParams = { page, search: searchQuery };
+
+  const occasionsQuery = useQuery({
+    queryKey: queryKeys.panel.occasions(listParams),
+    queryFn: () =>
+      apiGet<Page<PanelOccasion>>(
+        `/api/panel/occasions/?${listQueryString(listParams)}`,
+      ),
+    // Keep the current page on screen while the next one loads
+    placeholderData: keepPreviousData,
+  });
+  const occasionsPage = occasionsQuery.data;
+  const refreshOccasions = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.panel.occasions() });
+
   // Deleting, finishing and cancelling are two-step: the row asks for confirmation inline
-  const [confirm, setConfirm] = useState<{
-    id: number;
+  const [confirmAction, setConfirmAction] = useState<{
+    occasionId: number;
     action: RowAction;
   } | null>(null);
-  const [busyId, setBusyId] = useState<number | null>(null);
-  const [creatingTest, setCreatingTest] = useState(false);
-  const [testOccasion, setTestOccasion] = useState<PanelOccasion | null>(null);
 
-  const load = useCallback(() => {
-    const params = new URLSearchParams({ page: String(page), search: query });
-    return apiGet<Page<PanelOccasion>>(`/api/panel/occasions/?${params}`)
-      .then(setData)
-      .catch((err) => setErrors(errorsFrom(err)));
-  }, [page, query]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  async function remove(occasion: PanelOccasion) {
-    setBusyId(occasion.id);
-    setErrors({});
-    try {
-      await apiDelete(`/api/panel/occasions/${occasion.id}/`);
-      setConfirm(null);
-      // Step back a page if this deleted the last row on it
-      if (data?.results.length === 1 && page > 1) setPage(page - 1);
-      else load();
-    } catch (err) {
-      setErrors(errorsFrom(err));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
+  // delete: removes the occasion.
   // finish: ends the occasion now; the worker then counts connections between its attendees.
   // cancel: calls it off; no connections are counted. Either way its attendees can join another occasion
-  async function endEarly(
-    occasion: PanelOccasion,
-    action: "finish" | "cancel" | "revert_cancel",
-  ) {
-    setBusyId(occasion.id);
-    setErrors({});
-    try {
-      await apiPost(`/api/panel/occasions/${occasion.id}/${action}/`);
-      await load();
-      setConfirm(null);
-    } catch (err) {
-      setErrors(errorsFrom(err));
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const rowMutation = useMutation({
+    mutationFn: ({
+      occasion,
+      action,
+    }: {
+      occasion: PanelOccasion;
+      action: RowAction;
+    }) =>
+      action === "delete"
+        ? apiDelete(`/api/panel/occasions/${occasion.id}/`)
+        : apiPost(`/api/panel/occasions/${occasion.id}/${action}/`),
+    onMutate: () => {
+      testMutation.reset();
+    },
+    onSuccess: async (_, { action }) => {
+      // Step back a page if this deleted the last row on it
+      if (
+        action === "delete" &&
+        occasionsPage?.results.length === 1 &&
+        page > 1
+      ) {
+        setPage(page - 1);
+      } else {
+        await refreshOccasions();
+      }
+      setConfirmAction(null);
+    },
+  });
+  const busyOccasionId = rowMutation.isPending
+    ? rowMutation.variables.occasion.id
+    : null;
 
   // Random time and 1-3 random attendees; the server creates test users if there are none
-  async function createTest() {
-    setCreatingTest(true);
-    setErrors({});
-    setTestOccasion(null);
-    try {
-      const occasion = await apiPost<PanelOccasion>(
-        "/api/panel/occasions/test/",
-      );
-      // Refresh first, so the message never points at a row the table doesn't show yet
-      await load();
-      setTestOccasion(occasion);
-    } catch (err) {
-      setErrors(errorsFrom(err));
-    } finally {
-      setCreatingTest(false);
-    }
-  }
+  const testMutation = useMutation({
+    mutationFn: () => apiPost<PanelOccasion>("/api/panel/occasions/test/"),
+    onMutate: () => {
+      rowMutation.reset();
+    },
+    // Refresh first, so the message never points at a row the table doesn't show yet
+    onSuccess: () => refreshOccasions(),
+  });
+  // Shown only once the table has it (see onSuccess)
+  const testOccasion = testMutation.isSuccess ? testMutation.data : null;
+
+  const errors = useFieldErrors(
+    rowMutation.error,
+    testMutation.error,
+    occasionsQuery.error,
+  );
 
   return (
     <>
@@ -153,10 +162,10 @@ export default function Occasions() {
           <button
             className="btn"
             type="button"
-            onClick={createTest}
-            disabled={creatingTest}
+            onClick={() => testMutation.mutate()}
+            disabled={testMutation.isPending}
           >
-            {creatingTest ? "Creating…" : "Create test occasion"}
+            {testMutation.isPending ? "Creating…" : "Create test occasion"}
           </button>
           <Link className="btn btn-primary" to="/admin/occasions/new">
             New occasion
@@ -179,7 +188,8 @@ export default function Occasions() {
               testOccasion.start_datetime,
               testOccasion.end_datetime,
             )}{" "}
-            with {testOccasion.attendees.map((a) => a.name).join(", ")}
+            with{" "}
+            {testOccasion.attendees.map((attendee) => attendee.name).join(", ")}
           </span>
         </p>
       )}
@@ -190,8 +200,8 @@ export default function Occasions() {
           label="Search by name"
           type="search"
           value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
+          onChange={(event) => {
+            setSearch(event.target.value);
             setPage(1);
           }}
         />
@@ -199,12 +209,14 @@ export default function Occasions() {
 
       <FormAlert messages={errors.non_field_errors} />
 
-      {data && data.results.length === 0 && (
+      {occasionsPage && occasionsPage.results.length === 0 && (
         <div className="empty">
           <p>
-            {query ? `No occasions match “${query}”.` : "No occasions yet."}
+            {searchQuery
+              ? `No occasions match “${searchQuery}”.`
+              : "No occasions yet."}
           </p>
-          {!query && (
+          {!searchQuery && (
             <Link className="btn btn-primary btn-sm" to="/admin/occasions/new">
               Create the first occasion
             </Link>
@@ -212,7 +224,7 @@ export default function Occasions() {
         </div>
       )}
 
-      {data && data.results.length > 0 && (
+      {occasionsPage && occasionsPage.results.length > 0 && (
         <table className="data-table">
           <thead>
             <tr>
@@ -226,34 +238,34 @@ export default function Occasions() {
             </tr>
           </thead>
           <tbody>
-            {data.results.map((o) => (
-              <tr key={o.id}>
+            {occasionsPage.results.map((occasion) => (
+              <tr key={occasion.id}>
                 <td className="occasion-cell" data-label="Occasion">
                   <div className="occasion-main">
                     <Link
                       className="row-link"
-                      to={`/admin/occasions/${o.id}`}
-                      title={o.name}
+                      to={`/admin/occasions/${occasion.id}`}
+                      title={occasion.name}
                     >
-                      {o.name}
+                      {occasion.name}
                     </Link>
                     {/* Always rendered and one line high, so every row is the same height; the title lists what's cut off */}
                     <ul
                       className="row-meta"
                       aria-label="Status and tags"
                       title={[
-                        o.cancelled_at && "Cancelled",
-                        ...o.tags.map((t) => t.name),
+                        occasion.cancelled_at && "Cancelled",
+                        ...occasion.tags.map((tag) => tag.name),
                       ]
                         .filter(Boolean)
                         .join(", ")}
                     >
-                      {o.cancelled_at && (
+                      {occasion.cancelled_at && (
                         <li className="tag tag-off">Cancelled</li>
                       )}
-                      {o.tags.map((t) => (
-                        <li className="tag tag-topic" key={t.id}>
-                          {t.name}
+                      {occasion.tags.map((tag) => (
+                        <li className="tag tag-topic" key={tag.id}>
+                          {tag.name}
                         </li>
                       ))}
                     </ul>
@@ -262,58 +274,59 @@ export default function Occasions() {
                 <td data-label="When">
                   <div
                     className="when"
-                    title={formatRange(o.start_datetime, o.end_datetime)}
+                    title={formatRange(occasion.start_datetime, occasion.end_datetime)}
                   >
-                    <time dateTime={o.start_datetime}>
-                      {formatDate(o.start_datetime)}
+                    <time dateTime={occasion.start_datetime}>
+                      {formatDate(occasion.start_datetime)}
                     </time>
                     <small>
-                      {formatTimesShort(o.start_datetime, o.end_datetime)}
+                      {formatTimesShort(occasion.start_datetime, occasion.end_datetime)}
                     </small>
                   </div>
                 </td>
                 <td data-label="Length">
-                  {o.duration_minutes === null
+                  {occasion.duration_minutes === null
                     ? "Open"
-                    : formatDuration(o.duration_minutes)}
+                    : formatDuration(occasion.duration_minutes)}
                 </td>
-                <td data-label="Going">{o.attendees.length}</td>
+                <td data-label="Going">{occasion.attendees.length}</td>
                 <td className="row-actions">
-                  {confirm?.id === o.id ? (
+                  {confirmAction?.occasionId === occasion.id ? (
                     <span
                       className="confirm"
                       role="group"
-                      aria-label={`${CONFIRM[confirm.action].group} ${o.name}?`}
+                      aria-label={`${CONFIRM[confirmAction.action].group} ${occasion.name}?`}
                     >
                       <span className="confirm-text">
-                        {CONFIRM[confirm.action].question}
+                        {CONFIRM[confirmAction.action].question}
                       </span>
                       <button
                         className="btn btn-sm"
-                        onClick={() => setConfirm(null)}
+                        onClick={() => setConfirmAction(null)}
                         autoFocus
                       >
                         Keep
                       </button>
                       <button
-                        className={`btn btn-sm ${CONFIRM[confirm.action].className}`}
-                        disabled={busyId === o.id}
+                        className={`btn btn-sm ${CONFIRM[confirmAction.action].className}`}
+                        disabled={busyOccasionId === occasion.id}
                         onClick={() =>
-                          confirm.action === "delete"
-                            ? remove(o)
-                            : endEarly(o, confirm.action)
+                          rowMutation.mutate({
+                            occasion,
+                            action: confirmAction.action,
+                          })
                         }
                       >
-                        {CONFIRM[confirm.action].button}
+                        {CONFIRM[confirmAction.action].button}
                       </button>
                     </span>
                   ) : (
                     <>
-                      {isUpcoming(o) && (
+                      {isUpcoming(occasion) && (
                         <button
                           className="btn btn-sm"
                           onClick={() =>
-                            setConfirm({ id: o.id, action: "finish" })
+                            setConfirmAction({ occasionId: occasion.id, action: "finish" })
                           }
                         >
                           Finish
@@ -321,25 +334,25 @@ export default function Occasions() {
                       )}
                       <Link
                         className="btn btn-sm"
-                        to={`/admin/occasions/${o.id}`}
+                        to={`/admin/occasions/${occasion.id}`}
                       >
                         Edit
                       </Link>
-                      {isUpcoming(o) && (
+                      {isUpcoming(occasion) && (
                         <button
                           className="btn btn-sm btn-primary"
                           onClick={() =>
-                            setConfirm({ id: o.id, action: "cancel" })
+                            setConfirmAction({ occasionId: occasion.id, action: "cancel" })
                           }
                         >
                           Cancel
                         </button>
                       )}
-                      {o.cancelled_at && !hasEnded(o) && (
+                      {occasion.cancelled_at && !hasEnded(occasion) && (
                         <button
                           className="btn btn-sm btn-primary"
                           onClick={() =>
-                            setConfirm({ id: o.id, action: "revert_cancel" })
+                            setConfirmAction({ occasionId: occasion.id, action: "revert_cancel" })
                           }
                         >
                           Revert cancel
@@ -348,7 +361,7 @@ export default function Occasions() {
                       <button
                         className="btn btn-sm btn-danger"
                         onClick={() =>
-                          setConfirm({ id: o.id, action: "delete" })
+                          setConfirmAction({ occasionId: occasion.id, action: "delete" })
                         }
                       >
                         Delete
@@ -362,10 +375,10 @@ export default function Occasions() {
         </table>
       )}
 
-      {data && (
+      {occasionsPage && (
         <Pager
           page={page}
-          count={data.count}
+          count={occasionsPage.count}
           pageSize={PAGE_SIZE}
           onChange={setPage}
         />

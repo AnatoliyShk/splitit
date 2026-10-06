@@ -1,5 +1,6 @@
+import { useMutation } from '@tanstack/react-query'
 import { useState, type SubmitEvent } from 'react'
-import { errorsFrom, type FieldErrors } from '../api'
+import { useFieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { AuthCard } from '../components/AuthCard'
 import { Field } from '../components/Field'
@@ -9,19 +10,15 @@ export default function Register() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [errors, setErrors] = useState<FieldErrors>({})
-  const [submitting, setSubmitting] = useState(false)
+  // On success AuthCard redirects, since the user is now logged in
+  const registerMutation = useMutation({ mutationFn: () => register(name, email, password) })
+  const errors = useFieldErrors(registerMutation.error)
+  // Stays on after success until the redirect
+  const submitting = registerMutation.isPending || registerMutation.isSuccess
 
-  async function onSubmit(e: SubmitEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setSubmitting(true)
-    try {
-      // On success AuthCard redirects, since the user is now logged in
-      await register(name, email, password)
-    } catch (err) {
-      setErrors(errorsFrom(err))
-      setSubmitting(false)
-    }
+  function onSubmit(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault()
+    registerMutation.mutate()
   }
 
   return (
@@ -39,7 +36,7 @@ export default function Register() {
           autoComplete="name"
           required
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(event) => setName(event.target.value)}
           errors={errors.name}
         />
         <Field
@@ -49,7 +46,7 @@ export default function Register() {
           autoComplete="email"
           required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(event) => setEmail(event.target.value)}
           errors={errors.email}
         />
         <Field
@@ -60,7 +57,7 @@ export default function Register() {
           required
           hint="At least 8 characters, not too common and not only numbers."
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(event) => setPassword(event.target.value)}
           errors={errors.password}
         />
         <button className="btn btn-primary" type="submit" disabled={submitting}>

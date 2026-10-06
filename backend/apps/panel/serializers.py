@@ -104,7 +104,7 @@ class PanelOccasionSerializer(serializers.ModelSerializer):
 
     def get_tags(self, occasion) -> list[dict]:
         # Sorted here rather than in the query, so a just-saved occasion comes back in the same order
-        tags = sorted(occasion.tags.all(), key=lambda t: t.name.lower())
+        tags = sorted(occasion.tags.all(), key=lambda tag: tag.name.lower())
         return OccasionTagSerializer(tags, many=True).data
 
     def get_duration_minutes(self, occasion) -> int | None:

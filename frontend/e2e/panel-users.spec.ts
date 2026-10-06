@@ -25,7 +25,7 @@ function seed(): PanelUser[] {
 
 async function openUsers(page: Page, users = seed()) {
   const calls = await mockApi(page, '/api/panel/users/', {
-    GET: ({ url }) => ({ body: paginate(users, url, (u) => [u.email, u.name]) }),
+    GET: ({ url }) => ({ body: paginate(users, url, (user) => [user.email, user.name]) }),
   })
   await page.goto('/admin/users')
   await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible()
@@ -36,7 +36,7 @@ async function openUsers(page: Page, users = seed()) {
 function mockPatch(page: Page, users: PanelUser[]) {
   return mockApi(page, /^\/api\/panel\/users\/\d+\/$/, {
     PATCH: ({ url, body }) => {
-      const user = users.find((u) => url.pathname === `/api/panel/users/${u.id}/`)!
+      const user = users.find((panelUser) => url.pathname === `/api/panel/users/${panelUser.id}/`)!
       Object.assign(user, body)
       return { body: user }
     },
@@ -251,7 +251,7 @@ test.describe('panel users', () => {
     test('buttons are disabled while the change is in flight', async ({ page }) => {
       const { users } = await openUsers(page)
       let release!: () => void
-      const gate = new Promise<void>((r) => (release = r))
+      const gate = new Promise<void>((resolvePromise) => (release = resolvePromise))
       await mockApi(page, '/api/panel/users/2/', {
         PATCH: async ({ body }) => {
           await gate

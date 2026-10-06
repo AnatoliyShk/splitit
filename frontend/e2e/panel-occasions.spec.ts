@@ -41,13 +41,13 @@ function seed(): PanelOccasion[] {
 // In-memory list endpoint; DELETE removes from the same array
 async function openOccasions(page: Page, occasions = seed()) {
   const calls = await mockApi(page, '/api/panel/occasions/', {
-    GET: ({ url }) => ({ body: paginate(occasions, url, (e) => [e.name]) }),
+    GET: ({ url }) => ({ body: paginate(occasions, url, (occasion) => [occasion.name]) }),
   })
   const deletes = await mockApi(page, /^\/api\/panel\/occasions\/\d+\/$/, {
     DELETE: ({ url }) => {
       const id = Number(url.pathname.split('/').at(-2))
       occasions.splice(
-        occasions.findIndex((e) => e.id === id),
+        occasions.findIndex((occasion) => occasion.id === id),
         1,
       )
       return { status: 204 }
@@ -126,11 +126,11 @@ test.describe('panel occasions list', () => {
 
     // A row with no tags or status is as tall as one with many (clientHeight leaves out the last row's missing border)
     const heights = await Promise.all(
-      ['Jazz night', 'Open mic', 'Old picnic'].map((n) =>
-        row(page, n)
+      ['Jazz night', 'Open mic', 'Old picnic'].map((occasionName) =>
+        row(page, occasionName)
           .getByRole('cell')
           .first()
-          .evaluate((td) => td.clientHeight),
+          .evaluate((cell) => cell.clientHeight),
       ),
     )
     expect(new Set(heights).size).toBe(1)
@@ -417,13 +417,17 @@ test.describe('panel occasions list', () => {
 
     test('a second click replaces the previous status message', async ({ page }) => {
       const { occasions } = await openOccasions(page)
-      let n = 0
+      let createdCount = 0
       await mockApi(page, '/api/panel/occasions/test/', {
         POST: () => {
-          n += 1
-          const e = panelOccasion({ ...created, id: 200 + n, name: `Test occasion ${n}` })
-          occasions.push(e)
-          return { status: 201, body: e }
+          createdCount += 1
+          const testOccasion = panelOccasion({
+            ...created,
+            id: 200 + createdCount,
+            name: `Test occasion ${createdCount}`,
+          })
+          occasions.push(testOccasion)
+          return { status: 201, body: testOccasion }
         },
       })
 

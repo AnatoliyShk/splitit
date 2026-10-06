@@ -1,9 +1,11 @@
 import { createNodeBorderProgram } from '@sigma/node-border'
 import Graph from 'graphology'
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import Sigma from 'sigma'
 import type { NodeHoverDrawingFunction, NodeLabelDrawingFunction } from 'sigma/rendering'
 import { apiGet } from '../api'
+import { queryKeys } from '../queryClient'
 import type { Network } from '../types/connections'
 
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -98,59 +100,63 @@ function hoverDrawer(colors: Colors, container: HTMLElement): NodeHoverDrawingFu
 // the connection who links to them most strongly
 function buildGraph(network: Network, colors: Colors) {
   const graph = new Graph()
-  const me = network.nodes.find((n) => n.degree === 0)!
-  const mine = new Map<string, number>() // connection uuid -> strength with the user
-  const anchor = new Map<string, { friend: string; strength: number }>() // outsider -> strongest friend link
-  const maxStrength = Math.max(...network.edges.map((e) => e.strength))
-  for (const e of network.edges) {
-    const other = e.source === me.uuid ? e.target : e.target === me.uuid ? e.source : null
-    if (other) mine.set(other, e.strength)
+  const meNode = network.nodes.find((node) => node.degree === 0)!
+  const myStrengths = new Map<string, number>() // connection uuid -> strength with the user
+  const outsiderAnchors = new Map<string, { friendUuid: string; strength: number }>() // outsider -> strongest friend link
+  const maxStrength = Math.max(...network.edges.map((edge) => edge.strength))
+  for (const edge of network.edges) {
+    const otherUuid = edge.source === meNode.uuid ? edge.target : edge.target === meNode.uuid ? edge.source : null
+    if (otherUuid) myStrengths.set(otherUuid, edge.strength)
   }
-  const degree = new Map(network.nodes.map((n) => [n.uuid, n.degree]))
-  for (const e of network.edges) {
-    for (const [outsider, friend] of [
-      [e.source, e.target],
-      [e.target, e.source],
+  const degreeByUuid = new Map(network.nodes.map((node) => [node.uuid, node.degree]))
+  for (const edge of network.edges) {
+    for (const [outsiderUuid, friendUuid] of [
+      [edge.source, edge.target],
+      [edge.target, edge.source],
     ]) {
-      if (degree.get(outsider) !== 2 || degree.get(friend) !== 1) continue
-      if ((anchor.get(outsider)?.strength ?? -1) < e.strength) anchor.set(outsider, { friend, strength: e.strength })
+      if (degreeByUuid.get(outsiderUuid) !== 2 || degreeByUuid.get(friendUuid) !== 1) continue
+      if ((outsiderAnchors.get(outsiderUuid)?.strength ?? -1) < edge.strength) {
+        outsiderAnchors.set(outsiderUuid, { friendUuid, strength: edge.strength })
+      }
     }
   }
 
-  const maxMine = Math.max(...mine.values())
-  const polar = new Map<string, { angle: number; radius: number }>()
-  graph.addNode(me.uuid, { x: 0, y: 0, size: 16, color: colors.primary, borderColor: colors.ink })
+  const maxMyStrength = Math.max(...myStrengths.values())
+  const polarByUuid = new Map<string, { angle: number; radius: number }>()
+  graph.addNode(meNode.uuid, { x: 0, y: 0, size: 16, color: colors.primary, borderColor: colors.ink })
   // Connections arrive strongest first; the golden angle spreads neighbours in that order apart
   network.nodes
-    .filter((n) => n.degree === 1)
-    .forEach((n, i) => {
-      const share = (mine.get(n.uuid) ?? 0) / maxMine
-      const angle = i * GOLDEN_ANGLE - Math.PI / 2
+    .filter((node) => node.degree === 1)
+    .forEach((node, nodeIndex) => {
+      const share = (myStrengths.get(node.uuid) ?? 0) / maxMyStrength
+      const angle = nodeIndex * GOLDEN_ANGLE - Math.PI / 2
       const radius = 1 - 0.45 * share
-      polar.set(n.uuid, { angle, radius })
-      graph.addNode(n.uuid, {
+      polarByUuid.set(node.uuid, { angle, radius })
+      graph.addNode(node.uuid, {
         x: radius * Math.cos(angle),
         y: radius * Math.sin(angle),
         size: 7 + 5 * share,
-        label: n.name,
+        label: node.name,
         color: colors.secondary,
         borderColor: colors.ink,
       })
     })
   // Outsiders fan out just past their friend, a small step apart
-  const fans = new Map<string, string[]>()
-  for (const [outsider, { friend }] of anchor) fans.set(friend, [...(fans.get(friend) ?? []), outsider])
-  const names = new Map(network.nodes.map((n) => [n.uuid, n.name]))
-  for (const [friend, outsiders] of fans) {
-    const { angle, radius } = polar.get(friend)!
-    outsiders.forEach((uuid, j) => {
-      const a = angle + (j - (outsiders.length - 1) / 2) * 0.22
-      const r = radius + 0.5
-      graph.addNode(uuid, {
-        x: r * Math.cos(a),
-        y: r * Math.sin(a),
+  const outsiderFans = new Map<string, string[]>() // friend uuid -> outsider uuids
+  for (const [outsiderUuid, { friendUuid }] of outsiderAnchors) {
+    outsiderFans.set(friendUuid, [...(outsiderFans.get(friendUuid) ?? []), outsiderUuid])
+  }
+  const nameByUuid = new Map(network.nodes.map((node) => [node.uuid, node.name]))
+  for (const [friendUuid, outsiderUuids] of outsiderFans) {
+    const { angle, radius } = polarByUuid.get(friendUuid)!
+    outsiderUuids.forEach((outsiderUuid, outsiderIndex) => {
+      const outsiderAngle = angle + (outsiderIndex - (outsiderUuids.length - 1) / 2) * 0.22
+      const outsiderRadius = radius + 0.5
+      graph.addNode(outsiderUuid, {
+        x: outsiderRadius * Math.cos(outsiderAngle),
+        y: outsiderRadius * Math.sin(outsiderAngle),
         size: 6,
-        label: names.get(uuid),
+        label: nameByUuid.get(outsiderUuid),
         color: colors.surface,
         borderColor: colors.ink,
         outsider: true,
@@ -158,12 +164,12 @@ function buildGraph(network: Network, colors: Colors) {
     })
   }
 
-  for (const e of network.edges) {
-    if (!graph.hasNode(e.source) || !graph.hasNode(e.target)) continue
-    const withMe = e.source === me.uuid || e.target === me.uuid
-    const share = withMe ? e.strength / maxMine : e.strength / maxStrength
+  for (const edge of network.edges) {
+    if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) continue
+    const withMe = edge.source === meNode.uuid || edge.target === meNode.uuid
+    const share = withMe ? edge.strength / maxMyStrength : edge.strength / maxStrength
     // Your own links are ink; links between other people are the quieter muted tone
-    graph.addEdge(e.source, e.target, {
+    graph.addEdge(edge.source, edge.target, {
       size: withMe ? 1 + 3 * share : 0.5 + 2 * share,
       color: withMe ? colors.ink : colors.muted,
     })
@@ -180,14 +186,11 @@ function buildGraph(network: Network, colors: Colors) {
 export default function ConnectionsGraph({ userUuid }: { userUuid: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const dark = useDarkMode()
-  const [network, setNetwork] = useState<Network | null>(null)
-  const [failed, setFailed] = useState(false)
-
-  useEffect(() => {
-    apiGet<Network>(`/api/users/${userUuid}/connections/graph/`)
-      .then(setNetwork)
-      .catch(() => setFailed(true)) // the list below still shows every connection
-  }, [userUuid])
+  const networkQuery = useQuery({
+    queryKey: queryKeys.connectionsGraph(userUuid),
+    queryFn: () => apiGet<Network>(`/api/users/${userUuid}/connections/graph/`),
+  })
+  const network = networkQuery.data
 
   useEffect(() => {
     const container = containerRef.current
@@ -242,20 +245,21 @@ export default function ConnectionsGraph({ userUuid }: { userUuid: string }) {
       container.parentElement!.hidden = true
       return
     }
-    const r = renderer
-    r.on('enterNode', ({ node }) => {
+    const activeRenderer = renderer
+    activeRenderer.on('enterNode', ({ node }) => {
       hovered = node
-      r.refresh({ skipIndexation: true })
+      activeRenderer.refresh({ skipIndexation: true })
     })
-    r.on('leaveNode', () => {
+    activeRenderer.on('leaveNode', () => {
       hovered = null
-      r.refresh({ skipIndexation: true })
+      activeRenderer.refresh({ skipIndexation: true })
     })
-    r.refresh()
-    return () => r.kill()
+    activeRenderer.refresh()
+    return () => activeRenderer.kill()
   }, [network, dark])
 
-  if (failed) return null
+  // The list below still shows every connection
+  if (networkQuery.isError) return null
 
   return (
     <figure className="connections-figure">

@@ -37,9 +37,9 @@ export default function PanelLayout() {
     <section className="panel">
       <title>Admin · Splitit</title>
       <nav className="tabs" aria-label="Admin sections">
-        {tabs.map((t) => (
-          <NavLink key={t.to} to={t.to} end={t.end} className="tab">
-            {t.label}
+        {tabs.map((tab) => (
+          <NavLink key={tab.to} to={tab.to} end={tab.end} className="tab">
+            {tab.label}
           </NavLink>
         ))}
       </nav>

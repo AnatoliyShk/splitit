@@ -31,7 +31,8 @@ frontend/           Vite React app
   src/pages/        Home (landing), Login, Register, Profile, Settings (name/password, linked from Profile), Explore (accept/decline upcoming occasions), OccasionPage (/occasions/:id, main image + gallery; Explore cards and Profile rows link to it)
   src/pages/panel/  admin control panel at /admin (staff only)
   src/components/   shared UI (form fields, auth card)
-  src/api.ts        fetch helpers with CSRF handling
+  src/api.ts        fetch helpers with CSRF handling; useFieldErrors() turns query/mutation errors into form errors
+  src/queryClient.ts  TanStack QueryClient (retry policy) and `queryKeys`, every query key in one place
   src/types/        API response types shared across pages, one file per backend app (users, occasions, tags, connections); types used by one file stay in it, panel-only types in pages/panel/shared.ts
   src/auth.ts       useAuth() hook; state lives in AuthProvider.tsx
   src/index.css     design tokens (colors, borders, shadows, fonts)
@@ -82,6 +83,19 @@ Write every query with the Django ORM: QuerySets, `F`/`Q` expressions, `annotate
 - An upsert that adds to existing values: `bulk_create(..., ignore_conflicts=True)` for missing rows, then one `update()` with `F()` expressions (see `apps/connections/services.py`).
 - Schema changes go through migrations made by `makemigrations`. Use Django or pgvector operations (e.g. `VectorExtension`, `SeparateDatabaseAndState`) instead of `RunSQL`.
 - If a query really can't be written with the ORM, ask first. Keep it in one function and pass values as query parameters, never by string formatting.
+
+## Frontend data
+
+Fetch server data with TanStack Query, never `useEffect` + `useState`:
+
+- Reads use `useQuery` with a key from `queryKeys` in `src/queryClient.ts`; add new keys there. Paged lists pass `placeholderData: keepPreviousData`.
+- Writes use `useMutation`. Update the cache in `onSuccess` (`setQueryData` for a returned row, `invalidateQueries` with a key prefix to refetch lists).
+- Show errors with `useFieldErrors(mutation.error, query.error)`; it returns the first error as stable `FieldErrors`.
+- Data goes stale right away, so a page refetches when it mounts. Logging out clears every cached query except the session.
+
+## Naming
+
+Name variables after what they hold, as concretely as you can. When a variable holds an instance of a class or a typed object, put that class or type name in it: `active_occasion` rather than `active`, `other_occasion` rather than `other`, `tag` or `selected_tag` rather than `item`. The same goes for lists and QuerySets (`upcoming_occasions`, `attendee_ids`). Follow each language's case style: snake_case in Python (`active_occasion`), camelCase in TypeScript (`activeOccasion`).
 
 ## Design system: Soft Brutalism
 

@@ -1,22 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
-import { apiGet, errorsFrom, type FieldErrors } from '../../api'
+import { apiGet, useFieldErrors } from '../../api'
 import { FormAlert } from '../../components/Field'
+import { queryKeys } from '../../queryClient'
 import { formatRange, plural, type Stats } from './shared'
 
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'short' })
 
 export default function Overview() {
-  const [stats, setStats] = useState<Stats | null>(null)
-  const [errors, setErrors] = useState<FieldErrors>({})
+  const statsQuery = useQuery({ queryKey: queryKeys.panel.stats, queryFn: () => apiGet<Stats>('/api/panel/stats/') })
+  const stats = statsQuery.data
+  const errors = useFieldErrors(statsQuery.error)
 
-  useEffect(() => {
-    apiGet<Stats>('/api/panel/stats/')
-      .then(setStats)
-      .catch((err) => setErrors(errorsFrom(err)))
-  }, [])
-
-  const tiles = stats && [
+  const statTiles = stats && [
     { label: 'Users', value: stats.users.total, note: `${stats.users.active} active`, tone: 'primary' },
     { label: 'Admins', value: stats.users.staff, note: 'with panel access', tone: 'secondary' },
     { label: 'New this week', value: stats.users.new_this_week, note: 'sign-ups, last 7 days', tone: 'primary' },
@@ -32,13 +28,13 @@ export default function Overview() {
 
       {!stats && !errors.non_field_errors && <p className="muted">Loading…</p>}
 
-      {tiles && (
+      {statTiles && (
         <ul className="stats" aria-label="Totals">
-          {tiles.map((t) => (
-            <li className={`stat stat-${t.tone}`} key={t.label}>
-              <span className="stat-label">{t.label}</span>
-              <strong className="stat-value">{t.value}</strong>
-              <span className="stat-note">{t.note}</span>
+          {statTiles.map((tile) => (
+            <li className={`stat stat-${tile.tone}`} key={tile.label}>
+              <span className="stat-label">{tile.label}</span>
+              <strong className="stat-value">{tile.value}</strong>
+              <span className="stat-note">{tile.note}</span>
             </li>
           ))}
         </ul>
@@ -54,18 +50,18 @@ export default function Overview() {
           </div>
           {stats.next_occasions.length ? (
             <ul className="occasion-list">
-              {stats.next_occasions.map((o) => (
-                <li key={o.id}>
-                  <Link className="occasion-row" to={`/admin/occasions/${o.id}`}>
+              {stats.next_occasions.map((occasion) => (
+                <li key={occasion.id}>
+                  <Link className="occasion-row" to={`/admin/occasions/${occasion.id}`}>
                     <span className="occasion-day occasion-date">
-                      {new Date(o.start_datetime).getDate()}
-                      <small>{monthFormat.format(new Date(o.start_datetime))}</small>
+                      {new Date(occasion.start_datetime).getDate()}
+                      <small>{monthFormat.format(new Date(occasion.start_datetime))}</small>
                     </span>
                     <span className="occasion-info">
-                      <strong>{o.name}</strong>
-                      <small>{formatRange(o.start_datetime, o.end_datetime)}</small>
+                      <strong>{occasion.name}</strong>
+                      <small>{formatRange(occasion.start_datetime, occasion.end_datetime)}</small>
                     </span>
-                    <span className="occasion-going">{o.attendees_count} going</span>
+                    <span className="occasion-going">{occasion.attendees_count} going</span>
                   </Link>
                 </li>
               ))}

@@ -1,31 +1,30 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router'
-import { ApiError, apiGet, errorsFrom, type FieldErrors } from '../api'
+import { ApiError, apiGet, useFieldErrors, type FieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { FormAlert } from '../components/Field'
+import { queryKeys } from '../queryClient'
 import type { OccasionDetail } from '../types/occasions'
 import { formatRange } from './panel/shared'
 
+const NOT_FOUND: FieldErrors = { non_field_errors: ["This occasion doesn't exist or was deleted."] }
+
 export default function OccasionPage() {
-  const { id } = useParams()
+  const { id: occasionId = '' } = useParams()
   const { user, loading } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
-  const [occasion, setOccasion] = useState<OccasionDetail | null>(null)
-  const [errors, setErrors] = useState<FieldErrors>({})
-
-  useEffect(() => {
-    if (!user) return
-    apiGet<OccasionDetail>(`/api/occasions/${id}/`)
-      .then(setOccasion)
-      .catch((err) =>
-        setErrors(
-          err instanceof ApiError && err.status === 404
-            ? { non_field_errors: ["This occasion doesn't exist or was deleted."] }
-            : errorsFrom(err),
-        ),
-      )
-  }, [user, id])
+  const occasionQuery = useQuery({
+    queryKey: queryKeys.occasion(occasionId),
+    queryFn: () => apiGet<OccasionDetail>(`/api/occasions/${occasionId}/`),
+    enabled: Boolean(user),
+  })
+  const occasion = occasionQuery.data
+  const fieldErrors = useFieldErrors(occasionQuery.error)
+  const errors: FieldErrors =
+    occasionQuery.error instanceof ApiError && occasionQuery.error.status === 404
+      ? NOT_FOUND
+      : fieldErrors
 
   if (loading) return null
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />
@@ -59,9 +58,9 @@ export default function OccasionPage() {
               <span className="tags">
                 {occasion.cancelled_at && <span className="tag tag-off">Cancelled</span>}
                 {occasion.is_going && <span className="tag">You're going</span>}
-                {occasion.tags.map((t) => (
-                  <span className="tag" key={t}>
-                    {t}
+                {occasion.tags.map((tagName) => (
+                  <span className="tag" key={tagName}>
+                    {tagName}
                   </span>
                 ))}
               </span>
@@ -77,13 +76,13 @@ export default function OccasionPage() {
             <section className="occasion-gallery" aria-labelledby="gallery-title">
               <h2 id="gallery-title">Gallery</h2>
               <ul>
-                {occasion.gallery.map((url, i) => (
-                  <li key={url}>
+                {occasion.gallery.map((imageUrl, imageIndex) => (
+                  <li key={imageUrl}>
                     {/* Full size in a new tab */}
-                    <a href={url} target="_blank" rel="noreferrer">
+                    <a href={imageUrl} target="_blank" rel="noreferrer">
                       <img
-                        src={url}
-                        alt={`${occasion.name}, photo ${i + 1} of ${occasion.gallery.length}`}
+                        src={imageUrl}
+                        alt={`${occasion.name}, photo ${imageIndex + 1} of ${occasion.gallery.length}`}
                         loading="lazy"
                       />
                     </a>

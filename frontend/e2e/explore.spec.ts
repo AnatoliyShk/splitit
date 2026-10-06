@@ -96,7 +96,7 @@ test.describe('decline', () => {
     await expect(page.getByRole('article', { name: 'Board Game Night' })).toBeVisible()
     await expect(page.getByText('2 of 3')).toBeVisible()
     await expect(page.getByRole('status')).toHaveText('Skipped Rooftop Yoga')
-    expect(mock.requests.filter((r) => r.startsWith('POST'))).toEqual([])
+    expect(mock.requests.filter((request) => request.startsWith('POST'))).toEqual([])
   })
 })
 
@@ -305,7 +305,7 @@ test.describe('cancelled occasions', () => {
 
     // Board Game Night is cancelled while the tab is in the background
     deck = [occasions[0], occasions[2]]
-    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange', { bubbles: true })))
 
     await expect(page.getByRole('article', { name: 'Hike Day' })).toBeVisible()
     await expect(page.getByText('2 of 2')).toBeVisible()
@@ -324,7 +324,7 @@ test.describe('cancelled occasions', () => {
     await expect(page.getByText("You're going to", { exact: true })).toBeVisible()
 
     active = null
-    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange', { bubbles: true })))
 
     await expect(page.getByRole('article', { name: 'Rooftop Yoga' })).toBeVisible()
     await expect(page.getByText("You're going to", { exact: true })).toHaveCount(0)
@@ -343,7 +343,7 @@ test.describe('end of the list', () => {
     await expect(page.getByRole('button', { name: 'Accept' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Decline' })).toHaveCount(0)
     await expect(page.getByText(/\d of 3/)).toHaveCount(0)
-    expect(mock.requests.filter((r) => r.startsWith('POST'))).toEqual([])
+    expect(mock.requests.filter((request) => request.startsWith('POST'))).toEqual([])
   })
 
   test('shows the empty state when there are no new occasions', async ({ page }) => {

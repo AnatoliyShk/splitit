@@ -33,20 +33,20 @@ class UserConnectionsView(APIView):
 
     def get(self, request, user_uuid):
         user = user_from_url(request, user_uuid)
-        key = my_connections_key(user.pk)
-        data = cache.get(key)
-        if data is None:
+        cache_key = my_connections_key(user.pk)
+        connections_data = cache.get(cache_key)
+        if connections_data is None:
             connections = list(
                 Connection.objects.for_user(user)
                 .select_related("user_low", "user_high")
                 .annotate(other_name=Case(When(user_low=user, then=F("user_high__name")), default=F("user_low__name")))
                 .order_by("-strength", "other_name")[:LIMIT]
             )
-            for c in connections:
-                c.other_user = c.other(user)
-            data = MyConnectionSerializer(connections, many=True).data
-            cache.set(key, data, MY_CONNECTIONS_TTL)
-        return Response(data)
+            for connection in connections:
+                connection.other_user = connection.other(user)
+            connections_data = MyConnectionSerializer(connections, many=True).data
+            cache.set(cache_key, connections_data, MY_CONNECTIONS_TTL)
+        return Response(connections_data)
 
 
 class UserConnectionsGraphView(APIView):
@@ -63,54 +63,66 @@ class UserConnectionsGraphView(APIView):
 
     def get(self, request, user_uuid):
         user = user_from_url(request, user_uuid)
-        people = {user.pk: (user, 0)}
-        edges = []
+        people = {user.pk: (user, 0)}  # user id -> (user, degree)
+        edge_connections = []
 
-        mine = Connection.objects.for_user(user).select_related("user_low", "user_high").order_by("-strength")
-        for c in mine[:LIMIT]:
-            people[c.other(user).pk] = (c.other(user), 1)
-            edges.append(c)
-        friend_ids = [pk for pk, (_, degree) in people.items() if degree == 1]
+        my_connections = (
+            Connection.objects.for_user(user).select_related("user_low", "user_high").order_by("-strength")
+        )
+        for connection in my_connections[:LIMIT]:
+            friend = connection.other(user)
+            people[friend.pk] = (friend, 1)
+            edge_connections.append(connection)
+        friend_ids = [user_id for user_id, (_, degree) in people.items() if degree == 1]
 
         # Links between the user's own connections
-        edges += Connection.objects.filter(user_low__in=friend_ids, user_high__in=friend_ids).select_related(
+        edge_connections += Connection.objects.filter(user_low__in=friend_ids, user_high__in=friend_ids).select_related(
             "user_low", "user_high"
         )
 
         # Each connection's strongest links to outsiders. A pair row can name the friend on either
         # side, so rank each side separately and merge the two top lists per friend below.
-        known = [*people]
-        candidates = {}
-        for side, other in (("user_low", "user_high"), ("user_high", "user_low")):
-            rows = (
+        known_user_ids = [*people]
+        candidates_by_friend = {}  # friend id -> their strongest connections to outsiders
+        for side, other_side in (("user_low", "user_high"), ("user_high", "user_low")):
+            side_connections = (
                 Connection.objects.filter(**{f"{side}__in": friend_ids})
-                .exclude(**{f"{other}__in": known})
+                .exclude(**{f"{other_side}__in": known_user_ids})
                 .annotate(rank=Window(RowNumber(), partition_by=F(side), order_by=F("strength").desc()))
                 .filter(rank__lte=SECOND_DEGREE_PER_PERSON)
                 .select_related("user_low", "user_high")
             )
-            for c in rows:
-                candidates.setdefault(getattr(c, f"{side}_id"), []).append(c)
-        picked = [
-            c
-            for rows in candidates.values()
-            for c in sorted(rows, key=lambda c: -c.strength)[:SECOND_DEGREE_PER_PERSON]
+            for connection in side_connections:
+                candidates_by_friend.setdefault(getattr(connection, f"{side}_id"), []).append(connection)
+        picked_connections = [
+            connection
+            for friend_connections in candidates_by_friend.values()
+            for connection in sorted(friend_connections, key=lambda candidate: -candidate.strength)[
+                :SECOND_DEGREE_PER_PERSON
+            ]
         ]
         # Strongest links first, so the cap drops the weakest outsiders
-        for c in sorted(picked, key=lambda c: -c.strength):
-            outsider = c.user_high if c.user_low_id in friend_ids else c.user_low
+        for connection in sorted(picked_connections, key=lambda candidate: -candidate.strength):
+            outsider = connection.user_high if connection.user_low_id in friend_ids else connection.user_low
             if outsider.pk not in people:
                 if len(people) - len(friend_ids) - 1 >= SECOND_DEGREE_LIMIT:
                     continue
                 people[outsider.pk] = (outsider, 2)
-            edges.append(c)
+            edge_connections.append(connection)
 
         return Response(
             {
-                "nodes": [{"uuid": str(u.uuid), "name": u.name, "degree": d} for u, d in people.values()],
+                "nodes": [
+                    {"uuid": str(person.uuid), "name": person.name, "degree": degree}
+                    for person, degree in people.values()
+                ],
                 "edges": [
-                    {"source": str(c.user_low.uuid), "target": str(c.user_high.uuid), "strength": c.strength}
-                    for c in edges
+                    {
+                        "source": str(connection.user_low.uuid),
+                        "target": str(connection.user_high.uuid),
+                        "strength": connection.strength,
+                    }
+                    for connection in edge_connections
                 ],
             }
         )

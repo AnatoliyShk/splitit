@@ -56,11 +56,11 @@ export default function Home() {
       </section>
 
       <section className="cards" aria-label="How it works">
-        {features.map((f) => (
-          <article className={`card card-${f.tone}`} key={f.title}>
-            <span className="card-step">{f.step}</span>
-            <h2>{f.title}</h2>
-            <p>{f.text}</p>
+        {features.map((feature) => (
+          <article className={`card card-${feature.tone}`} key={feature.title}>
+            <span className="card-step">{feature.step}</span>
+            <h2>{feature.title}</h2>
+            <p>{feature.text}</p>
           </article>
         ))}
       </section>

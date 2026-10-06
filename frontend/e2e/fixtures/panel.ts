@@ -86,7 +86,7 @@ export const PAGE_SIZE = 20
 export function paginate<T>(items: T[], url: URL, searchText: (item: T) => string[] = () => []) {
   const search = (url.searchParams.get('search') ?? '').trim().toLowerCase()
   const filtered = search
-    ? items.filter((i) => searchText(i).some((s) => s.toLowerCase().includes(search)))
+    ? items.filter((item) => searchText(item).some((text) => text.toLowerCase().includes(search)))
     : items
   const page = Number(url.searchParams.get('page') ?? '1')
   const start = (page - 1) * PAGE_SIZE
@@ -190,6 +190,6 @@ export function pageOf<T>(results: T[]) {
 // A promise that can be resolved from outside; lets a test hold a response open
 export function deferred() {
   let resolve!: () => void
-  const promise = new Promise<void>((r) => (resolve = r))
+  const promise = new Promise<void>((resolvePromise) => (resolve = resolvePromise))
   return { promise, resolve }
 }

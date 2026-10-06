@@ -69,7 +69,7 @@ test.describe('Register success', () => {
 
   test('disables the submit button and shows progress while the request is pending', async ({ page }) => {
     let release!: () => void
-    const gate = new Promise<void>((r) => (release = r))
+    const gate = new Promise<void>((resolvePromise) => (release = resolvePromise))
     await page.route('**/api/auth/register/', async (route) => {
       await gate
       await json(route, 201, { user: fakeUser })

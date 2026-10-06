@@ -1,46 +1,52 @@
-import { useCallback, useEffect, useState } from 'react'
-import { apiGet, apiPatch, errorsFrom, type FieldErrors, type Page } from '../../api'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { apiGet, apiPatch, useFieldErrors, type Page } from '../../api'
 import { useAuth } from '../../auth'
 import { Field, FormAlert } from '../../components/Field'
 import { Pager } from '../../components/Pager'
+import { listQueryString, queryKeys } from '../../queryClient'
 import { formatDate, PAGE_SIZE, useDebounced, type PanelUser } from './shared'
 
+type UserChanges = Partial<Pick<PanelUser, 'is_active' | 'is_staff'>>
+
 export default function Users() {
-  const { user: me } = useAuth()
+  const { user: currentUser } = useAuth()
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
-  const query = useDebounced(search.trim())
+  const searchQuery = useDebounced(search.trim())
   const [page, setPage] = useState(1)
-  const [data, setData] = useState<Page<PanelUser> | null>(null)
-  const [errors, setErrors] = useState<FieldErrors>({})
-  const [busyId, setBusyId] = useState<number | null>(null)
+  const listParams = { page, search: searchQuery }
 
-  const load = useCallback(() => {
-    const params = new URLSearchParams({ page: String(page), search: query })
-    apiGet<Page<PanelUser>>(`/api/panel/users/?${params}`)
-      .then(setData)
-      .catch((err) => setErrors(errorsFrom(err)))
-  }, [page, query])
+  const usersQuery = useQuery({
+    queryKey: queryKeys.panel.users(listParams),
+    queryFn: () => apiGet<Page<PanelUser>>(`/api/panel/users/?${listQueryString(listParams)}`),
+    // Keep the current page on screen while the next one loads
+    placeholderData: keepPreviousData,
+  })
+  const usersPage = usersQuery.data
 
-  useEffect(load, [load])
-
-  async function update(target: PanelUser, changes: Partial<Pick<PanelUser, 'is_active' | 'is_staff'>>) {
-    setBusyId(target.id)
-    setErrors({})
-    try {
-      const updated = await apiPatch<PanelUser>(`/api/panel/users/${target.id}/`, changes)
-      setData((d) => d && { ...d, results: d.results.map((u) => (u.id === updated.id ? updated : u)) })
-    } catch (err) {
-      setErrors(errorsFrom(err))
-    } finally {
-      setBusyId(null)
-    }
-  }
+  const updateMutation = useMutation({
+    mutationFn: ({ panelUser, changes }: { panelUser: PanelUser; changes: UserChanges }) =>
+      apiPatch<PanelUser>(`/api/panel/users/${panelUser.id}/`, changes),
+    onSuccess: (updatedUser) => {
+      queryClient.setQueryData<Page<PanelUser>>(
+        queryKeys.panel.users(listParams),
+        (cachedPage) =>
+          cachedPage && {
+            ...cachedPage,
+            results: cachedPage.results.map((panelUser) => (panelUser.id === updatedUser.id ? updatedUser : panelUser)),
+          },
+      )
+    },
+  })
+  const busyUserId = updateMutation.isPending ? updateMutation.variables.panelUser.id : null
+  const errors = useFieldErrors(updateMutation.error, usersQuery.error)
 
   return (
     <>
       <div className="panel-head">
         <h1>Users</h1>
-        {data && <span className="muted">{data.count} total</span>}
+        {usersPage && <span className="muted">{usersPage.count} total</span>}
       </div>
 
       <div className="panel-toolbar">
@@ -49,8 +55,8 @@ export default function Users() {
           label="Search by name or email"
           type="search"
           value={search}
-          onChange={(e) => {
-            setSearch(e.target.value)
+          onChange={(event) => {
+            setSearch(event.target.value)
             setPage(1)
           }}
         />
@@ -58,13 +64,13 @@ export default function Users() {
 
       <FormAlert messages={errors.non_field_errors} />
 
-      {data && data.results.length === 0 && (
+      {usersPage && usersPage.results.length === 0 && (
         <div className="empty">
-          <p>No users match “{query}”.</p>
+          <p>No users match “{searchQuery}”.</p>
         </div>
       )}
 
-      {data && data.results.length > 0 && (
+      {usersPage && usersPage.results.length > 0 && (
         <table className="data-table">
           <thead>
             <tr>
@@ -78,29 +84,31 @@ export default function Users() {
             </tr>
           </thead>
           <tbody>
-            {data.results.map((u) => {
-              const isMe = u.id === me?.id
+            {usersPage.results.map((panelUser) => {
+              const isMe = panelUser.id === currentUser?.id
               // Mirrors the backend: no changing your own access, only superusers manage superusers
-              const locked = isMe || (u.is_superuser && !me?.is_superuser)
-              const busy = busyId === u.id
+              const locked = isMe || (panelUser.is_superuser && !currentUser?.is_superuser)
+              const busy = busyUserId === panelUser.id
               return (
-                <tr key={u.id}>
+                <tr key={panelUser.id}>
                   <td className="cell-stack" data-label="User">
-                    <strong>{u.name || '—'}</strong>
-                    <small>{u.email}</small>
+                    <strong>{panelUser.name || '—'}</strong>
+                    <small>{panelUser.email}</small>
                   </td>
-                  <td data-label="Joined">{formatDate(u.date_joined)}</td>
-                  <td data-label="Occasions">{u.occasions_count}</td>
+                  <td data-label="Joined">{formatDate(panelUser.date_joined)}</td>
+                  <td data-label="Occasions">{panelUser.occasions_count}</td>
                   <td data-label="Access">
                     <span className="tags">
                       {isMe && <span className="tag">You</span>}
-                      {u.is_superuser ? (
+                      {panelUser.is_superuser ? (
                         <span className="tag">Superuser</span>
                       ) : (
-                        u.is_staff && <span className="tag">Admin</span>
+                        panelUser.is_staff && <span className="tag">Admin</span>
                       )}
-                      {!u.is_active && <span className="tag tag-off">Deactivated</span>}
-                      {u.is_active && !u.is_staff && !isMe && <span className="tag tag-off">Member</span>}
+                      {!panelUser.is_active && <span className="tag tag-off">Deactivated</span>}
+                      {panelUser.is_active && !panelUser.is_staff && !isMe && (
+                        <span className="tag tag-off">Member</span>
+                      )}
                     </span>
                   </td>
                   <td className="row-actions">
@@ -109,16 +117,20 @@ export default function Users() {
                         <button
                           className="btn btn-sm"
                           disabled={busy}
-                          onClick={() => update(u, { is_staff: !u.is_staff })}
+                          onClick={() =>
+                            updateMutation.mutate({ panelUser, changes: { is_staff: !panelUser.is_staff } })
+                          }
                         >
-                          {u.is_staff ? 'Remove admin' : 'Make admin'}
+                          {panelUser.is_staff ? 'Remove admin' : 'Make admin'}
                         </button>
                         <button
                           className="btn btn-sm"
                           disabled={busy}
-                          onClick={() => update(u, { is_active: !u.is_active })}
+                          onClick={() =>
+                            updateMutation.mutate({ panelUser, changes: { is_active: !panelUser.is_active } })
+                          }
                         >
-                          {u.is_active ? 'Deactivate' : 'Reactivate'}
+                          {panelUser.is_active ? 'Deactivate' : 'Reactivate'}
                         </button>
                       </>
                     )}
@@ -130,7 +142,7 @@ export default function Users() {
         </table>
       )}
 
-      {data && <Pager page={page} count={data.count} pageSize={PAGE_SIZE} onChange={setPage} />}
+      {usersPage && <Pager page={page} count={usersPage.count} pageSize={PAGE_SIZE} onChange={setPage} />}
     </>
   )
 }

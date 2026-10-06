@@ -32,7 +32,7 @@ def embed_texts(texts, task_type="RETRIEVAL_DOCUMENT"):
             contents=texts[start:start + BATCH_SIZE],
             config=config,
         )
-        vectors.extend(normalize(e.values) for e in response.embeddings)
+        vectors.extend(normalize(embedding.values) for embedding in response.embeddings)
     return vectors
 
 
@@ -43,5 +43,5 @@ def embed_query(text):
 
 def normalize(values):
     # Gemini only normalizes full-size (3072) vectors; shortened ones need it here
-    length = math.sqrt(sum(v * v for v in values))
-    return [v / length for v in values] if length else list(values)
+    length = math.sqrt(sum(value * value for value in values))
+    return [value / length for value in values] if length else list(values)

@@ -25,9 +25,9 @@ def join(occasion, user):
     with transaction.atomic():
         # Lock the user's row so two quick accepts can't both pass the check below
         get_user_model().objects.select_for_update().filter(pk=user.pk).first()
-        other = active_occasions(user).exclude(pk=occasion.pk).order_by("start_datetime").first()
-        if other is not None:
-            raise AlreadyGoing(other)
+        other_occasion = active_occasions(user).exclude(pk=occasion.pk).order_by("start_datetime").first()
+        if other_occasion is not None:
+            raise AlreadyGoing(other_occasion)
         occasion.users.add(user)
 
 

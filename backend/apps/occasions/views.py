@@ -34,8 +34,8 @@ class UserOccasionSerializer(serializers.ModelSerializer):
 
     def get_main_image(self, occasion) -> str | None:
         # Reads the prefetched images (see with_details), so a list costs no query per occasion
-        main = next((i for i in occasion.images.all() if i.order == MAIN_IMAGE_ORDER), None)
-        return main.image.url if main else None
+        main_image = next((image for image in occasion.images.all() if image.order == MAIN_IMAGE_ORDER), None)
+        return main_image.image.url if main_image else None
 
 
 class OccasionDetailSerializer(UserOccasionSerializer):
@@ -47,7 +47,7 @@ class OccasionDetailSerializer(UserOccasionSerializer):
         fields = (*UserOccasionSerializer.Meta.fields, "gallery", "is_going")
 
     def get_gallery(self, occasion) -> list[str]:
-        return [i.image.url for i in occasion.images.all() if i.order != MAIN_IMAGE_ORDER]
+        return [image.image.url for image in occasion.images.all() if image.order != MAIN_IMAGE_ORDER]
 
 
 class KnownAttendeeSerializer(serializers.Serializer):
@@ -105,15 +105,15 @@ class ExploreOccasionsView(APIView):
         def details(occasions):
             return with_known_attendees(with_details(occasions), request.user)
 
-        active = details(active_occasions(request.user)).order_by("start_datetime").first()
+        active_occasion = details(active_occasions(request.user)).order_by("start_datetime").first()
         occasions = []
-        if active is None:
+        if active_occasion is None:
             occasions = details(Occasion.objects.upcoming().exclude(users=request.user)).order_by(
                 "start_datetime", "id"
             )[: self.limit]
         return Response(
             {
-                "active_occasion": active and ExploreOccasionSerializer(active).data,
+                "active_occasion": active_occasion and ExploreOccasionSerializer(active_occasion).data,
                 "occasions": ExploreOccasionSerializer(occasions, many=True).data,
             }
         )
@@ -134,10 +134,10 @@ class JoinOccasionView(APIView):
             return Response({"detail": "This occasion is no longer available."}, status=status.HTTP_404_NOT_FOUND)
         try:
             join(occasion, request.user)
-        except AlreadyGoing as e:
+        except AlreadyGoing as already_going:
             return Response(
                 {
-                    "detail": f"You're already going to {e.occasion.name}. "
+                    "detail": f"You're already going to {already_going.occasion.name}. "
                     "You can join another occasion once it ends or is cancelled."
                 },
                 status=status.HTTP_409_CONFLICT,

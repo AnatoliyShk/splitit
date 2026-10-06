@@ -8,7 +8,7 @@ type AuthCardProps = {
   title: string
   subtitle: string
   errors: FieldErrors
-  onSubmit: (e: SubmitEvent<HTMLFormElement>) => void
+  onSubmit: (event: SubmitEvent<HTMLFormElement>) => void
   children: ReactNode
 }
 
@@ -23,8 +23,8 @@ export function AuthCard({ title, subtitle, errors, onSubmit, children }: AuthCa
   const formRef = useRef<HTMLFormElement>(null)
   // Pages that require login send visitors here with the path to return to afterwards
   const { state } = useLocation()
-  const from = (state as { from?: string } | null)?.from
-  const returnTo = from?.startsWith('/') ? from : '/'
+  const fromPath = (state as { from?: string } | null)?.from
+  const returnTo = fromPath?.startsWith('/') ? fromPath : '/'
 
   // After a failed submit, move focus to the first invalid field so it's announced
   useEffect(() => {
@@ -37,9 +37,9 @@ export function AuthCard({ title, subtitle, errors, onSubmit, children }: AuthCa
     <section className="auth">
       <div className="auth-panel">
         <nav className="tabs" aria-label="Account">
-          {tabs.map((t) => (
-            <NavLink key={t.to} to={t.to} state={state} className="tab" replace>
-              {t.label}
+          {tabs.map((tab) => (
+            <NavLink key={tab.to} to={tab.to} state={state} className="tab" replace>
+              {tab.label}
             </NavLink>
           ))}
         </nav>

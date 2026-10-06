@@ -22,7 +22,7 @@ DUMMY_TASKS = {"default": {"BACKEND": "django.tasks.backends.dummy.DummyBackend"
 
 
 def make_users(*names):
-    return [User.objects.create_user(f"{n.lower()}@example.com", PASSWORD, name=n) for n in names]
+    return [User.objects.create_user(f"{name.lower()}@example.com", PASSWORD, name=name) for name in names]
 
 
 def past_occasion(*users, name="Gig"):
@@ -32,15 +32,15 @@ def past_occasion(*users, name="Gig"):
     return occasion
 
 
-def strength(a, b):
-    low, high = sorted([a, b], key=lambda u: u.pk)
+def strength(first_user, second_user):
+    low, high = sorted([first_user, second_user], key=lambda user: user.pk)
     return Connection.objects.get(user_low=low, user_high=high)
 
 
 class ConnectionModelTests(TestCase):
     def setUp(self):
         self.ana, self.ben = make_users("Ana", "Ben")
-        self.low, self.high = sorted([self.ana, self.ben], key=lambda u: u.pk)
+        self.low, self.high = sorted([self.ana, self.ben], key=lambda user: user.pk)
 
     def test_pair_must_be_ordered(self):
         with self.assertRaises(IntegrityError):
@@ -69,19 +69,19 @@ class ApplyOccasionTests(TestCase):
         occasion = past_occasion(self.ana, self.ben, self.cy)
         self.assertTrue(apply_occasion(occasion.pk))
         self.assertEqual(Connection.objects.count(), 3)
-        for a, b in [(self.ana, self.ben), (self.ana, self.cy), (self.ben, self.cy)]:
-            c = strength(a, b)
-            self.assertAlmostEqual(c.strength, 0.5)
-            self.assertEqual(c.shared_occasions, 1)
+        for first_user, second_user in [(self.ana, self.ben), (self.ana, self.cy), (self.ben, self.cy)]:
+            connection = strength(first_user, second_user)
+            self.assertAlmostEqual(connection.strength, 0.5)
+            self.assertEqual(connection.shared_occasions, 1)
         occasion.refresh_from_db()
         self.assertIsNotNone(occasion.connections_applied_at)
 
     def test_shared_occasions_add_up(self):
         apply_occasion(past_occasion(self.ana, self.ben, self.cy).pk)  # +0.5
         apply_occasion(past_occasion(self.ana, self.ben).pk)  # +1
-        c = strength(self.ana, self.ben)
-        self.assertAlmostEqual(c.strength, 1.5)
-        self.assertEqual(c.shared_occasions, 2)
+        connection = strength(self.ana, self.ben)
+        self.assertAlmostEqual(connection.strength, 1.5)
+        self.assertEqual(connection.shared_occasions, 2)
 
     def test_an_occasion_counts_once(self):
         occasion = past_occasion(self.ana, self.ben)
@@ -120,7 +120,7 @@ class ApplyOccasionTests(TestCase):
         self.assertAlmostEqual(strength(self.ana, self.ben).strength, 1.0)
 
     def test_large_occasions_are_written_in_batches(self):
-        crowd = make_users(*[f"Guest{i}" for i in range(50)])  # 1,225 pairs: more than one batch
+        crowd = make_users(*[f"Guest{guest_number}" for guest_number in range(50)])  # 1,225 pairs: more than one batch
         apply_occasion(past_occasion(*crowd).pk)
         self.assertEqual(Connection.objects.count(), 50 * 49 // 2)
         self.assertAlmostEqual(strength(crowd[0], crowd[-1]).strength, 1 / 49)
@@ -132,7 +132,11 @@ class SchedulingTests(TestCase):
         default_task_backend.clear()
 
     def enqueued(self):
-        return [r for r in default_task_backend.results if r.task.name == "apply_occasion_connections"]
+        return [
+            task_result
+            for task_result in default_task_backend.results
+            if task_result.task.name == "apply_occasion_connections"
+        ]
 
     def test_saving_an_occasion_schedules_it_for_when_it_ends(self):
         end = timezone.now() + timedelta(days=2)
@@ -180,10 +184,16 @@ class ApplyConnectionsCommandTests(TestCase):
     def test_rebuild_reproduces_the_same_totals(self):
         apply_occasion(past_occasion(self.ana, self.ben, self.cy).pk)
         apply_occasion(past_occasion(self.ana, self.ben).pk)
-        before = {(c.user_low_id, c.user_high_id): (c.strength, c.shared_occasions) for c in Connection.objects.all()}
+        before = {
+            (connection.user_low_id, connection.user_high_id): (connection.strength, connection.shared_occasions)
+            for connection in Connection.objects.all()
+        }
 
         call_command("apply_connections", "--rebuild", stdout=StringIO())
-        after = {(c.user_low_id, c.user_high_id): (c.strength, c.shared_occasions) for c in Connection.objects.all()}
+        after = {
+            (connection.user_low_id, connection.user_high_id): (connection.strength, connection.shared_occasions)
+            for connection in Connection.objects.all()
+        }
         self.assertEqual(after, before)
 
 
@@ -218,10 +228,10 @@ class UserConnectionsApiTests(APITestCase):
             ],
         )
         self.client.force_login(self.cy)
-        self.assertEqual([c["name"] for c in self.get(self.cy)], ["Ana", "Ben"])
+        self.assertEqual([connection["name"] for connection in self.get(self.cy)], ["Ana", "Ben"])
 
     def test_list_is_capped(self):
-        crowd = make_users(*[f"Guest{i}" for i in range(views.LIMIT)])
+        crowd = make_users(*[f"Guest{guest_number}" for guest_number in range(views.LIMIT)])
         apply_occasion(past_occasion(self.ana, *crowd).pk)
         self.assertEqual(len(self.get()), views.LIMIT)
 
@@ -260,10 +270,12 @@ class UserConnectionsGraphApiTests(APITestCase):
         return f"/api/users/{(user or self.ana).uuid}/connections/graph/"
 
     def get(self):
-        data = self.client.get(self.url()).json()
-        names = {n["uuid"]: n["name"] for n in data["nodes"]}
-        degrees = {n["name"]: n["degree"] for n in data["nodes"]}
-        edges = {frozenset((names[e["source"]], names[e["target"]])): e["strength"] for e in data["edges"]}
+        graph_data = self.client.get(self.url()).json()
+        names = {node["uuid"]: node["name"] for node in graph_data["nodes"]}
+        degrees = {node["name"]: node["degree"] for node in graph_data["nodes"]}
+        edges = {
+            frozenset((names[edge["source"]], names[edge["target"]])): edge["strength"] for edge in graph_data["edges"]
+        }
         return degrees, edges
 
     def test_requires_login_and_hides_other_users(self):
@@ -294,8 +306,8 @@ class UserConnectionsGraphApiTests(APITestCase):
     def test_keeps_each_connections_strongest_outside_links(self):
         outsiders = make_users("O1", "O2", "O3", "O4")
         apply_occasion(past_occasion(self.ana, self.ben).pk)
-        for i, o in enumerate(outsiders):
-            for _ in range(i + 1):  # O4 is Ben's strongest outside link, O1 his weakest
-                apply_occasion(past_occasion(self.ben, o).pk)
+        for outsider_index, outsider in enumerate(outsiders):
+            for _ in range(outsider_index + 1):  # O4 is Ben's strongest outside link, O1 his weakest
+                apply_occasion(past_occasion(self.ben, outsider).pk)
         degrees, _ = self.get()
-        self.assertEqual({n for n, d in degrees.items() if d == 2}, {"O2", "O3", "O4"})
+        self.assertEqual({name for name, degree in degrees.items() if degree == 2}, {"O2", "O3", "O4"})

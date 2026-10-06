@@ -14,11 +14,11 @@ type Props = {
 export function ImageSlots({ saved, changes, errors, onPick, onRemove, onUndo }: Props) {
   // Local previews for files that aren't uploaded yet
   const previews = useMemo(() => {
-    const urls: Record<number, string> = {}
-    for (const [order, file] of Object.entries(changes)) if (file) urls[Number(order)] = URL.createObjectURL(file)
-    return urls
+    const previewUrls: Record<number, string> = {}
+    for (const [order, file] of Object.entries(changes)) if (file) previewUrls[Number(order)] = URL.createObjectURL(file)
+    return previewUrls
   }, [changes])
-  useEffect(() => () => Object.values(previews).forEach((url) => URL.revokeObjectURL(url)), [previews])
+  useEffect(() => () => Object.values(previews).forEach((previewUrl) => URL.revokeObjectURL(previewUrl)), [previews])
 
   return (
     <fieldset className="image-slots" aria-describedby="images-hint">
@@ -31,7 +31,7 @@ export function ImageSlots({ saved, changes, errors, onPick, onRemove, onUndo }:
         {IMAGE_SLOTS.map((order) => {
           const label = slotLabel(order)
           const pending = order in changes
-          const url = pending ? (previews[order] ?? null) : (saved[order] ?? null)
+          const imageUrl = pending ? (previews[order] ?? null) : (saved[order] ?? null)
           const slotErrors = errors[order] ?? []
           const inputId = `image-${order}`
           return (
@@ -40,14 +40,14 @@ export function ImageSlots({ saved, changes, errors, onPick, onRemove, onUndo }:
                 {label}
                 {pending && <span className="tag image-slot-pending">Unsaved</span>}
               </span>
-              {url ? (
-                <img className="image-slot-preview" src={url} alt={`${label} preview`} />
+              {imageUrl ? (
+                <img className="image-slot-preview" src={imageUrl} alt={`${label} preview`} />
               ) : (
                 <span className="image-slot-preview image-slot-empty">No image</span>
               )}
               <div className="image-slot-actions">
                 <label className="btn btn-sm image-pick" htmlFor={inputId}>
-                  {url ? 'Replace' : 'Add'}
+                  {imageUrl ? 'Replace' : 'Add'}
                   <span className="visually-hidden"> {label.toLowerCase()}</span>
                 </label>
                 <input
@@ -56,14 +56,14 @@ export function ImageSlots({ saved, changes, errors, onPick, onRemove, onUndo }:
                   type="file"
                   accept={IMAGE_TYPES.join(',')}
                   aria-invalid={slotErrors.length > 0 || undefined}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
                     // Clear it so picking the same file again still fires a change
-                    e.target.value = ''
+                    event.target.value = ''
                     if (file) onPick(order, file)
                   }}
                 />
-                {url && (
+                {imageUrl && (
                   <button className="btn btn-sm" type="button" onClick={() => onRemove(order)}>
                     Remove<span className="visually-hidden"> {label.toLowerCase()}</span>
                   </button>
@@ -76,8 +76,8 @@ export function ImageSlots({ saved, changes, errors, onPick, onRemove, onUndo }:
               </div>
               {slotErrors.length > 0 && (
                 <ul className="field-errors">
-                  {slotErrors.map((e) => (
-                    <li key={e}>{e}</li>
+                  {slotErrors.map((message) => (
+                    <li key={message}>{message}</li>
                   ))}
                 </ul>
               )}

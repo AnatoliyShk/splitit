@@ -1,5 +1,6 @@
+import { useMutation } from '@tanstack/react-query'
 import { useState, type SubmitEvent } from 'react'
-import { errorsFrom, type FieldErrors } from '../api'
+import { useFieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { AuthCard } from '../components/AuthCard'
 import { Field } from '../components/Field'
@@ -8,19 +9,15 @@ export default function Login() {
   const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [errors, setErrors] = useState<FieldErrors>({})
-  const [submitting, setSubmitting] = useState(false)
+  // On success AuthCard redirects, since the user is now logged in
+  const loginMutation = useMutation({ mutationFn: () => login(email, password) })
+  const errors = useFieldErrors(loginMutation.error)
+  // Stays on after success until the redirect
+  const submitting = loginMutation.isPending || loginMutation.isSuccess
 
-  async function onSubmit(e: SubmitEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setSubmitting(true)
-    try {
-      // On success AuthCard redirects, since the user is now logged in
-      await login(email, password)
-    } catch (err) {
-      setErrors(errorsFrom(err))
-      setSubmitting(false)
-    }
+  function onSubmit(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault()
+    loginMutation.mutate()
   }
 
   return (
@@ -39,7 +36,7 @@ export default function Login() {
           autoComplete="email"
           required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(event) => setEmail(event.target.value)}
           errors={errors.email}
         />
         <Field
@@ -49,7 +46,7 @@ export default function Login() {
           autoComplete="current-password"
           required
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(event) => setPassword(event.target.value)}
           errors={errors.password}
         />
         <button className="btn btn-primary" type="submit" disabled={submitting}>

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router'
+import { apiGet } from './api'
 import './App.css'
 import { useAuth } from './auth'
 import Explore from './pages/Explore'
@@ -15,6 +16,7 @@ import Overview from './pages/panel/Overview'
 import PanelLayout from './pages/panel/PanelLayout'
 import Tags from './pages/panel/Tags'
 import Users from './pages/panel/Users'
+import { queryKeys } from './queryClient'
 
 function HeaderActions() {
   const { user, loading, logout } = useAuth()
@@ -22,7 +24,7 @@ function HeaderActions() {
 
   if (loading) return null
 
-  const explore = (
+  const exploreLink = (
     <NavLink className="btn btn-ghost btn-explore" to="/explore">
       <svg className="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="12" cy="12" r="9" />
@@ -35,7 +37,7 @@ function HeaderActions() {
   if (user) {
     return (
       <div className="header-actions">
-        {explore}
+        {exploreLink}
         {user.is_staff && (
           <NavLink className="btn btn-ghost" to="/admin">
             Admin
@@ -59,7 +61,7 @@ function HeaderActions() {
 
   return (
     <div className="header-actions">
-      {explore}
+      {exploreLink}
       <Link className="btn btn-ghost" to="/login">
         Log in
       </Link>
@@ -68,14 +70,11 @@ function HeaderActions() {
 }
 
 export default function App() {
-  const [status, setStatus] = useState('loading...')
-
-  useEffect(() => {
-    fetch('/api/health/')
-      .then((r) => r.json())
-      .then((d) => setStatus(d.status))
-      .catch(() => setStatus('unreachable'))
-  }, [])
+  const healthQuery = useQuery({
+    queryKey: queryKeys.health,
+    queryFn: () => apiGet<{ status: string }>('/api/health/'),
+  })
+  const healthStatus = healthQuery.data?.status ?? (healthQuery.isError ? 'unreachable' : 'loading...')
 
   return (
     <>
@@ -111,9 +110,9 @@ export default function App() {
 
       <footer className="footer">
         <span className="logo-small">Splitit</span>
-        <span className={`status status-${status === 'ok' ? 'ok' : 'bad'}`}>
+        <span className={`status status-${healthStatus === 'ok' ? 'ok' : 'bad'}`}>
           <span className="status-dot" aria-hidden="true" />
-          API status: {status}
+          API status: {healthStatus}
         </span>
       </footer>
     </>

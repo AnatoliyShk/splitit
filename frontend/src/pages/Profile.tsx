@@ -1,9 +1,10 @@
 import { lazy, Suspense } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, Navigate, useLocation } from 'react-router'
-import { apiGet, errorsFrom } from '../api'
+import { apiGet, useFieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { FormAlert } from '../components/Field'
+import { queryKeys } from '../queryClient'
 import type { Connection } from '../types/connections'
 import type { UserOccasion } from '../types/occasions'
 import type { User } from '../types/users'
@@ -17,32 +18,32 @@ const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'short' })
 function OccasionRows({ occasions }: { occasions: UserOccasion[] }) {
   return (
     <ul className="occasion-list">
-      {occasions.map((o) => (
-        <li key={o.id}>
-          <Link className="occasion-row" to={`/occasions/${o.id}`}>
-            {o.main_image ? (
-              <img className="occasion-day occasion-thumb" src={o.main_image} alt="" />
+      {occasions.map((occasion) => (
+        <li key={occasion.id}>
+          <Link className="occasion-row" to={`/occasions/${occasion.id}`}>
+            {occasion.main_image ? (
+              <img className="occasion-day occasion-thumb" src={occasion.main_image} alt="" />
             ) : (
               <span className="occasion-day occasion-date">
-                {new Date(o.start_datetime).getDate()}
-                <small>{monthFormat.format(new Date(o.start_datetime))}</small>
+                {new Date(occasion.start_datetime).getDate()}
+                <small>{monthFormat.format(new Date(occasion.start_datetime))}</small>
               </span>
             )}
             <span className="occasion-info">
-              <strong>{o.name}</strong>
-              <small>{formatRange(o.start_datetime, o.end_datetime)}</small>
-              {(o.cancelled_at || o.tags.length > 0) && (
+              <strong>{occasion.name}</strong>
+              <small>{formatRange(occasion.start_datetime, occasion.end_datetime)}</small>
+              {(occasion.cancelled_at || occasion.tags.length > 0) && (
                 <span className="tags occasion-tags">
-                  {o.cancelled_at && <span className="tag tag-off">Cancelled</span>}
-                  {o.tags.map((t) => (
-                    <span className="tag" key={t}>
-                      {t}
+                  {occasion.cancelled_at && <span className="tag tag-off">Cancelled</span>}
+                  {occasion.tags.map((tagName) => (
+                    <span className="tag" key={tagName}>
+                      {tagName}
                     </span>
                   ))}
                 </span>
               )}
             </span>
-            <span className="occasion-going">{o.attendees_count} going</span>
+            <span className="occasion-going">{occasion.attendees_count} going</span>
           </Link>
         </li>
       ))}
@@ -55,25 +56,26 @@ type SplitOccasions = Record<'all' | 'upcoming' | 'past', UserOccasion[]>
 // Same rule as the admin overview: upcoming until it ends (or starts, if it has no end)
 function splitByNow(occasions: UserOccasion[]): SplitOccasions {
   const now = Date.now()
-  const isUpcoming = (o: UserOccasion) => new Date(o.end_datetime ?? o.start_datetime).getTime() >= now
+  const isUpcoming = (occasion: UserOccasion) =>
+    new Date(occasion.end_datetime ?? occasion.start_datetime).getTime() >= now
   return {
     all: occasions,
     upcoming: occasions.filter(isUpcoming),
-    past: occasions.filter((o) => !isUpcoming(o)).reverse(), // most recent first
+    past: occasions.filter((occasion) => !isUpcoming(occasion)).reverse(), // most recent first
   }
 }
 
 function MyOccasions({ user }: { user: User }) {
-  const { data, error } = useQuery({
-    queryKey: ['users', user.uuid, 'occasions'],
+  const occasionsQuery = useQuery({
+    queryKey: queryKeys.userOccasions(user.uuid),
     queryFn: () => apiGet<UserOccasion[]>(`/api/users/${user.uuid}/occasions/`),
     select: splitByNow,
   })
-  const errors = error ? errorsFrom(error) : {}
+  const errors = useFieldErrors(occasionsQuery.error)
 
-  const occasions = data?.all
-  const upcoming = data?.upcoming ?? []
-  const past = data?.past ?? []
+  const occasions = occasionsQuery.data?.all
+  const upcomingOccasions = occasionsQuery.data?.upcoming ?? []
+  const pastOccasions = occasionsQuery.data?.past ?? []
 
   return (
     <section className="profile-card" aria-labelledby="occasions-title">
@@ -88,16 +90,16 @@ function MyOccasions({ user }: { user: User }) {
           </Link>
         </div>
       )}
-      {upcoming.length > 0 && (
+      {upcomingOccasions.length > 0 && (
         <div className="profile-occasions">
           <h3>Upcoming</h3>
-          <OccasionRows occasions={upcoming} />
+          <OccasionRows occasions={upcomingOccasions} />
         </div>
       )}
-      {past.length > 0 && (
+      {pastOccasions.length > 0 && (
         <div className="profile-occasions">
           <h3>Past</h3>
-          <OccasionRows occasions={past} />
+          <OccasionRows occasions={pastOccasions} />
         </div>
       )}
     </section>
@@ -108,11 +110,12 @@ const strengthFormat = new Intl.NumberFormat(undefined, { minimumFractionDigits:
 
 function MyConnections({ user }: { user: User }) {
   // Already sorted by strength, strongest first
-  const { data: connections, error } = useQuery({
-    queryKey: ['users', user.uuid, 'connections'],
+  const connectionsQuery = useQuery({
+    queryKey: queryKeys.userConnections(user.uuid),
     queryFn: () => apiGet<Connection[]>(`/api/users/${user.uuid}/connections/`),
   })
-  const errors = error ? errorsFrom(error) : {}
+  const connections = connectionsQuery.data
+  const errors = useFieldErrors(connectionsQuery.error)
 
   return (
     <section className="profile-card" aria-labelledby="connections-title">
@@ -134,15 +137,17 @@ function MyConnections({ user }: { user: User }) {
       )}
       {connections && connections.length > 0 && (
         <ul className="occasion-list">
-          {connections.map((c) => (
-            <li key={c.uuid}>
+          {connections.map((connection) => (
+            <li key={connection.uuid}>
               <span className="occasion-info">
-                <strong>{c.name}</strong>
+                <strong>{connection.name}</strong>
                 <small>
-                  {c.shared_occasions === 1 ? '1 shared occasion' : `${c.shared_occasions} shared occasions`}
+                  {connection.shared_occasions === 1
+                    ? '1 shared occasion'
+                    : `${connection.shared_occasions} shared occasions`}
                 </small>
               </span>
-              <span className="occasion-going">Strength {strengthFormat.format(c.strength)}</span>
+              <span className="occasion-going">Strength {strengthFormat.format(connection.strength)}</span>
             </li>
           ))}
         </ul>

@@ -60,13 +60,13 @@ class StatsView(APIView):
                 "occasions": {"total": Occasion.objects.count(), "upcoming": upcoming.count()},
                 "next_occasions": [
                     {
-                        "id": o.id,
-                        "name": o.name,
-                        "start_datetime": o.start_datetime,
-                        "end_datetime": o.end_datetime,
-                        "attendees_count": o.attendees_count,
+                        "id": occasion.id,
+                        "name": occasion.name,
+                        "start_datetime": occasion.start_datetime,
+                        "end_datetime": occasion.end_datetime,
+                        "attendees_count": occasion.attendees_count,
                     }
-                    for o in next_occasions
+                    for occasion in next_occasions
                 ],
             }
         )

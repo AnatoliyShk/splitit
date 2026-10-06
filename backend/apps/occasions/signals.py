@@ -11,11 +11,12 @@ def schedule(occasion_id):
     occasion = Occasion.objects.filter(pk=occasion_id).first()
     if occasion is None:
         return
-    task = deactivate_finished_attendances
+    deactivate_task = deactivate_finished_attendances
     # Hold the job until the occasion ends, when the backend can defer (Django's ImmediateBackend can't)
-    if occasion.cancelled_at is None and occasion.ends_at > timezone.now() and task.get_backend().supports_defer:
-        task = task.using(run_after=occasion.ends_at)
-    task.enqueue()
+    can_defer = deactivate_task.get_backend().supports_defer
+    if occasion.cancelled_at is None and occasion.ends_at > timezone.now() and can_defer:
+        deactivate_task = deactivate_task.using(run_after=occasion.ends_at)
+    deactivate_task.enqueue()
 
 
 def occasion_saved(sender, instance, **kwargs):

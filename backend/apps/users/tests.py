@@ -14,10 +14,10 @@ class AuthApiTests(APITestCase):
         cache.clear()
         self.client = APIClient(enforce_csrf_checks=True)
 
-    def csrf_post(self, url, data=None):
+    def csrf_post(self, url, request_data=None):
         self.client.get("/api/auth/csrf/")
         token = self.client.cookies["csrftoken"].value
-        return self.client.post(url, data or {}, format="json", HTTP_X_CSRFTOKEN=token)
+        return self.client.post(url, request_data or {}, format="json", HTTP_X_CSRFTOKEN=token)
 
     def me(self):
         return self.client.get("/api/auth/me/").json()["user"]
@@ -26,61 +26,61 @@ class AuthApiTests(APITestCase):
         self.assertIsNone(self.me())
 
     def test_register_creates_user_and_logs_in(self):
-        res = self.csrf_post(
+        response = self.csrf_post(
             "/api/auth/register/",
             {"email": "Ana@Example.com", "name": "Ana", "password": PASSWORD},
         )
-        self.assertEqual(res.status_code, 201)
-        self.assertEqual(res.json()["user"]["email"], "ana@example.com")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["user"]["email"], "ana@example.com")
         self.assertEqual(self.me()["name"], "Ana")
 
     def test_register_rejects_duplicate_email_case_insensitively(self):
         User.objects.create_user("ana@example.com", PASSWORD, name="Ana")
-        res = self.csrf_post(
+        response = self.csrf_post(
             "/api/auth/register/",
             {"email": "ANA@example.com", "name": "Ana 2", "password": PASSWORD},
         )
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("email", res.json())
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("email", response.json())
 
     def test_register_rejects_weak_password(self):
-        res = self.csrf_post(
+        response = self.csrf_post(
             "/api/auth/register/",
             {"email": "ana@example.com", "name": "Ana", "password": "123"},
         )
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("password", res.json())
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("password", response.json())
         self.assertFalse(User.objects.exists())
 
     def test_login_and_logout(self):
         User.objects.create_user("ana@example.com", PASSWORD, name="Ana")
-        res = self.csrf_post("/api/auth/login/", {"email": "ANA@example.com", "password": PASSWORD})
-        self.assertEqual(res.status_code, 200)
+        response = self.csrf_post("/api/auth/login/", {"email": "ANA@example.com", "password": PASSWORD})
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(self.me()["email"], "ana@example.com")
 
-        res = self.csrf_post("/api/auth/logout/")
-        self.assertEqual(res.status_code, 204)
+        response = self.csrf_post("/api/auth/logout/")
+        self.assertEqual(response.status_code, 204)
         self.assertIsNone(self.me())
 
     def test_login_rejects_wrong_password(self):
         User.objects.create_user("ana@example.com", PASSWORD, name="Ana")
-        res = self.csrf_post("/api/auth/login/", {"email": "ana@example.com", "password": "nope"})
-        self.assertEqual(res.status_code, 400)
-        self.assertEqual(res.json()["non_field_errors"], ["Email or password is incorrect."])
+        response = self.csrf_post("/api/auth/login/", {"email": "ana@example.com", "password": "nope"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["non_field_errors"], ["Email or password is incorrect."])
         self.assertIsNone(self.me())
 
     def test_login_requires_csrf_token(self):
         User.objects.create_user("ana@example.com", PASSWORD, name="Ana")
-        res = self.client.post(
+        response = self.client.post(
             "/api/auth/login/", {"email": "ana@example.com", "password": PASSWORD}, format="json"
         )
-        self.assertEqual(res.status_code, 403)
+        self.assertEqual(response.status_code, 403)
 
     def test_login_is_rate_limited(self):
         for _ in range(10):
             self.csrf_post("/api/auth/login/", {"email": "ana@example.com", "password": "nope"})
-        res = self.csrf_post("/api/auth/login/", {"email": "ana@example.com", "password": "nope"})
-        self.assertEqual(res.status_code, 429)
+        response = self.csrf_post("/api/auth/login/", {"email": "ana@example.com", "password": "nope"})
+        self.assertEqual(response.status_code, 429)
 
 
 class UserAdminTests(APITestCase):
@@ -116,23 +116,23 @@ class ProfileApiTests(APITestCase):
         self.client = APIClient(enforce_csrf_checks=True)
         self.client.force_login(self.user)
 
-    def csrf(self, method, url, data):
+    def csrf(self, method, url, request_data):
         self.client.get("/api/auth/csrf/")
         token = self.client.cookies["csrftoken"].value
-        return getattr(self.client, method)(url, data, format="json", HTTP_X_CSRFTOKEN=token)
+        return getattr(self.client, method)(url, request_data, format="json", HTTP_X_CSRFTOKEN=token)
 
     def test_me_includes_join_date(self):
         self.assertIn("date_joined", self.client.get("/api/auth/me/").json()["user"])
 
     def test_update_name(self):
-        res = self.csrf("patch", "/api/auth/me/", {"name": "  Ana Petrova "})
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.json()["user"]["name"], "Ana Petrova")
+        response = self.csrf("patch", "/api/auth/me/", {"name": "  Ana Petrova "})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["user"]["name"], "Ana Petrova")
 
     def test_blank_name_is_rejected(self):
-        res = self.csrf("patch", "/api/auth/me/", {"name": "   "})
-        self.assertEqual(res.status_code, 400)
-        self.assertEqual(res.json()["name"], ["Enter your name."])
+        response = self.csrf("patch", "/api/auth/me/", {"name": "   "})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["name"], ["Enter your name."])
 
     def test_cannot_change_email_or_access(self):
         self.csrf("patch", "/api/auth/me/", {"email": "x@example.com", "is_staff": True})
@@ -146,16 +146,16 @@ class ProfileApiTests(APITestCase):
 
     def test_change_password_keeps_session(self):
         new = "another-strong-pass-42"
-        res = self.csrf("post", "/api/auth/password/", {"current_password": PASSWORD, "new_password": new})
-        self.assertEqual(res.status_code, 204)
+        response = self.csrf("post", "/api/auth/password/", {"current_password": PASSWORD, "new_password": new})
+        self.assertEqual(response.status_code, 204)
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password(new))
         self.assertEqual(self.client.get("/api/auth/me/").json()["user"]["email"], "ana@example.com")
 
     def test_change_password_checks_current_and_strength(self):
-        res = self.csrf("post", "/api/auth/password/", {"current_password": "nope", "new_password": "123"})
-        self.assertEqual(res.status_code, 400)
-        errors = res.json()
+        response = self.csrf("post", "/api/auth/password/", {"current_password": "nope", "new_password": "123"})
+        self.assertEqual(response.status_code, 400)
+        errors = response.json()
         self.assertEqual(errors["current_password"], ["Your current password is incorrect."])
         self.assertIn("new_password", errors)
 

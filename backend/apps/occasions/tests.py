@@ -10,11 +10,11 @@ from .models import EMBEDDING_DIMENSIONS, Occasion, OccasionUser
 from .services import deactivate_finished
 
 
-def one_hot(i):
-    """A unit vector pointing along axis i, so cosine distances are easy to predict."""
-    v = [0.0] * EMBEDDING_DIMENSIONS
-    v[i] = 1.0
-    return v
+def one_hot(axis):
+    """A unit vector pointing along `axis`, so cosine distances are easy to predict."""
+    vector = [0.0] * EMBEDDING_DIMENSIONS
+    vector[axis] = 1.0
+    return vector
 
 
 class OccasionEmbeddingTests(TestCase):
@@ -45,7 +45,7 @@ class OccasionEmbeddingTests(TestCase):
             .annotate(distance=CosineDistance("embedding", one_hot(0)))
             .order_by("distance")
         )
-        self.assertEqual([o.name for o in nearest], ["Same", "Near", "Far"])
+        self.assertEqual([occasion.name for occasion in nearest], ["Same", "Near", "Far"])
         self.assertAlmostEqual(nearest[0].distance, 0.0, places=6)
 
 
@@ -70,10 +70,10 @@ class UserOccasionsApiTests(TestCase):
         return f"/api/users/{user.uuid}/occasions/"
 
     def test_lists_only_that_users_occasions_soonest_first(self):
-        data = self.client.get(self.url(self.me)).json()
-        self.assertEqual([o["name"] for o in data], ["Sooner", "Later"])
-        self.assertEqual(data[1]["attendees_count"], 2)
-        self.assertEqual(data[1]["tags"], ["Jazz"])
+        user_occasions = self.client.get(self.url(self.me)).json()
+        self.assertEqual([occasion["name"] for occasion in user_occasions], ["Sooner", "Later"])
+        self.assertEqual(user_occasions[1]["attendees_count"], 2)
+        self.assertEqual(user_occasions[1]["tags"], ["Jazz"])
 
     def test_requires_login(self):
         self.client.logout()
@@ -93,15 +93,15 @@ class UserOccasionsApiTests(TestCase):
     def test_staff_can_view_anyones_occasions(self):
         self.me.is_staff = True
         self.me.save()
-        data = self.client.get(self.url(self.other)).json()
-        self.assertEqual([o["name"] for o in data], ["Not mine", "Later"])
+        user_occasions = self.client.get(self.url(self.other)).json()
+        self.assertEqual([occasion["name"] for occasion in user_occasions], ["Not mine", "Later"])
 
 
     def test_cancelled_occasions_say_so(self):
         Occasion.objects.filter(name="Later").update(cancelled_at=timezone.now())
-        data = self.client.get(self.url(self.me)).json()
-        self.assertIsNone(data[0]["cancelled_at"])
-        self.assertIsNotNone(data[1]["cancelled_at"])
+        user_occasions = self.client.get(self.url(self.me)).json()
+        self.assertIsNone(user_occasions[0]["cancelled_at"])
+        self.assertIsNotNone(user_occasions[1]["cancelled_at"])
 
 
 class ExploreApiTests(TestCase):
@@ -133,10 +133,10 @@ class ExploreApiTests(TestCase):
         return self.client.post(f"/api/occasions/{occasion.id}/join/")
 
     def test_lists_upcoming_occasions_im_not_going_to_soonest_first(self):
-        data = self.explore()
-        self.assertIsNone(data["active_occasion"])
-        self.assertEqual([o["name"] for o in data["occasions"]], ["Running", "Sooner", "Later"])
-        self.assertEqual(data["occasions"][2]["attendees_count"], 1)
+        explore_data = self.explore()
+        self.assertIsNone(explore_data["active_occasion"])
+        self.assertEqual([occasion["name"] for occasion in explore_data["occasions"]], ["Running", "Sooner", "Later"])
+        self.assertEqual(explore_data["occasions"][2]["attendees_count"], 1)
 
     def test_names_the_attendees_i_have_a_connection_with(self):
         from apps.connections.models import Connection
@@ -153,7 +153,7 @@ class ExploreApiTests(TestCase):
         Connection.objects.create(user_low=self.other, user_high=cleo, strength=1, shared_occasions=1)
         self.client.force_login(eve)
 
-        occasions = {o["name"]: o for o in self.explore()["occasions"]}
+        occasions = {occasion["name"]: occasion for occasion in self.explore()["occasions"]}
         self.assertEqual(occasions["Later"]["attendees_count"], 3)
         self.assertEqual(
             occasions["Later"]["known_attendees"],
@@ -166,22 +166,24 @@ class ExploreApiTests(TestCase):
 
         Connection.objects.create(user_low=self.me, user_high=self.other, strength=1, shared_occasions=1)
         self.join(self.later)
-        data = self.explore()
-        self.assertEqual(data["active_occasion"]["known_attendees"], [{"uuid": str(self.other.uuid), "name": "Ben"}])
+        explore_data = self.explore()
+        self.assertEqual(
+            explore_data["active_occasion"]["known_attendees"], [{"uuid": str(self.other.uuid), "name": "Ben"}]
+        )
 
     def test_join_makes_the_occasion_active_and_hides_the_rest(self):
         self.assertEqual(self.join(self.sooner).status_code, 204)
         self.assertTrue(OccasionUser.objects.get(occasion=self.sooner, user=self.me).is_active)
-        data = self.explore()
-        self.assertEqual(data["active_occasion"]["name"], "Sooner")
-        self.assertEqual(data["active_occasion"]["attendees_count"], 1)
-        self.assertEqual(data["occasions"], [])
+        explore_data = self.explore()
+        self.assertEqual(explore_data["active_occasion"]["name"], "Sooner")
+        self.assertEqual(explore_data["active_occasion"]["attendees_count"], 1)
+        self.assertEqual(explore_data["occasions"], [])
 
     def test_cannot_join_a_second_occasion_while_one_is_active(self):
         self.join(self.sooner)
-        res = self.join(self.later)
-        self.assertEqual(res.status_code, 409)
-        self.assertIn("You're already going to Sooner", res.json()["detail"])
+        response = self.join(self.later)
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("You're already going to Sooner", response.json()["detail"])
         self.assertFalse(self.later.users.filter(id=self.me.id).exists())
 
     def test_joining_the_active_occasion_again_is_harmless(self):
@@ -207,9 +209,9 @@ class ExploreApiTests(TestCase):
 
     def test_cannot_join_past_cancelled_or_unknown_occasions(self):
         self.assertEqual(self.join(self.past).status_code, 404)
-        res = self.join(self.cancelled)
-        self.assertEqual(res.status_code, 404)
-        self.assertEqual(res.json()["detail"], "This occasion is no longer available.")
+        response = self.join(self.cancelled)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "This occasion is no longer available.")
         self.assertEqual(self.client.post("/api/occasions/999999/join/").status_code, 404)
 
     def test_requires_login(self):
@@ -263,7 +265,11 @@ class DeactivateSchedulingTests(TestCase):
         default_task_backend.clear()
 
     def enqueued(self):
-        return [r for r in default_task_backend.results if r.task.name == "deactivate_finished_attendances"]
+        return [
+            task_result
+            for task_result in default_task_backend.results
+            if task_result.task.name == "deactivate_finished_attendances"
+        ]
 
     def test_saving_an_occasion_schedules_the_sweep_for_when_it_ends(self):
         end = timezone.now() + timedelta(days=2)
@@ -299,30 +305,30 @@ class OccasionImagesApiTests(TestCase):
         self.client.force_login(self.me)
 
     def test_previews_carry_the_main_image(self):
-        data = self.client.get("/api/occasions/explore/").json()["occasions"]
-        self.assertRegex(data[0]["main_image"], rf"^/media/occasions/{self.occasion.pk}/\w+\.png$")
-        self.assertIsNone(data[1]["main_image"])
+        explore_occasions = self.client.get("/api/occasions/explore/").json()["occasions"]
+        self.assertRegex(explore_occasions[0]["main_image"], rf"^/media/occasions/{self.occasion.pk}/\w+\.png$")
+        self.assertIsNone(explore_occasions[1]["main_image"])
 
     def test_detail_has_the_gallery_in_order_without_the_main_image(self):
-        data = self.client.get(f"/api/occasions/{self.occasion.pk}/").json()
-        self.assertEqual(data["name"], "Gig")
-        self.assertIsNotNone(data["main_image"])
-        self.assertEqual(len(data["gallery"]), 2)
-        self.assertNotIn(data["main_image"], data["gallery"])
+        occasion_data = self.client.get(f"/api/occasions/{self.occasion.pk}/").json()
+        self.assertEqual(occasion_data["name"], "Gig")
+        self.assertIsNotNone(occasion_data["main_image"])
+        self.assertEqual(len(occasion_data["gallery"]), 2)
+        self.assertNotIn(occasion_data["main_image"], occasion_data["gallery"])
         orders = dict(self.occasion.images.values_list("image", "order"))
-        self.assertEqual([orders[url.removeprefix("/media/")] for url in data["gallery"]], [1, 2])
+        self.assertEqual([orders[url.removeprefix("/media/")] for url in occasion_data["gallery"]], [1, 2])
 
     def test_detail_says_whether_im_going(self):
         self.assertFalse(self.client.get(f"/api/occasions/{self.occasion.pk}/").json()["is_going"])
         self.occasion.users.add(self.me)
-        data = self.client.get(f"/api/occasions/{self.occasion.pk}/").json()
-        self.assertTrue(data["is_going"])
-        self.assertEqual(data["attendees_count"], 1)
+        occasion_data = self.client.get(f"/api/occasions/{self.occasion.pk}/").json()
+        self.assertTrue(occasion_data["is_going"])
+        self.assertEqual(occasion_data["attendees_count"], 1)
 
     def test_detail_without_images(self):
-        data = self.client.get(f"/api/occasions/{self.plain.pk}/").json()
-        self.assertIsNone(data["main_image"])
-        self.assertEqual(data["gallery"], [])
+        occasion_data = self.client.get(f"/api/occasions/{self.plain.pk}/").json()
+        self.assertIsNone(occasion_data["main_image"])
+        self.assertEqual(occasion_data["gallery"], [])
 
     def test_detail_requires_login_and_a_real_occasion(self):
         self.assertEqual(self.client.get("/api/occasions/999999/").status_code, 404)

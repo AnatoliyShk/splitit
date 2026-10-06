@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { mockApi, mockStaffSession } from './fixtures/panel'
+import { mockApi, mockStaffSession, panelOccasion } from './fixtures/panel'
 
 // Dates are shown in the viewer's zone; pin it so the text is predictable
 test.use({ timezoneId: 'UTC', locale: 'en-US' })
@@ -47,7 +47,7 @@ test.describe('panel overview', () => {
 
   test('shows a loading message until stats arrive', async ({ page }) => {
     let release!: () => void
-    const gate = new Promise<void>((r) => (release = r))
+    const gate = new Promise<void>((resolvePromise) => (release = resolvePromise))
     await mockApi(page, '/api/panel/stats/', {
       GET: async () => {
         await gate
@@ -84,16 +84,12 @@ test.describe('panel overview', () => {
     await mockApi(page, '/api/panel/stats/', { GET: () => ({ body: stats }) })
     await mockApi(page, '/api/panel/occasions/7/', {
       GET: () => ({
-        body: {
+        body: panelOccasion({
           id: 7,
           name: 'Rooftop picnic',
           start_datetime: '2099-10-10T12:00:00Z',
           end_datetime: '2099-10-10T15:00:00Z',
-          duration_minutes: 180,
-          attendees: [],
-          created_at: '2025-05-01T12:00:00Z',
-          updated_at: '2025-05-02T12:00:00Z',
-        },
+        }),
       }),
     })
     await page.goto('/admin')

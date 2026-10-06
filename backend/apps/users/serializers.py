@@ -40,8 +40,8 @@ class PasswordChangeSerializer(serializers.Serializer):
     def validate_new_password(self, value):
         try:
             validate_password(value, self.context["request"].user)
-        except DjangoValidationError as e:
-            raise serializers.ValidationError(list(e.messages))
+        except DjangoValidationError as validation_error:
+            raise serializers.ValidationError(list(validation_error.messages))
         return value
 
 
@@ -64,8 +64,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         user = User(email=attrs["email"], name=attrs["name"])
         try:
             validate_password(attrs["password"], user)
-        except DjangoValidationError as e:
-            raise serializers.ValidationError({"password": list(e.messages)})
+        except DjangoValidationError as validation_error:
+            raise serializers.ValidationError({"password": list(validation_error.messages)})
         return attrs
 
     def create(self, validated_data):

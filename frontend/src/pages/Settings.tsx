@@ -1,41 +1,35 @@
+import { useMutation } from '@tanstack/react-query'
 import { useEffect, useRef, useState, type RefObject, type SubmitEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router'
-import { apiPatch, apiPost, errorsFrom, type FieldErrors } from '../api'
+import { apiPatch, apiPost, useFieldErrors, type FieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { Field, FormAlert } from '../components/Field'
 import type { User } from '../types/users'
 
 // After a failed submit, move focus to the first invalid field so it's announced
-function useFocusFirstInvalid(ref: RefObject<HTMLFormElement | null>, errors: FieldErrors) {
+function useFocusFirstInvalid(formRef: RefObject<HTMLFormElement | null>, errors: FieldErrors) {
   useEffect(() => {
-    ref.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus()
-  }, [ref, errors])
+    formRef.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus()
+  }, [formRef, errors])
 }
 
 function DetailsForm({ user }: { user: User }) {
   const { setUser } = useAuth()
   const formRef = useRef<HTMLFormElement>(null)
   const [name, setName] = useState(user.name)
-  const [errors, setErrors] = useState<FieldErrors>({})
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const detailsMutation = useMutation({
+    mutationFn: () => apiPatch<{ user: User }>('/api/auth/me/', { name }),
+    onSuccess: (userResponse) => {
+      setUser(userResponse.user)
+      setName(userResponse.user.name)
+    },
+  })
+  const errors = useFieldErrors(detailsMutation.error)
   useFocusFirstInvalid(formRef, errors)
 
-  async function onSubmit(e: SubmitEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setSaving(true)
-    setErrors({})
-    setSaved(false)
-    try {
-      const d = await apiPatch<{ user: User }>('/api/auth/me/', { name })
-      setUser(d.user)
-      setName(d.user.name)
-      setSaved(true)
-    } catch (err) {
-      setErrors(errorsFrom(err))
-    } finally {
-      setSaving(false)
-    }
+  function onSubmit(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault()
+    detailsMutation.mutate()
   }
 
   return (
@@ -49,9 +43,10 @@ function DetailsForm({ user }: { user: User }) {
           autoComplete="name"
           required
           value={name}
-          onChange={(e) => {
-            setName(e.target.value)
-            setSaved(false)
+          onChange={(event) => {
+            setName(event.target.value)
+            // Hide "Saved" once the name changes again
+            if (detailsMutation.isSuccess) detailsMutation.reset()
           }}
           errors={errors.name}
         />
@@ -64,13 +59,17 @@ function DetailsForm({ user }: { user: User }) {
           hint="Your email is your login. Ask an admin if it needs to change."
         />
         <div className="form-actions">
-          {saved && (
+          {detailsMutation.isSuccess && (
             <p className="form-status" role="status">
               Saved
             </p>
           )}
-          <button className="btn btn-confirm" type="submit" disabled={saving || name.trim() === user.name}>
-            {saving ? 'Saving…' : 'Save changes'}
+          <button
+            className="btn btn-confirm"
+            type="submit"
+            disabled={detailsMutation.isPending || name.trim() === user.name}
+          >
+            {detailsMutation.isPending ? 'Saving…' : 'Save changes'}
           </button>
         </div>
       </form>
@@ -80,28 +79,22 @@ function DetailsForm({ user }: { user: User }) {
 
 function PasswordForm() {
   const formRef = useRef<HTMLFormElement>(null)
-  const [current, setCurrent] = useState('')
-  const [next, setNext] = useState('')
-  const [errors, setErrors] = useState<FieldErrors>({})
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const passwordMutation = useMutation({
+    mutationFn: () =>
+      apiPost('/api/auth/password/', { current_password: currentPassword, new_password: newPassword }),
+    onSuccess: () => {
+      setCurrentPassword('')
+      setNewPassword('')
+    },
+  })
+  const errors = useFieldErrors(passwordMutation.error)
   useFocusFirstInvalid(formRef, errors)
 
-  async function onSubmit(e: SubmitEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setSaving(true)
-    setErrors({})
-    setSaved(false)
-    try {
-      await apiPost('/api/auth/password/', { current_password: current, new_password: next })
-      setCurrent('')
-      setNext('')
-      setSaved(true)
-    } catch (err) {
-      setErrors(errorsFrom(err))
-    } finally {
-      setSaving(false)
-    }
+  function onSubmit(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault()
+    passwordMutation.mutate()
   }
 
   return (
@@ -115,8 +108,8 @@ function PasswordForm() {
           type="password"
           autoComplete="current-password"
           required
-          value={current}
-          onChange={(e) => setCurrent(e.target.value)}
+          value={currentPassword}
+          onChange={(event) => setCurrentPassword(event.target.value)}
           errors={errors.current_password}
         />
         <Field
@@ -126,18 +119,22 @@ function PasswordForm() {
           autoComplete="new-password"
           required
           hint="At least 8 characters, not too common and not only numbers."
-          value={next}
-          onChange={(e) => setNext(e.target.value)}
+          value={newPassword}
+          onChange={(event) => setNewPassword(event.target.value)}
           errors={errors.new_password}
         />
         <div className="form-actions">
-          {saved && (
+          {passwordMutation.isSuccess && (
             <p className="form-status" role="status">
               Password updated
             </p>
           )}
-          <button className="btn btn-confirm" type="submit" disabled={saving || !current || !next}>
-            {saving ? 'Updating…' : 'Update password'}
+          <button
+            className="btn btn-confirm"
+            type="submit"
+            disabled={passwordMutation.isPending || !currentPassword || !newPassword}
+          >
+            {passwordMutation.isPending ? 'Updating…' : 'Update password'}
           </button>
         </div>
       </form>

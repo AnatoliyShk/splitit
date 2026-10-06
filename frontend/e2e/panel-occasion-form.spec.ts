@@ -33,13 +33,13 @@ const tags = [
 // Every form test needs the user and tag searches (pickers) and the occasions list it returns to
 async function mockCommon(page: Page) {
   await mockStaffSession(page)
-  await mockApi(page, '/api/panel/tags/', { GET: ({ url }) => ({ body: paginate(tags, url, (t) => [t.name]) }) })
+  await mockApi(page, '/api/panel/tags/', { GET: ({ url }) => ({ body: paginate(tags, url, (tag) => [tag.name]) }) })
   const searches = await mockApi(page, '/api/panel/users/', {
     GET: ({ url }) => ({
       body: paginate(
-        people.map((p) => panelUser({ ...p })),
+        people.map((person) => panelUser({ ...person })),
         url,
-        (u) => [u.name, u.email],
+        (panelUser) => [panelUser.name, panelUser.email],
       ),
     }),
   })
@@ -82,8 +82,8 @@ test.describe('new occasion', () => {
 
     await expect(page).toHaveURL(/\/admin\/occasions$/)
     await expect(page.getByRole('heading', { name: 'Occasions' })).toBeVisible()
-    const post = posts.find((c) => c.method === 'POST')!
-    expect(post.body).toEqual({
+    const postCall = posts.find((call) => call.method === 'POST')!
+    expect(postCall.body).toEqual({
       name: 'Board game night',
       start_datetime: '2099-10-10T18:00:00.000Z',
       end_datetime: '2099-10-10T21:30:00.000Z',
@@ -105,7 +105,7 @@ test.describe('new occasion', () => {
     await page.getByRole('button', { name: 'Create occasion' }).click()
 
     await expect(page).toHaveURL(/\/admin\/occasions$/)
-    expect(posts.find((c) => c.method === 'POST')!.body).toMatchObject({
+    expect(posts.find((call) => call.method === 'POST')!.body).toMatchObject({
       name: 'Open mic',
       start_datetime: '2099-11-02T19:30:00.000Z',
       end_datetime: null,
@@ -132,7 +132,7 @@ test.describe('new occasion', () => {
     await page.getByRole('link', { name: 'Cancel' }).click()
 
     await expect(page).toHaveURL(/\/admin\/occasions$/)
-    expect(posts.filter((c) => c.method === 'POST')).toHaveLength(0)
+    expect(posts.filter((call) => call.method === 'POST')).toHaveLength(0)
 
     await page.goto('/admin/occasions/new')
     await page.getByRole('link', { name: '← Occasions' }).click()
@@ -288,7 +288,7 @@ test.describe('new occasion', () => {
       await page.getByRole('button', { name: 'Create occasion' }).click()
 
       await expect(page).toHaveURL(/\/admin\/occasions$/)
-      expect(posts.find((c) => c.method === 'POST')!.body).toMatchObject({ users: [1, 3] })
+      expect(posts.find((call) => call.method === 'POST')!.body).toMatchObject({ users: [1, 3] })
     })
 
     test('results show name and email, and hide people who are already added', async ({ page }) => {
@@ -348,7 +348,7 @@ test.describe('new occasion', () => {
       await page.getByRole('button', { name: 'Create occasion' }).click()
 
       await expect(page).toHaveURL(/\/admin\/occasions$/)
-      expect(posts.find((c) => c.method === 'POST')!.body).toMatchObject({ users: [2] })
+      expect(posts.find((call) => call.method === 'POST')!.body).toMatchObject({ users: [2] })
     })
 
     test('a user without a name is shown by email', async ({ page }) => {
@@ -422,7 +422,7 @@ test.describe('new occasion', () => {
       await page.getByRole('button', { name: 'Create occasion' }).click()
 
       await expect(page).toHaveURL(/\/admin\/occasions$/)
-      expect(posts.find((c) => c.method === 'POST')!.body).toMatchObject({ tag_ids: [2] })
+      expect(posts.find((call) => call.method === 'POST')!.body).toMatchObject({ tag_ids: [2] })
     })
 
     test('says so when no other tag matches', async ({ page }) => {
@@ -508,8 +508,8 @@ test.describe('edit occasion', () => {
     await page.getByRole('button', { name: 'Save changes' }).click()
 
     await expect(page).toHaveURL(/\/admin\/occasions$/)
-    const patch = patches.find((c) => c.method === 'PATCH')!
-    expect(patch.body).toEqual({
+    const patchCall = patches.find((call) => call.method === 'PATCH')!
+    expect(patchCall.body).toEqual({
       name: 'Jazz brunch',
       start_datetime: '2099-10-10T11:00:00.000Z',
       end_datetime: null,
@@ -639,7 +639,7 @@ test.describe('images', () => {
     await page.getByRole('button', { name: 'Save changes' }).click()
 
     await expect(page).toHaveURL(/\/admin\/occasions$/)
-    expect(deletes.map((c) => c.url.pathname)).toEqual(['/api/panel/occasions/10/images/1/'])
+    expect(deletes.map((call) => call.url.pathname)).toEqual(['/api/panel/occasions/10/images/1/'])
     expect(uploads).toHaveLength(0)
   })
 
@@ -707,8 +707,8 @@ test.describe('images', () => {
     await page.getByRole('button', { name: 'Create occasion' }).click()
 
     await expect(page).toHaveURL(/\/admin\/occasions$/)
-    expect(posts.filter((c) => c.method === 'POST')).toHaveLength(1)
-    expect(uploads.map((c) => c.raw!.match(/name="order"\r\n\r\n(\d)/)![1])).toEqual(['0', '1'])
+    expect(posts.filter((call) => call.method === 'POST')).toHaveLength(1)
+    expect(uploads.map((call) => call.raw!.match(/name="order"\r\n\r\n(\d)/)![1])).toEqual(['0', '1'])
   })
 
   test('a failed upload keeps the form open, and saving again updates the created occasion', async ({ page }) => {
@@ -743,7 +743,7 @@ test.describe('images', () => {
     fail = false
     await page.getByRole('button', { name: 'Save changes' }).click()
     await expect(page).toHaveURL(/\/admin\/occasions$/)
-    expect(posts.filter((c) => c.method === 'POST')).toHaveLength(1)
+    expect(posts.filter((call) => call.method === 'POST')).toHaveLength(1)
     expect(patches).toHaveLength(1)
   })
 })

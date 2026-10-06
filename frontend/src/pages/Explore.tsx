@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link, Navigate, useLocation } from 'react-router'
-import { ApiError, apiGet, apiPost, errorsFrom, type FieldErrors } from '../api'
+import { ApiError, apiGet, apiPost, useFieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { FormAlert } from '../components/Field'
+import { queryKeys } from '../queryClient'
 import type { ExploreOccasion, KnownAttendee } from '../types/occasions'
 import { formatDateTime, formatTimes } from './panel/shared'
 
@@ -11,40 +13,40 @@ type ExploreData = { active_occasion: ExploreOccasion | null; occasions: Explore
 
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'short' })
 
-function goingText(count: number, includesMe: boolean) {
+function goingText(attendeesCount: number, includesMe: boolean) {
   if (includesMe) {
-    const others = count - 1
-    if (others <= 0) return "You're the first one going"
-    return `You and ${others} ${others === 1 ? 'other person are' : 'others are'} going`
+    const othersCount = attendeesCount - 1
+    if (othersCount <= 0) return "You're the first one going"
+    return `You and ${othersCount} ${othersCount === 1 ? 'other person are' : 'others are'} going`
   }
-  if (count === 0) return 'Nobody is going yet. Be the first!'
-  return `${count} ${count === 1 ? 'person is' : 'people are'} going`
+  if (attendeesCount === 0) return 'Nobody is going yet. Be the first!'
+  return `${attendeesCount} ${attendeesCount === 1 ? 'person is' : 'people are'} going`
 }
 
 const listFormat = new Intl.ListFormat(undefined, { type: 'conjunction' })
 // Names shown on a card before the rest collapse into "N more"
 const KNOWN_SHOWN = 3
 
-function knownText(known: KnownAttendee[], others: number) {
-  if (known.length === 0) return null
-  const names = known.slice(0, KNOWN_SHOWN).map((k) => k.name)
-  const rest = known.length - names.length
-  const list = listFormat.format(rest > 0 ? [...names, `${rest} more`] : names)
-  if (others === 1) return `You know them: ${list}`
-  if (known.length === others) return `You know all of them: ${list}`
-  return `You know ${known.length} of them: ${list}`
+function knownText(knownAttendees: KnownAttendee[], othersCount: number) {
+  if (knownAttendees.length === 0) return null
+  const shownNames = knownAttendees.slice(0, KNOWN_SHOWN).map((knownAttendee) => knownAttendee.name)
+  const restCount = knownAttendees.length - shownNames.length
+  const namesList = listFormat.format(restCount > 0 ? [...shownNames, `${restCount} more`] : shownNames)
+  if (othersCount === 1) return `You know them: ${namesList}`
+  if (knownAttendees.length === othersCount) return `You know all of them: ${namesList}`
+  return `You know ${knownAttendees.length} of them: ${namesList}`
 }
 
 function OccasionCard({ occasion, mine = false }: { occasion: ExploreOccasion; mine?: boolean }) {
-  const start = new Date(occasion.start_datetime)
-  const known = knownText(occasion.known_attendees, occasion.attendees_count - (mine ? 1 : 0))
+  const startDate = new Date(occasion.start_datetime)
+  const knownAttendeesText = knownText(occasion.known_attendees, occasion.attendees_count - (mine ? 1 : 0))
   return (
     <article className="explore-card" aria-labelledby="explore-occasion-name">
       {occasion.main_image && <img className="explore-image" src={occasion.main_image} alt="" />}
       <div className="explore-title">
         <time className="explore-day" dateTime={occasion.start_datetime}>
-          {start.getDate()}
-          <small>{monthFormat.format(start)}</small>
+          {startDate.getDate()}
+          <small>{monthFormat.format(startDate)}</small>
         </time>
         <div>
           <h2 id="explore-occasion-name">
@@ -59,16 +61,16 @@ function OccasionCard({ occasion, mine = false }: { occasion: ExploreOccasion; m
       </div>
       {occasion.tags.length > 0 && (
         <span className="tags">
-          {occasion.tags.map((t) => (
-            <span className="tag" key={t}>
-              {t}
+          {occasion.tags.map((tagName) => (
+            <span className="tag" key={tagName}>
+              {tagName}
             </span>
           ))}
         </span>
       )}
       <div className="explore-going">
         <p>{goingText(occasion.attendees_count, mine)}</p>
-        {known && <p className="muted">{known}</p>}
+        {knownAttendeesText && <p className="muted">{knownAttendeesText}</p>}
       </div>
     </article>
   )
@@ -95,67 +97,63 @@ function ActiveOccasion({ occasion }: { occasion: ExploreOccasion }) {
 export default function Explore() {
   const { user, loading } = useAuth()
   const location = useLocation()
-  const [data, setData] = useState<ExploreData | null>(null)
+  const queryClient = useQueryClient()
   // Declined occasions, by id, so a refresh doesn't bring them back
-  const [declined, setDeclined] = useState<ReadonlySet<number>>(new Set())
-  const [errors, setErrors] = useState<FieldErrors>({})
-  const [joining, setJoining] = useState(false)
-  const [status, setStatus] = useState('')
+  const [declinedIds, setDeclinedIds] = useState<ReadonlySet<number>>(new Set())
+  const [statusMessage, setStatusMessage] = useState('')
 
-  const load = useCallback(() => {
+  const exploreQuery = useQuery({
+    queryKey: queryKeys.explore,
     // Already sorted soonest first, without occasions the user is going to
-    return apiGet<ExploreData>('/api/occasions/explore/')
-      .then(setData)
-      .catch((err) => setErrors(errorsFrom(err)))
-  }, [])
-
-  useEffect(() => {
-    if (!user) return
-    load()
+    queryFn: () => apiGet<ExploreData>('/api/occasions/explore/'),
+    enabled: Boolean(user),
     // Occasions can be cancelled or end while the page is open: refresh whenever the user comes back to it
-    function onVisible() {
-      if (document.visibilityState === 'visible') load()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [user, load])
+    refetchOnWindowFocus: true,
+  })
+
+  const joinMutation = useMutation({
+    mutationFn: (occasion: ExploreOccasion) => apiPost(`/api/occasions/${occasion.id}/join/`),
+    onSuccess: (_, occasion) => {
+      setStatusMessage(`You're going to ${occasion.name}`)
+      // Joining makes it the active occasion, which pauses the rest of Explore
+      queryClient.setQueryData<ExploreData>(queryKeys.explore, {
+        active_occasion: { ...occasion, attendees_count: occasion.attendees_count + 1 },
+        occasions: [],
+      })
+    },
+    onError: (error) => {
+      // 409: already going somewhere (joined in another tab, say), so show that occasion instead of the deck.
+      // 404: the occasion was cancelled or ended since the deck loaded, so drop it.
+      if (error instanceof ApiError && (error.status === 409 || error.status === 404)) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.explore })
+      }
+    },
+  })
+  const errors = useFieldErrors(joinMutation.error, exploreQuery.error)
 
   if (loading) return null
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />
 
+  const exploreData = exploreQuery.data
   // Declined first, so the counter keeps its place when a refresh drops or adds occasions
-  const occasions = data && [
-    ...data.occasions.filter((o) => declined.has(o.id)),
-    ...data.occasions.filter((o) => !declined.has(o.id)),
+  const declinedOccasions = exploreData?.occasions.filter((occasion) => declinedIds.has(occasion.id)) ?? []
+  const occasions = exploreData && [
+    ...declinedOccasions,
+    ...exploreData.occasions.filter((occasion) => !declinedIds.has(occasion.id)),
   ]
-  const index = data ? data.occasions.filter((o) => declined.has(o.id)).length : 0
-  const active = data?.active_occasion
-  const occasion = active ? undefined : occasions?.[index]
+  const occasionIndex = declinedOccasions.length
+  const activeOccasion = exploreData?.active_occasion
+  const occasion = activeOccasion ? undefined : occasions?.[occasionIndex]
 
   function decline() {
     if (!occasion) return
-    setErrors({})
-    setStatus(`Skipped ${occasion.name}`)
-    setDeclined((d) => new Set(d).add(occasion.id))
+    joinMutation.reset()
+    setStatusMessage(`Skipped ${occasion.name}`)
+    setDeclinedIds((ids) => new Set(ids).add(occasion.id))
   }
 
-  async function accept() {
-    if (!occasion) return
-    setJoining(true)
-    setErrors({})
-    try {
-      await apiPost(`/api/occasions/${occasion.id}/join/`)
-      setStatus(`You're going to ${occasion.name}`)
-      // Joining makes it the active occasion, which pauses the rest of Explore
-      setData({ active_occasion: { ...occasion, attendees_count: occasion.attendees_count + 1 }, occasions: [] })
-    } catch (err) {
-      setErrors(errorsFrom(err))
-      // 409: already going somewhere (joined in another tab, say), so show that occasion instead of the deck.
-      // 404: the occasion was cancelled or ended since the deck loaded, so drop it.
-      if (err instanceof ApiError && (err.status === 409 || err.status === 404)) load()
-    } finally {
-      setJoining(false)
-    }
+  function accept() {
+    if (occasion) joinMutation.mutate(occasion)
   }
 
   return (
@@ -165,7 +163,7 @@ export default function Explore() {
         <h1>Explore</h1>
         {occasions && occasion && (
           <p className="muted">
-            {index + 1} of {occasions.length}
+            {occasionIndex + 1} of {occasions.length}
           </p>
         )}
       </div>
@@ -180,14 +178,14 @@ export default function Explore() {
 
       <FormAlert messages={errors.non_field_errors} />
       <p className="visually-hidden" role="status">
-        {status}
+        {statusMessage}
       </p>
 
-      {!data && !errors.non_field_errors && <p className="muted">Loading…</p>}
+      {!exploreData && !errors.non_field_errors && <p className="muted">Loading…</p>}
 
-      {active && <ActiveOccasion occasion={active} />}
+      {activeOccasion && <ActiveOccasion occasion={activeOccasion} />}
 
-      {occasions && !active && !occasion && (
+      {occasions && !activeOccasion && !occasion && (
         <div className="explore-card explore-done">
           <h2>{occasions.length === 0 ? 'No new occasions right now' : "You're all caught up"}</h2>
           <p className="muted">Check back later for more occasions, or see the ones you're going to.</p>
@@ -202,11 +200,11 @@ export default function Explore() {
           {/* Keyed by occasion id so the entrance animation replays for each card */}
           <OccasionCard key={occasion.id} occasion={occasion} />
           <div className="explore-actions">
-            <button className="btn" type="button" onClick={decline} disabled={joining}>
+            <button className="btn" type="button" onClick={decline} disabled={joinMutation.isPending}>
               Decline
             </button>
-            <button className="btn btn-confirm" type="button" onClick={accept} disabled={joining}>
-              {joining ? 'Joining…' : 'Accept'}
+            <button className="btn btn-confirm" type="button" onClick={accept} disabled={joinMutation.isPending}>
+              {joinMutation.isPending ? 'Joining…' : 'Accept'}
             </button>
           </div>
         </>

@@ -15,10 +15,10 @@ function seed(): PanelTag[] {
 async function openTags(page: Page, tags = seed()) {
   let nextId = 1000
   const list = await mockApi(page, '/api/panel/tags/', {
-    GET: ({ url }) => ({ body: paginate(tags, url, (t) => [t.name]) }),
+    GET: ({ url }) => ({ body: paginate(tags, url, (tag) => [tag.name]) }),
     POST: ({ body }) => {
       const name = String((body as { name: string }).name).trim()
-      if (tags.some((t) => t.name.toLowerCase() === name.toLowerCase())) {
+      if (tags.some((tag) => tag.name.toLowerCase() === name.toLowerCase())) {
         return { status: 400, body: { name: ['A tag with this name already exists.'] } }
       }
       const tag = panelTag({ id: nextId++, name, occasions_count: 0, has_embedding: false })
@@ -30,17 +30,17 @@ async function openTags(page: Page, tags = seed()) {
     PATCH: ({ url, body }) => {
       const id = Number(url.pathname.split('/').at(-2))
       const name = String((body as { name: string }).name).trim()
-      if (tags.some((t) => t.id !== id && t.name.toLowerCase() === name.toLowerCase())) {
+      if (tags.some((tag) => tag.id !== id && tag.name.toLowerCase() === name.toLowerCase())) {
         return { status: 400, body: { name: ['A tag with this name already exists.'] } }
       }
-      const tag = tags.find((t) => t.id === id)!
+      const tag = tags.find((tag) => tag.id === id)!
       tag.name = name
       return { body: tag }
     },
     DELETE: ({ url }) => {
       const id = Number(url.pathname.split('/').at(-2))
       tags.splice(
-        tags.findIndex((t) => t.id === id),
+        tags.findIndex((tag) => tag.id === id),
         1,
       )
       return { status: 204 }
@@ -90,9 +90,9 @@ test.describe('panel tags', () => {
       await openTags(page)
 
       for (const name of ['Hiking', 'Board games']) {
-        const r = row(page, name)
-        await expect(r.getByRole('img', { name: 'Missing' })).toHaveText('–')
-        await expect(r.getByRole('img', { name: 'Ready' })).toHaveCount(0)
+        const tagRow = row(page, name)
+        await expect(tagRow.getByRole('img', { name: 'Missing' })).toHaveText('–')
+        await expect(tagRow.getByRole('img', { name: 'Ready' })).toHaveCount(0)
       }
     })
 
@@ -167,7 +167,7 @@ test.describe('panel tags', () => {
       await expect(climbing.getByRole('cell').nth(1)).toHaveText('0')
       await expect(page.getByLabel('New tag')).toHaveValue('')
       await expect(page.getByText('4 total')).toBeVisible()
-      expect(list.find((c) => c.method === 'POST')!.body).toEqual({ name: 'Climbing' })
+      expect(list.find((call) => call.method === 'POST')!.body).toEqual({ name: 'Climbing' })
     })
 
     test('submitting with Enter adds the tag', async ({ page }) => {
@@ -238,9 +238,9 @@ test.describe('panel tags', () => {
       await expect(renamed.getByRole('cell').nth(1)).toHaveText('3')
       await expect(renamed.getByRole('img', { name: 'Ready' })).toBeVisible()
       await expect(page.getByLabel('Rename “Jazz”')).toHaveCount(0)
-      const patch = detail.find((c) => c.method === 'PATCH')!
-      expect(patch.url.pathname).toBe('/api/panel/tags/1/')
-      expect(patch.body).toEqual({ name: 'Smooth jazz' })
+      const patchCall = detail.find((call) => call.method === 'PATCH')!
+      expect(patchCall.url.pathname).toBe('/api/panel/tags/1/')
+      expect(patchCall.body).toEqual({ name: 'Smooth jazz' })
     })
 
     test('submitting with Enter saves', async ({ page }) => {
@@ -336,8 +336,8 @@ test.describe('panel tags', () => {
 
       await expect(row(page, 'Hiking')).toHaveCount(0)
       await expect(page.getByText('2 total')).toBeVisible()
-      const del = detail.find((c) => c.method === 'DELETE')!
-      expect(del.url.pathname).toBe('/api/panel/tags/2/')
+      const deleteCall = detail.find((call) => call.method === 'DELETE')!
+      expect(deleteCall.url.pathname).toBe('/api/panel/tags/2/')
     })
 
     test('a failed delete shows the error and keeps the tag', async ({ page }) => {

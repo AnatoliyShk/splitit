@@ -55,24 +55,24 @@ class StatsTests(PanelTestCase):
         running.users.add(self.member)
         Occasion.objects.create(name="Soon", start_datetime=now + timedelta(days=3))
 
-        data = self.client.get("/api/panel/stats/").json()
-        self.assertEqual(data["users"], {"total": 2, "active": 2, "staff": 1, "new_this_week": 2})
-        self.assertEqual(data["occasions"], {"total": 4, "upcoming": 2})
-        self.assertEqual([o["name"] for o in data["next_occasions"]], ["Running", "Soon"])
-        self.assertEqual(data["next_occasions"][0]["attendees_count"], 1)
+        stats = self.client.get("/api/panel/stats/").json()
+        self.assertEqual(stats["users"], {"total": 2, "active": 2, "staff": 1, "new_this_week": 2})
+        self.assertEqual(stats["occasions"], {"total": 4, "upcoming": 2})
+        self.assertEqual([occasion["name"] for occasion in stats["next_occasions"]], ["Running", "Soon"])
+        self.assertEqual(stats["next_occasions"][0]["attendees_count"], 1)
 
 
 class UserManagementTests(PanelTestCase):
     def test_list_and_search(self):
-        data = self.client.get("/api/panel/users/", {"search": "memb"}).json()
-        self.assertEqual(data["count"], 1)
-        self.assertEqual(data["results"][0]["email"], "member@example.com")
+        users_page = self.client.get("/api/panel/users/", {"search": "memb"}).json()
+        self.assertEqual(users_page["count"], 1)
+        self.assertEqual(users_page["results"][0]["email"], "member@example.com")
 
     def test_toggle_access_flags(self):
-        res = self.client.patch(
+        response = self.client.patch(
             f"/api/panel/users/{self.member.pk}/", {"is_staff": True, "is_active": False}, format="json"
         )
-        self.assertEqual(res.status_code, 200)
+        self.assertEqual(response.status_code, 200)
         self.member.refresh_from_db()
         self.assertTrue(self.member.is_staff)
         self.assertFalse(self.member.is_active)
@@ -83,18 +83,18 @@ class UserManagementTests(PanelTestCase):
         self.assertEqual(self.member.email, "member@example.com")
 
     def test_cannot_change_own_access(self):
-        res = self.client.patch(f"/api/panel/users/{self.admin.pk}/", {"is_staff": False}, format="json")
-        self.assertEqual(res.status_code, 403)
+        response = self.client.patch(f"/api/panel/users/{self.admin.pk}/", {"is_staff": False}, format="json")
+        self.assertEqual(response.status_code, 403)
 
     def test_staff_cannot_change_superuser(self):
         boss = User.objects.create_superuser("boss@example.com", PASSWORD, name="Boss")
-        res = self.client.patch(f"/api/panel/users/{boss.pk}/", {"is_active": False}, format="json")
-        self.assertEqual(res.status_code, 403)
+        response = self.client.patch(f"/api/panel/users/{boss.pk}/", {"is_active": False}, format="json")
+        self.assertEqual(response.status_code, 403)
 
 
 class OccasionManagementTests(PanelTestCase):
     def test_create_update_delete(self):
-        res = self.client.post(
+        response = self.client.post(
             "/api/panel/occasions/",
             {
                 "name": "Trip",
@@ -104,76 +104,76 @@ class OccasionManagementTests(PanelTestCase):
             },
             format="json",
         )
-        self.assertEqual(res.status_code, 201)
-        occasion = res.json()
+        self.assertEqual(response.status_code, 201)
+        occasion = response.json()
         self.assertEqual(occasion["start_datetime"], "2026-10-10T15:00:00Z")  # stored and returned in UTC
         self.assertEqual(occasion["duration_minutes"], 2 * 24 * 60 + 150)
         self.assertEqual(occasion["attendees"][0]["name"], "Member")
 
-        res = self.client.patch(f"/api/panel/occasions/{occasion['id']}/", {"users": []}, format="json")
-        self.assertEqual(res.json()["attendees"], [])
+        response = self.client.patch(f"/api/panel/occasions/{occasion['id']}/", {"users": []}, format="json")
+        self.assertEqual(response.json()["attendees"], [])
 
-        res = self.client.delete(f"/api/panel/occasions/{occasion['id']}/")
-        self.assertEqual(res.status_code, 204)
+        response = self.client.delete(f"/api/panel/occasions/{occasion['id']}/")
+        self.assertEqual(response.status_code, 204)
         self.assertFalse(Occasion.objects.exists())
 
     def test_tags_are_set_by_id_and_read_back_with_names(self):
         jazz, blues = Tag.objects.create(name="jazz"), Tag.objects.create(name="Blues")
-        res = self.client.post(
+        response = self.client.post(
             "/api/panel/occasions/",
             {"name": "Gig", "start_datetime": "2026-10-10T18:00:00Z", "tag_ids": [jazz.pk, blues.pk]},
             format="json",
         )
-        self.assertEqual(res.status_code, 201)
-        occasion = res.json()
+        self.assertEqual(response.status_code, 201)
+        occasion = response.json()
         self.assertNotIn("tag_ids", occasion)
         # Sorted case-insensitively, like the tag list
         self.assertEqual(occasion["tags"], [{"id": blues.pk, "name": "Blues"}, {"id": jazz.pk, "name": "jazz"}])
 
-        res = self.client.patch(f"/api/panel/occasions/{occasion['id']}/", {"tag_ids": [jazz.pk]}, format="json")
-        self.assertEqual(res.json()["tags"], [{"id": jazz.pk, "name": "jazz"}])
+        response = self.client.patch(f"/api/panel/occasions/{occasion['id']}/", {"tag_ids": [jazz.pk]}, format="json")
+        self.assertEqual(response.json()["tags"], [{"id": jazz.pk, "name": "jazz"}])
         # Leaving tag_ids out keeps them
-        res = self.client.patch(f"/api/panel/occasions/{occasion['id']}/", {"name": "Gig 2"}, format="json")
-        self.assertEqual(res.json()["tags"], [{"id": jazz.pk, "name": "jazz"}])
+        response = self.client.patch(f"/api/panel/occasions/{occasion['id']}/", {"name": "Gig 2"}, format="json")
+        self.assertEqual(response.json()["tags"], [{"id": jazz.pk, "name": "jazz"}])
 
     def test_unknown_tag_is_rejected(self):
-        res = self.client.post(
+        response = self.client.post(
             "/api/panel/occasions/",
             {"name": "Gig", "start_datetime": "2026-10-10T18:00:00Z", "tag_ids": [999]},
             format="json",
         )
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("tag_ids", res.json())
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("tag_ids", response.json())
 
     def test_end_not_after_start_is_rejected(self):
         for end in ("2026-10-10T17:00:00Z", "2026-10-10T18:00:00Z"):
             with self.subTest(end=end):
-                res = self.client.post(
+                response = self.client.post(
                     "/api/panel/occasions/",
                     {"name": "Bad", "start_datetime": "2026-10-10T18:00:00Z", "end_datetime": end},
                     format="json",
                 )
-                self.assertEqual(res.status_code, 400)
-                self.assertIn("end_datetime", res.json())
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("end_datetime", response.json())
 
     def test_partial_update_checks_end_against_stored_start(self):
         occasion = Occasion.objects.create(name="Trip", start_datetime="2026-10-10T18:00:00Z")
-        res = self.client.patch(
+        response = self.client.patch(
             f"/api/panel/occasions/{occasion.pk}/", {"end_datetime": "2026-10-10T09:00:00Z"}, format="json"
         )
-        self.assertEqual(res.status_code, 400)
+        self.assertEqual(response.status_code, 400)
 
     def test_open_ended_occasion_has_no_duration(self):
-        res = self.client.post(
+        response = self.client.post(
             "/api/panel/occasions/", {"name": "Open", "start_datetime": "2026-10-10T18:00:00Z"}, format="json"
         )
-        self.assertIsNone(res.json()["duration_minutes"])
+        self.assertIsNone(response.json()["duration_minutes"])
 
     def test_finish_running_occasion_ends_it_now(self):
         start = timezone.now() - timedelta(hours=1)
         occasion = Occasion.objects.create(name="Live", start_datetime=start, end_datetime=start + timedelta(hours=3))
-        res = self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
-        self.assertEqual(res.status_code, 200)
+        response = self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
+        self.assertEqual(response.status_code, 200)
         occasion.refresh_from_db()
         self.assertEqual(occasion.start_datetime, start)
         self.assertLessEqual(occasion.end_datetime, timezone.now())
@@ -200,15 +200,19 @@ class OccasionManagementTests(PanelTestCase):
         occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
         with self.captureOnCommitCallbacks(execute=True):
             self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
-        [job] = [r for r in default_task_backend.results if r.task.name == "apply_occasion_connections"]
+        [job] = [
+            task_result
+            for task_result in default_task_backend.results
+            if task_result.task.name == "apply_occasion_connections"
+        ]
         self.assertEqual(job.args, [occasion.pk])
         self.assertIsNone(job.task.run_after)
 
     def test_finish_ended_occasion_is_rejected(self):
         occasion = Occasion.objects.create(name="Past", start_datetime=timezone.now() - timedelta(days=1))
-        res = self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("non_field_errors", res.json())
+        response = self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("non_field_errors", response.json())
 
     def test_finish_frees_its_attendees_straight_away(self):
         occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
@@ -219,26 +223,26 @@ class OccasionManagementTests(PanelTestCase):
     def test_cancel_marks_it_cancelled_and_frees_its_attendees(self):
         occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
         occasion.users.add(self.member)
-        res = self.client.post(f"/api/panel/occasions/{occasion.pk}/cancel/")
-        self.assertEqual(res.status_code, 200)
-        self.assertIsNotNone(res.json()["cancelled_at"])
+        response = self.client.post(f"/api/panel/occasions/{occasion.pk}/cancel/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.json()["cancelled_at"])
         self.assertFalse(OccasionUser.objects.get(occasion=occasion, user=self.member).is_active)
         # Still listed, with its attendees, but no longer upcoming
-        self.assertEqual(res.json()["attendees"][0]["id"], self.member.pk)
+        self.assertEqual(response.json()["attendees"][0]["id"], self.member.pk)
         self.assertEqual(self.client.get("/api/panel/stats/").json()["occasions"]["upcoming"], 0)
 
     def test_cancel_or_finish_twice_is_rejected(self):
         occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
         self.client.post(f"/api/panel/occasions/{occasion.pk}/cancel/")
         for action in ("cancel", "finish"):
-            res = self.client.post(f"/api/panel/occasions/{occasion.pk}/{action}/")
-            self.assertEqual(res.status_code, 400)
-            self.assertEqual(res.json()["non_field_errors"], ["This occasion was cancelled."])
+            response = self.client.post(f"/api/panel/occasions/{occasion.pk}/{action}/")
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.json()["non_field_errors"], ["This occasion was cancelled."])
 
     def test_cancel_ended_occasion_is_rejected(self):
         occasion = Occasion.objects.create(name="Past", start_datetime=timezone.now() - timedelta(days=1))
-        res = self.client.post(f"/api/panel/occasions/{occasion.pk}/cancel/")
-        self.assertEqual(res.status_code, 400)
+        response = self.client.post(f"/api/panel/occasions/{occasion.pk}/cancel/")
+        self.assertEqual(response.status_code, 400)
         self.assertIsNone(Occasion.objects.get(pk=occasion.pk).cancelled_at)
 
     def test_cancel_is_staff_only(self):
@@ -247,9 +251,9 @@ class OccasionManagementTests(PanelTestCase):
         self.assertEqual(self.client.post(f"/api/panel/occasions/{occasion.pk}/cancel/").status_code, 403)
 
     def test_create_test_occasion_with_existing_users(self):
-        res = self.client.post("/api/panel/occasions/test/")
-        self.assertEqual(res.status_code, 201)
-        occasion = Occasion.objects.get(pk=res.json()["id"])
+        response = self.client.post("/api/panel/occasions/test/")
+        self.assertEqual(response.status_code, 201)
+        occasion = Occasion.objects.get(pk=response.json()["id"])
         self.assertGreater(occasion.start_datetime, timezone.now())
         self.assertGreater(occasion.end_datetime, occasion.start_datetime)
         attendees = list(occasion.users.all())
@@ -260,12 +264,12 @@ class OccasionManagementTests(PanelTestCase):
 
     def test_create_test_occasion_creates_users_when_there_are_none(self):
         self.member.delete()
-        res = self.client.post("/api/panel/occasions/test/")
-        attendees = res.json()["attendees"]
+        response = self.client.post("/api/panel/occasions/test/")
+        attendees = response.json()["attendees"]
         self.assertTrue(1 <= len(attendees) <= 3)
         created = User.objects.filter(email__startswith="test-")
         self.assertEqual(created.count(), len(attendees))
-        self.assertFalse(any(u.has_usable_password() for u in created))
+        self.assertFalse(any(user.has_usable_password() for user in created))
 
     def test_create_test_occasion_is_staff_only(self):
         self.client.force_login(self.member)
@@ -278,17 +282,18 @@ class TagManagementTests(PanelTestCase):
         jazz = Tag.objects.create(name="jazz")
         Tag.objects.create(name="Art")
         jazz.occasions.add(Occasion.objects.create(name="Gig", start_datetime=timezone.now()))
-        data = self.client.get("/api/panel/tags/").json()
-        self.assertEqual([(t["name"], t["occasions_count"]) for t in data["results"]], [("Art", 0), ("jazz", 1)])
+        tags_page = self.client.get("/api/panel/tags/").json()
+        tag_counts = [(tag["name"], tag["occasions_count"]) for tag in tags_page["results"]]
+        self.assertEqual(tag_counts, [("Art", 0), ("jazz", 1)])
 
     def test_create_rename_delete(self):
-        res = self.client.post("/api/panel/tags/", {"name": "  Hiking "}, format="json")
-        self.assertEqual(res.status_code, 201)
-        tag = res.json()
+        response = self.client.post("/api/panel/tags/", {"name": "  Hiking "}, format="json")
+        self.assertEqual(response.status_code, 201)
+        tag = response.json()
         self.assertEqual((tag["name"], tag["occasions_count"]), ("Hiking", 0))
 
-        res = self.client.patch(f"/api/panel/tags/{tag['id']}/", {"name": "Hikes"}, format="json")
-        self.assertEqual(res.json()["name"], "Hikes")
+        response = self.client.patch(f"/api/panel/tags/{tag['id']}/", {"name": "Hikes"}, format="json")
+        self.assertEqual(response.json()["name"], "Hikes")
 
         self.assertEqual(self.client.delete(f"/api/panel/tags/{tag['id']}/").status_code, 204)
         self.assertFalse(Tag.objects.exists())
@@ -296,27 +301,28 @@ class TagManagementTests(PanelTestCase):
     def test_list_shows_whether_each_tag_has_an_embedding(self):
         Tag.objects.create(name="Art", embedding=[1.0] * EMBEDDING_DIMENSIONS)
         Tag.objects.create(name="Jazz")
-        data = self.client.get("/api/panel/tags/").json()
-        self.assertEqual([(t["name"], t["has_embedding"]) for t in data["results"]], [("Art", True), ("Jazz", False)])
+        tags_page = self.client.get("/api/panel/tags/").json()
+        tag_embeddings = [(tag["name"], tag["has_embedding"]) for tag in tags_page["results"]]
+        self.assertEqual(tag_embeddings, [("Art", True), ("Jazz", False)])
 
     def test_duplicate_name_is_rejected_case_insensitively(self):
         Tag.objects.create(name="Jazz")
-        res = self.client.post("/api/panel/tags/", {"name": "JAZZ"}, format="json")
-        self.assertEqual(res.status_code, 400)
-        self.assertEqual(res.json()["name"], ["A tag with this name already exists."])
+        response = self.client.post("/api/panel/tags/", {"name": "JAZZ"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["name"], ["A tag with this name already exists."])
 
     def test_renaming_to_own_name_with_new_case_is_allowed(self):
         tag = Tag.objects.create(name="jazz")
-        res = self.client.patch(f"/api/panel/tags/{tag.pk}/", {"name": "Jazz"}, format="json")
-        self.assertEqual(res.status_code, 200)
+        response = self.client.patch(f"/api/panel/tags/{tag.pk}/", {"name": "Jazz"}, format="json")
+        self.assertEqual(response.status_code, 200)
 
 
 class TagListCacheTests(PanelTestCase):
     def names(self, **params):
-        return [t["name"] for t in self.client.get("/api/panel/tags/", params).json()["results"]]
+        return [tag["name"] for tag in self.client.get("/api/panel/tags/", params).json()["results"]]
 
     def row(self, name):
-        return next(t for t in self.client.get("/api/panel/tags/").json()["results"] if t["name"] == name)
+        return next(tag for tag in self.client.get("/api/panel/tags/").json()["results"] if tag["name"] == name)
 
     def test_repeat_requests_are_served_from_cache(self):
         tag = Tag.objects.create(name="Jazz")
@@ -397,12 +403,12 @@ class OccasionImageTests(PanelTestCase):
     def stored_files(self):
         from pathlib import Path
 
-        return sorted(p.name for p in Path(self.media).rglob("*") if p.is_file())
+        return sorted(path.name for path in Path(self.media).rglob("*") if path.is_file())
 
     def test_upload_fills_a_slot_and_returns_the_images(self):
-        res = self.upload(0)
-        self.assertEqual(res.status_code, 201)
-        [image] = res.json()["images"]
+        response = self.upload(0)
+        self.assertEqual(response.status_code, 201)
+        [image] = response.json()["images"]
         self.assertEqual(image["order"], 0)
         self.assertRegex(image["url"], rf"^/media/occasions/{self.occasion.pk}/[0-9a-f]{{32}}\.png$")
         self.assertEqual(len(self.stored_files()), 1)
@@ -410,8 +416,8 @@ class OccasionImageTests(PanelTestCase):
     def test_images_come_back_in_order(self):
         for order in (2, 0, 1):
             self.upload(order)
-        data = self.client.get(f"/api/panel/occasions/{self.occasion.pk}/").json()
-        self.assertEqual([i["order"] for i in data["images"]], [0, 1, 2])
+        occasion_data = self.client.get(f"/api/panel/occasions/{self.occasion.pk}/").json()
+        self.assertEqual([image["order"] for image in occasion_data["images"]], [0, 1, 2])
 
     def test_uploading_to_a_taken_slot_replaces_the_image_and_its_file(self):
         first = self.upload(1).json()["images"][0]["url"]
@@ -424,9 +430,9 @@ class OccasionImageTests(PanelTestCase):
         self.upload(0)
         self.upload(3)
         with self.captureOnCommitCallbacks(execute=True):
-            res = self.client.delete(f"{self.url}3/")
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual([i["order"] for i in res.json()["images"]], [0])
+            response = self.client.delete(f"{self.url}3/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([image["order"] for image in response.json()["images"]], [0])
         self.assertEqual(len(self.stored_files()), 1)
         self.assertEqual(self.client.delete(f"{self.url}3/").status_code, 404)
 
@@ -439,19 +445,19 @@ class OccasionImageTests(PanelTestCase):
 
     def test_order_must_be_a_slot_from_0_to_3(self):
         for order in (-1, 4):
-            res = self.upload(order)
-            self.assertEqual(res.status_code, 400)
-            self.assertIn("order", res.json())
+            response = self.upload(order)
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("order", response.json())
         self.assertEqual(self.stored_files(), [])
 
     def test_rejects_files_that_are_not_web_images(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
 
-        res = self.upload(0, SimpleUploadedFile("notes.png", b"not an image", content_type="image/png"))
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("image", res.json())
-        res = self.upload(0, image_file("photo.gif", "GIF"))
-        self.assertEqual(res.json()["image"], ["Use a JPEG, PNG or WebP image."])
+        response = self.upload(0, SimpleUploadedFile("notes.png", b"not an image", content_type="image/png"))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("image", response.json())
+        response = self.upload(0, image_file("photo.gif", "GIF"))
+        self.assertEqual(response.json()["image"], ["Use a JPEG, PNG or WebP image."])
 
     def test_rejects_images_over_5_mb(self):
         from apps.panel import serializers
@@ -459,10 +465,10 @@ class OccasionImageTests(PanelTestCase):
         original = serializers.MAX_IMAGE_BYTES
         serializers.MAX_IMAGE_BYTES = 10
         try:
-            res = self.upload(0)
+            response = self.upload(0)
         finally:
             serializers.MAX_IMAGE_BYTES = original
-        self.assertEqual(res.json()["image"], ["The image must be 5 MB or smaller."])
+        self.assertEqual(response.json()["image"], ["The image must be 5 MB or smaller."])
 
     def test_images_are_staff_only(self):
         self.client.force_login(self.member)

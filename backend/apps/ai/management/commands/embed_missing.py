@@ -18,12 +18,12 @@ class Command(BaseCommand):
         for model_cls in embedded_models():
             if model and model_cls._meta.app_label != model:
                 continue
-            done = 0
+            embedded_count = 0
             while batch := list(model_cls.objects.filter(embedding=None).order_by("pk")[:BATCH_SIZE]):
-                vectors = embed_texts([embedding_text(obj) for obj in batch])
-                for obj, vector in zip(batch, vectors):
-                    model_cls.objects.filter(pk=obj.pk).update(embedding=vector)
-                done += len(batch)
-            if done:
+                vectors = embed_texts([embedding_text(model_instance) for model_instance in batch])
+                for model_instance, vector in zip(batch, vectors):
+                    model_cls.objects.filter(pk=model_instance.pk).update(embedding=vector)
+                embedded_count += len(batch)
+            if embedded_count:
                 embedding_updated.send(sender=model_cls)
-            self.stdout.write(f"{model_cls._meta.verbose_name_plural}: embedded {done}")
+            self.stdout.write(f"{model_cls._meta.verbose_name_plural}: embedded {embedded_count}")

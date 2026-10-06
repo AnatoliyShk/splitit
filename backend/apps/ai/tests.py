@@ -45,12 +45,13 @@ class EmbedTextsTests(FakeGeminiMixin, TestCase):
     def test_returns_unit_vectors_of_the_column_size(self):
         [vector] = client.embed_texts(["Jazz"])
         self.assertEqual(len(vector), EMBEDDING_DIMENSIONS)
-        self.assertAlmostEqual(sum(v * v for v in vector), 1.0)
+        self.assertAlmostEqual(sum(value * value for value in vector), 1.0)
 
     def test_sends_large_inputs_in_batches(self):
-        vectors = client.embed_texts([f"tag {i}" for i in range(client.BATCH_SIZE + 1)])
+        vectors = client.embed_texts([f"tag {tag_number}" for tag_number in range(client.BATCH_SIZE + 1)])
         self.assertEqual(len(vectors), client.BATCH_SIZE + 1)
-        self.assertEqual([len(c.kwargs["contents"]) for c in self.embed_content.call_args_list], [client.BATCH_SIZE, 1])
+        batch_sizes = [len(embed_call.kwargs["contents"]) for embed_call in self.embed_content.call_args_list]
+        self.assertEqual(batch_sizes, [client.BATCH_SIZE, 1])
 
     def test_query_uses_the_query_task_type(self):
         client.embed_query("live music")

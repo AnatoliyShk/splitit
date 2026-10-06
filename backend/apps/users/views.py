@@ -22,10 +22,10 @@ class CsrfEnforcedSessionAuthentication(SessionAuthentication):
     """DRF only checks CSRF for logged-in users; also check it for anonymous ones to block login CSRF."""
 
     def authenticate(self, request):
-        result = super().authenticate(request)
-        if result is None:
+        user_and_auth = super().authenticate(request)
+        if user_and_auth is None:
             self.enforce_csrf(request)
-        return result
+        return user_and_auth
 
 
 class AuthView(APIView):
