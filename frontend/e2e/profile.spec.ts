@@ -77,13 +77,13 @@ test.describe('your occasions', () => {
     const upcoming = occasions.locator('.profile-occasions', { has: page.getByRole('heading', { name: 'Upcoming' }) })
     const past = occasions.locator('.profile-occasions', { has: page.getByRole('heading', { name: 'Past' }) })
 
-    await expect(upcoming.getByRole('listitem')).toHaveCount(2)
-    await expect(upcoming.getByRole('listitem').nth(0)).toContainText('Board Game Night')
-    await expect(upcoming.getByRole('listitem').nth(1)).toContainText('Hike Day')
+    await expect(upcoming.getByRole('link')).toHaveCount(2)
+    await expect(upcoming.getByRole('link').nth(0)).toContainText('Board Game Night')
+    await expect(upcoming.getByRole('link').nth(1)).toContainText('Hike Day')
 
-    await expect(past.getByRole('listitem')).toHaveCount(2)
-    await expect(past.getByRole('listitem').nth(0)).toContainText('Last Week Picnic')
-    await expect(past.getByRole('listitem').nth(1)).toContainText('Old Meetup')
+    await expect(past.getByRole('link')).toHaveCount(2)
+    await expect(past.getByRole('link').nth(0)).toContainText('Last Week Picnic')
+    await expect(past.getByRole('link').nth(1)).toContainText('Old Meetup')
     await expect(occasions.getByText("You're not going to any occasions yet.")).toHaveCount(0)
   })
 
@@ -94,7 +94,8 @@ test.describe('your occasions', () => {
       occasions: [makeOccasion(3, 'Board Game Night', 2, { attendees_count: 4, tags: ['games', 'social'] })],
     })
     await page.goto('/profile')
-    const row = page.getByRole('region', { name: 'Your occasions' }).getByRole('listitem')
+    // Each occasion row is one link (its tags are a nested list)
+    const row = page.getByRole('region', { name: 'Your occasions' }).getByRole('link')
     await expect(row).toContainText('Board Game Night')
     await expect(row).toContainText('4 going')
     await expect(row.getByText('games', { exact: true })).toBeVisible()
@@ -111,7 +112,7 @@ test.describe('your occasions', () => {
       ],
     })
     await page.goto('/profile')
-    const rows = page.getByRole('region', { name: 'Your occasions' }).getByRole('listitem')
+    const rows = page.getByRole('region', { name: 'Your occasions' }).getByRole('link')
     await expect(rows.nth(0).getByText('Cancelled', { exact: true })).toHaveCount(0)
     await expect(rows.nth(1).getByText('Cancelled', { exact: true })).toBeVisible()
     await expect(rows.nth(1).getByText('outdoors', { exact: true })).toBeVisible()

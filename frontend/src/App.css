@@ -749,6 +749,10 @@ h1 mark {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  /* Also used as a <ul> (TagList) */
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .tag {

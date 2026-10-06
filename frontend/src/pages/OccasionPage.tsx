@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-route
 import { ApiError, apiGet, useFieldErrors, type FieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { FormAlert } from '../components/Field'
+import { TagList } from '../components/TagList'
 import { queryKeys } from '../queryClient'
 import type { OccasionDetail } from '../types/occasions'
 import { formatRange } from './panel/shared'
@@ -54,17 +55,13 @@ export default function OccasionPage() {
             {occasion.main_image && <img className="occasion-hero" src={occasion.main_image} alt="" />}
             <h1 id="occasion-title">{occasion.name}</h1>
             <p className="explore-when">{formatRange(occasion.start_datetime, occasion.end_datetime)}</p>
-            {(occasion.cancelled_at || occasion.is_going || occasion.tags.length > 0) && (
-              <span className="tags">
-                {occasion.cancelled_at && <span className="tag tag-off">Cancelled</span>}
-                {occasion.is_going && <span className="tag">You're going</span>}
-                {occasion.tags.map((tagName) => (
-                  <span className="tag" key={tagName}>
-                    {tagName}
-                  </span>
-                ))}
-              </span>
-            )}
+            <TagList
+              tagNames={occasion.tags}
+              statusTags={[
+                ...(occasion.cancelled_at ? [{ label: 'Cancelled', off: true }] : []),
+                ...(occasion.is_going ? [{ label: "You're going" }] : []),
+              ]}
+            />
             <p className="explore-going">
               {occasion.attendees_count === 0
                 ? 'Nobody is going yet'

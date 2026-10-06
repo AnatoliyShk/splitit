@@ -30,7 +30,7 @@ frontend/           Vite React app
   src/App.tsx       layout (header, footer) and routes
   src/pages/        Home (landing), Login, Register, Profile, Settings (name/password, linked from Profile), Explore (accept/decline upcoming occasions), OccasionPage (/occasions/:id, main image + gallery; Explore cards and Profile rows link to it)
   src/pages/panel/  admin control panel at /admin (staff only)
-  src/components/   shared UI (form fields, auth card)
+  src/components/   shared UI (form fields, auth card, OccasionCard for Explore, TagList of tag names)
   src/api.ts        fetch helpers with CSRF handling; useFieldErrors() turns query/mutation errors into form errors
   src/queryClient.ts  TanStack QueryClient (retry policy) and `queryKeys`, every query key in one place
   src/types/        API response types shared across pages, one file per backend app (users, occasions, tags, connections); types used by one file stay in it, panel-only types in pages/panel/shared.ts

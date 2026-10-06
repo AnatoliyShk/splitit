@@ -122,12 +122,12 @@ test('a profile row links to the occasion and shows its main image', async ({ pa
   })
   await page.goto('/profile')
 
-  const rows = page.getByRole('region', { name: 'Your occasions' }).getByRole('listitem')
+  const rows = page.getByRole('region', { name: 'Your occasions' }).getByRole('link')
   await expect(rows.nth(0).locator('img.occasion-thumb')).toHaveAttribute('src', '/media/occasions/21/main.png')
   // Without an image the row keeps its date badge
   await expect(rows.nth(1).locator('img')).toHaveCount(0)
   await expect(rows.nth(1).locator('.occasion-date')).toBeVisible()
 
-  await rows.nth(0).getByRole('link').click()
+  await rows.nth(0).click()
   await expect(page).toHaveURL(/\/occasions\/21$/)
 })

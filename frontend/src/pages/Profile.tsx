@@ -4,6 +4,7 @@ import { Link, Navigate, useLocation } from 'react-router'
 import { apiGet, useFieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { FormAlert } from '../components/Field'
+import { TagList } from '../components/TagList'
 import { queryKeys } from '../queryClient'
 import type { Connection } from '../types/connections'
 import type { UserOccasion } from '../types/occasions'
@@ -29,20 +30,15 @@ function OccasionRows({ occasions }: { occasions: UserOccasion[] }) {
                 <small>{monthFormat.format(new Date(occasion.start_datetime))}</small>
               </span>
             )}
-            <span className="occasion-info">
+            <div className="occasion-info">
               <strong>{occasion.name}</strong>
               <small>{formatRange(occasion.start_datetime, occasion.end_datetime)}</small>
-              {(occasion.cancelled_at || occasion.tags.length > 0) && (
-                <span className="tags occasion-tags">
-                  {occasion.cancelled_at && <span className="tag tag-off">Cancelled</span>}
-                  {occasion.tags.map((tagName) => (
-                    <span className="tag" key={tagName}>
-                      {tagName}
-                    </span>
-                  ))}
-                </span>
-              )}
-            </span>
+              <TagList
+                className="occasion-tags"
+                tagNames={occasion.tags}
+                statusTags={occasion.cancelled_at ? [{ label: 'Cancelled', off: true }] : []}
+              />
+            </div>
             <span className="occasion-going">{occasion.attendees_count} going</span>
           </Link>
         </li>
