@@ -33,8 +33,8 @@ const tags = [
 // Every form test needs the user and tag searches (pickers) and the occasions list it returns to
 async function mockCommon(page: Page) {
   await mockStaffSession(page)
-  await mockApi(page, '/api/panel/tags/', { GET: ({ url }) => ({ body: paginate(tags, url, (tag) => [tag.name]) }) })
-  const searches = await mockApi(page, '/api/panel/users/', {
+  await mockApi(page, '/api/admin/tags/', { GET: ({ url }) => ({ body: paginate(tags, url, (tag) => [tag.name]) }) })
+  const searches = await mockApi(page, '/api/admin/users/', {
     GET: ({ url }) => ({
       body: paginate(
         people.map((person) => panelUser({ ...person })),
@@ -43,7 +43,7 @@ async function mockCommon(page: Page) {
       ),
     }),
   })
-  await mockApi(page, '/api/panel/occasions/', {
+  await mockApi(page, '/api/admin/occasions/', {
     GET: () => ({ body: pageOf([panelOccasion({ id: 55, name: 'Saved occasion' })]) }),
   })
   return searches
@@ -69,7 +69,7 @@ test.describe('new occasion', () => {
 
   test('creates an occasion and returns to the list', async ({ page }) => {
     await mockCommon(page)
-    const posts = await mockApi(page, '/api/panel/occasions/', {
+    const posts = await mockApi(page, '/api/admin/occasions/', {
       GET: () => ({ body: pageOf([panelOccasion({ id: 55, name: 'Saved occasion' })]) }),
       POST: ({ body }) => ({ status: 201, body: panelOccasion({ id: 77, ...(body as object) }) }),
     })
@@ -94,7 +94,7 @@ test.describe('new occasion', () => {
 
   test('creates an occasion with no end time', async ({ page }) => {
     await mockCommon(page)
-    const posts = await mockApi(page, '/api/panel/occasions/', {
+    const posts = await mockApi(page, '/api/admin/occasions/', {
       GET: () => ({ body: pageOf([]) }),
       POST: ({ body }) => ({ status: 201, body: panelOccasion({ id: 77, ...(body as object) }) }),
     })
@@ -123,7 +123,7 @@ test.describe('new occasion', () => {
 
   test('Cancel and the back link return to the list without saving', async ({ page }) => {
     await mockCommon(page)
-    const posts = await mockApi(page, '/api/panel/occasions/', {
+    const posts = await mockApi(page, '/api/admin/occasions/', {
       GET: () => ({ body: pageOf([]) }),
       POST: () => ({ status: 201, body: panelOccasion() }),
     })
@@ -142,7 +142,7 @@ test.describe('new occasion', () => {
   test.describe('validation errors', () => {
     test('end before start shows the server error on the Ends field and focuses it', async ({ page }) => {
       await mockCommon(page)
-      await mockApi(page, '/api/panel/occasions/', {
+      await mockApi(page, '/api/admin/occasions/', {
         POST: () => ({ status: 400, body: { end_datetime: ['The end must be after the start.'] } }),
       })
       await page.goto('/admin/occasions/new')
@@ -164,7 +164,7 @@ test.describe('new occasion', () => {
 
     test('sends end-before-start as typed so the server decides', async ({ page }) => {
       await mockCommon(page)
-      const posts = await mockApi(page, '/api/panel/occasions/', {
+      const posts = await mockApi(page, '/api/admin/occasions/', {
         POST: () => ({ status: 400, body: { end_datetime: ['The end must be after the start.'] } }),
       })
       await page.goto('/admin/occasions/new')
@@ -184,7 +184,7 @@ test.describe('new occasion', () => {
 
     test('missing name and start show field errors and focus the first invalid field', async ({ page }) => {
       await mockCommon(page)
-      await mockApi(page, '/api/panel/occasions/', {
+      await mockApi(page, '/api/admin/occasions/', {
         POST: () => ({
           status: 400,
           body: { name: ['This field may not be blank.'], start_datetime: ['This field may not be null.'] },
@@ -202,7 +202,7 @@ test.describe('new occasion', () => {
 
     test('a form-wide error shows as an alert', async ({ page }) => {
       await mockCommon(page)
-      await mockApi(page, '/api/panel/occasions/', {
+      await mockApi(page, '/api/admin/occasions/', {
         POST: () => ({ status: 403, body: { detail: 'You do not have permission.' } }),
       })
       await page.goto('/admin/occasions/new')
@@ -216,7 +216,7 @@ test.describe('new occasion', () => {
     test('errors clear on the next submit', async ({ page }) => {
       await mockCommon(page)
       let attempt = 0
-      await mockApi(page, '/api/panel/occasions/', {
+      await mockApi(page, '/api/admin/occasions/', {
         GET: () => ({ body: pageOf([]) }),
         POST: ({ body }) => {
           attempt += 1
@@ -239,7 +239,7 @@ test.describe('new occasion', () => {
     test('the save button shows a busy state while saving', async ({ page }) => {
       await mockCommon(page)
       const gate = deferred()
-      await mockApi(page, '/api/panel/occasions/', {
+      await mockApi(page, '/api/admin/occasions/', {
         GET: () => ({ body: pageOf([]) }),
         POST: async ({ body }) => {
           await gate.promise
@@ -260,7 +260,7 @@ test.describe('new occasion', () => {
   test.describe('attendee picker', () => {
     test('searches users, adds them as chips and sends their ids', async ({ page }) => {
       const searches = await mockCommon(page)
-      const posts = await mockApi(page, '/api/panel/occasions/', {
+      const posts = await mockApi(page, '/api/admin/occasions/', {
         GET: () => ({ body: pageOf([]) }),
         POST: ({ body }) => ({ status: 201, body: panelOccasion({ ...(body as object) }) }),
       })
@@ -318,7 +318,7 @@ test.describe('new occasion', () => {
 
     test('removing a chip drops the person and sends the remaining ids', async ({ page }) => {
       await mockCommon(page)
-      const posts = await mockApi(page, '/api/panel/occasions/', {
+      const posts = await mockApi(page, '/api/admin/occasions/', {
         GET: () => ({ body: pageOf([]) }),
         POST: ({ body }) => ({ status: 201, body: panelOccasion({ ...(body as object) }) }),
       })
@@ -363,7 +363,7 @@ test.describe('new occasion', () => {
 
     test('shows a server error for the attendees', async ({ page }) => {
       await mockCommon(page)
-      await mockApi(page, '/api/panel/occasions/', {
+      await mockApi(page, '/api/admin/occasions/', {
         POST: () => ({ status: 400, body: { users: ['Invalid pk "999" - object does not exist.'] } }),
       })
       await page.goto('/admin/occasions/new')
@@ -377,7 +377,7 @@ test.describe('new occasion', () => {
 
     test('a failing user search shows no results instead of crashing', async ({ page }) => {
       await mockCommon(page)
-      await mockApi(page, '/api/panel/users/', { GET: () => ({ status: 500, body: { detail: 'down' } }) })
+      await mockApi(page, '/api/admin/users/', { GET: () => ({ status: 500, body: { detail: 'down' } }) })
       await page.goto('/admin/occasions/new')
 
       await page.getByLabel('Add people').fill('ann')
@@ -389,7 +389,7 @@ test.describe('new occasion', () => {
   test.describe('tag picker', () => {
     test('searches tags, adds them as chips and sends their ids', async ({ page }) => {
       await mockCommon(page)
-      const posts = await mockApi(page, '/api/panel/occasions/', {
+      const posts = await mockApi(page, '/api/admin/occasions/', {
         GET: () => ({ body: pageOf([]) }),
         POST: ({ body }) => ({ status: 201, body: panelOccasion({ ...(body as object) }) }),
       })
@@ -436,7 +436,7 @@ test.describe('new occasion', () => {
 
     test('shows a server error for the tags', async ({ page }) => {
       await mockCommon(page)
-      await mockApi(page, '/api/panel/occasions/', {
+      await mockApi(page, '/api/admin/occasions/', {
         POST: () => ({ status: 400, body: { tag_ids: ['Invalid pk "999" - object does not exist.'] } }),
       })
       await page.goto('/admin/occasions/new')
@@ -463,7 +463,7 @@ test.describe('edit occasion', () => {
 
   test('loads the occasion into the form', async ({ page }) => {
     await mockCommon(page)
-    await mockApi(page, '/api/panel/occasions/10/', { GET: () => ({ body: existing }) })
+    await mockApi(page, '/api/admin/occasions/10/', { GET: () => ({ body: existing }) })
     await page.goto('/admin/occasions/10')
 
     await expect(page.getByRole('heading', { name: 'Edit occasion' })).toBeVisible()
@@ -479,7 +479,7 @@ test.describe('edit occasion', () => {
 
   test('leaves Ends empty for an occasion without an end', async ({ page }) => {
     await mockCommon(page)
-    await mockApi(page, '/api/panel/occasions/10/', {
+    await mockApi(page, '/api/admin/occasions/10/', {
       GET: () => ({ body: { ...existing, end_datetime: null, duration_minutes: null } }),
     })
     await page.goto('/admin/occasions/10')
@@ -490,7 +490,7 @@ test.describe('edit occasion', () => {
 
   test('saves changes with PATCH and returns to the list', async ({ page }) => {
     await mockCommon(page)
-    const patches = await mockApi(page, '/api/panel/occasions/10/', {
+    const patches = await mockApi(page, '/api/admin/occasions/10/', {
       GET: () => ({ body: existing }),
       PATCH: ({ body }) => ({ body: { ...existing, ...(body as object) } }),
     })
@@ -520,7 +520,7 @@ test.describe('edit occasion', () => {
 
   test('shows validation errors from the server when saving', async ({ page }) => {
     await mockCommon(page)
-    await mockApi(page, '/api/panel/occasions/10/', {
+    await mockApi(page, '/api/admin/occasions/10/', {
       GET: () => ({ body: existing }),
       PATCH: () => ({ status: 400, body: { end_datetime: ['The end must be after the start.'] } }),
     })
@@ -537,7 +537,7 @@ test.describe('edit occasion', () => {
 
   test('an unknown occasion shows the server error', async ({ page }) => {
     await mockCommon(page)
-    await mockApi(page, '/api/panel/occasions/404/', {
+    await mockApi(page, '/api/admin/occasions/404/', {
       GET: () => ({ status: 404, body: { detail: 'No Occasion matches the given query.' } }),
     })
     await page.goto('/admin/occasions/404')
@@ -548,7 +548,7 @@ test.describe('edit occasion', () => {
   test('shows a loading message until the occasion arrives', async ({ page }) => {
     await mockCommon(page)
     const gate = deferred()
-    await mockApi(page, '/api/panel/occasions/10/', {
+    await mockApi(page, '/api/admin/occasions/10/', {
       GET: async () => {
         await gate.promise
         return { body: existing }
@@ -578,14 +578,14 @@ test.describe('images', () => {
   async function openEdit(page: Page) {
     await mockCommon(page)
     await mockMedia(page)
-    await mockApi(page, '/api/panel/occasions/10/', {
+    await mockApi(page, '/api/admin/occasions/10/', {
       GET: () => ({ body: existing }),
       PATCH: () => ({ body: existing }),
     })
-    const uploads = await mockApi(page, '/api/panel/occasions/10/images/', {
+    const uploads = await mockApi(page, '/api/admin/occasions/10/images/', {
       POST: () => ({ status: 201, body: existing }),
     })
-    const deletes = await mockApi(page, /^\/api\/panel\/occasions\/10\/images\/\d+\/$/, {
+    const deletes = await mockApi(page, /^\/api\/admin\/occasions\/10\/images\/\d+\/$/, {
       DELETE: () => ({ body: existing }),
     })
     await page.goto('/admin/occasions/10')
@@ -639,7 +639,7 @@ test.describe('images', () => {
     await page.getByRole('button', { name: 'Save changes' }).click()
 
     await expect(page).toHaveURL(/\/admin\/occasions$/)
-    expect(deletes.map((call) => call.url.pathname)).toEqual(['/api/panel/occasions/10/images/1/'])
+    expect(deletes.map((call) => call.url.pathname)).toEqual(['/api/admin/occasions/10/images/1/'])
     expect(uploads).toHaveLength(0)
   })
 
@@ -691,11 +691,11 @@ test.describe('images', () => {
 
   test('a new occasion is created first, then its images go to the new id', async ({ page }) => {
     await mockCommon(page)
-    const posts = await mockApi(page, '/api/panel/occasions/', {
+    const posts = await mockApi(page, '/api/admin/occasions/', {
       GET: () => ({ body: pageOf([]) }),
       POST: ({ body }) => ({ status: 201, body: panelOccasion({ id: 77, ...(body as object) }) }),
     })
-    const uploads = await mockApi(page, '/api/panel/occasions/77/images/', {
+    const uploads = await mockApi(page, '/api/admin/occasions/77/images/', {
       POST: () => ({ status: 201, body: panelOccasion({ id: 77 }) }),
     })
     await page.goto('/admin/occasions/new')
@@ -713,15 +713,15 @@ test.describe('images', () => {
 
   test('a failed upload keeps the form open, and saving again updates the created occasion', async ({ page }) => {
     await mockCommon(page)
-    const posts = await mockApi(page, '/api/panel/occasions/', {
+    const posts = await mockApi(page, '/api/admin/occasions/', {
       GET: () => ({ body: pageOf([]) }),
       POST: ({ body }) => ({ status: 201, body: panelOccasion({ id: 77, ...(body as object) }) }),
     })
-    const patches = await mockApi(page, '/api/panel/occasions/77/', {
+    const patches = await mockApi(page, '/api/admin/occasions/77/', {
       PATCH: ({ body }) => ({ body: panelOccasion({ id: 77, ...(body as object) }) }),
     })
     let fail = true
-    await mockApi(page, '/api/panel/occasions/77/images/', {
+    await mockApi(page, '/api/admin/occasions/77/images/', {
       POST: () =>
         fail
           ? { status: 400, body: { image: ['Upload a valid image.'] } }

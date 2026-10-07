@@ -1,3 +1,4 @@
+import { useId, useState } from 'react'
 import { Link } from 'react-router'
 import { formatTimes } from '../pages/panel/shared'
 import type { ExploreOccasion, KnownAttendee } from '../types/occasions'
@@ -29,10 +30,13 @@ function knownText(knownAttendees: KnownAttendee[], othersCount: number) {
   return `You know ${knownAttendees.length} of them: ${namesList}`
 }
 
-// An Explore card. `mine` words the attendee count for an occasion the user is going to
+// An Explore card. Tags and who's going stay folded away until the user clicks the card's bottom strip.
+// `mine` words the attendee count for an occasion the user is going to
 export function OccasionCard({ occasion, mine = false }: { occasion: ExploreOccasion; mine?: boolean }) {
   const startDate = new Date(occasion.start_datetime)
   const knownAttendeesText = knownText(occasion.known_attendees, occasion.attendees_count - (mine ? 1 : 0))
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const detailsId = useId()
   return (
     <article className="explore-card" aria-labelledby="explore-occasion-name">
       {occasion.main_image && <img className="explore-image" src={occasion.main_image} alt="" />}
@@ -52,11 +56,29 @@ export function OccasionCard({ occasion, mine = false }: { occasion: ExploreOcca
           <p className="explore-when">{formatTimes(occasion.start_datetime, occasion.end_datetime)}</p>
         </div>
       </div>
-      <TagList tagNames={occasion.tags} />
-      <div className="explore-going">
-        <p>{goingText(occasion.attendees_count, mine)}</p>
-        {knownAttendeesText && <p className="muted">{knownAttendeesText}</p>}
+      {/* Always rendered so it can slide open; while closed, CSS hides it from screen readers and the tab order too */}
+      <div className="explore-details" id={detailsId} data-open={detailsOpen}>
+        <div className="explore-details-body">
+          <TagList tagNames={occasion.tags} />
+          <div className="explore-going">
+            <p>{goingText(occasion.attendees_count, mine)}</p>
+            {knownAttendeesText && <p className="muted">{knownAttendeesText}</p>}
+          </div>
+        </div>
       </div>
+      {/* The card's bottom strip: clicking anywhere on it rolls the details open above it */}
+      <button
+        className="explore-details-toggle"
+        type="button"
+        aria-expanded={detailsOpen}
+        aria-controls={detailsId}
+        onClick={() => setDetailsOpen((open) => !open)}
+      >
+        {detailsOpen ? 'Hide details' : 'Show details'}
+        <span className="explore-details-chevron" aria-hidden="true">
+          ▾
+        </span>
+      </button>
     </article>
   )
 }

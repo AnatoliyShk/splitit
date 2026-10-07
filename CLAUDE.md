@@ -4,7 +4,7 @@ Splitit helps people go to occasions together and find community and friends. Us
 
 ## Stack
 
-- **Backend:** Django 6 + Django REST Framework, Python 3.12, dependencies managed with uv (`backend/pyproject.toml`, `backend/uv.lock`)
+- **Backend:** Django 6 + Django REST Framework, Python 3.12, dependencies managed with uv (`backend/pyproject.toml`, `backend/uv.lock`); OpenAPI docs by drf-spectacular
 - **Frontend:** React 19 + TypeScript + Vite, Yarn 4, linted with oxlint; server data fetched with TanStack Query (`src/queryClient.ts`)
 - **Database:** PostgreSQL 17 with pgvector (`pgvector/pgvector:pg17` image); `occasions` and `tags` have 768-dim `embedding` columns with HNSW cosine indexes
 - **Cache:** Redis 7 (Django's `CACHES` default backend)
@@ -19,22 +19,24 @@ backend/            Django project
   config/           settings, root urls, wsgi/asgi
   apps/api/         REST API app (urls mounted at /api/)
   apps/users/       custom User (email login, public UUIDv7 `uuid`) + session auth API at /api/auth/; user_from_url() guards /api/users/<uuid>/ routes
+                    FilterPreference (one per user, table `filter_preferences`): saved Explore filters, normalized to 5NF; one table per filter kind: tags (`filter_preference_tags`) and ISO weekdays 1-7 (`filter_preference_weekdays`). No JSON columns for filters. GET/PUT /api/users/<uuid>/filter-preference/ reads and replaces them; Explore lists only occasions with any saved tag that start on a saved weekday (UTC)
   apps/occasions/   Occasion model (many-to-many with users through OccasionUser, table `occasion_users`, app label `occasions`); GET /api/users/<uuid>/occasions/, GET /api/occasions/explore/, GET /api/occasions/<id>/, POST /api/occasions/<id>/join/
-                    OccasionImage (table `occasion_images`): `order` 0 is the main image (cards, lists), 1-3 the gallery on the occasion page; uploaded in the panel via POST/DELETE /api/panel/occasions/<id>/images/[<order>/]; files live in MEDIA_ROOT (backend/media, git-ignored) and are removed with their row
+                    OccasionImage (table `occasion_images`): `order` 0 is the main image (cards, lists), 1-3 the gallery on the occasion page; uploaded in the panel via POST/DELETE /api/admin/occasions/<id>/images/[<order>/]; files live in MEDIA_ROOT (backend/media, git-ignored) and are removed with their row
                     One occasion at a time: OccasionUser.is_active stays on until the occasion ends or is cancelled (panel Cancel sets `cancelled_at`); join returns 409 while another is active, and explore returns `active_occasion` instead of the deck. A worker task flips is_active off when an occasion ends; `manage.py deactivate_finished` sweeps manually
-  apps/tags/        Tag model (many-to-many with occasions: tag.occasions / occasion.tags)
-  apps/panel/       staff-only admin API at /api/panel/ (stats, users, occasions)
+  apps/tags/        Tag model (many-to-many with occasions: tag.occasions / occasion.tags); GET /api/tags/ lists every tag (for Explore filters)
+  apps/panel/       staff-only admin API at /api/admin/ (stats, users, occasions)
   apps/ai/          Gemini embedding client; saving a tag/occasion queues a task that fills its embedding
   apps/connections/ Connection between users who shared occasions (strength += 1/(attendees-1) per occasion, counted after it ends by a worker task); GET /api/users/<uuid>/connections/ and .../connections/graph/ (network for the profile graph); `manage.py apply_connections [--rebuild]`
 frontend/           Vite React app
   src/App.tsx       layout (header, footer) and routes
-  src/pages/        Home (landing), Login, Register, Profile, Settings (name/password, linked from Profile), Explore (accept/decline upcoming occasions), OccasionPage (/occasions/:id, main image + gallery; Explore cards and Profile rows link to it)
+  src/pages/        Home (landing), Login, Register, Profile, Settings (name/password, linked from Profile), Explore (accept/decline upcoming occasions; the ExploreFilters panel saves tag and weekday filters), OccasionPage (/occasions/:id, main image + gallery; Explore cards and Profile rows link to it)
   src/pages/panel/  admin control panel at /admin (staff only)
   src/components/   shared UI (form fields, auth card, OccasionCard for Explore, TagList of tag names)
   src/api.ts        fetch helpers with CSRF handling; useFieldErrors() turns query/mutation errors into form errors
   src/queryClient.ts  TanStack QueryClient (retry policy) and `queryKeys`, every query key in one place
   src/types/        API response types shared across pages, one file per backend app (users, occasions, tags, connections); types used by one file stay in it, panel-only types in pages/panel/shared.ts
   src/auth.ts       useAuth() hook; state lives in AuthProvider.tsx
+  src/filterPreference.ts  useFilterPreference(): the user's saved Explore filters
   src/index.css     design tokens (colors, borders, shadows, fonts)
   src/App.css       component styles
 docker-compose.yml  db, redis, backend, worker, frontend
@@ -51,6 +53,7 @@ docker compose up -d --build
 
 - Frontend: http://localhost:5173 (Vite proxies `/api` and `/media` to the backend)
 - Backend: http://localhost:5000 (`/django-admin/`, `/api/health/`)
+- API docs: http://localhost:5000/api/docs/ (Swagger UI) and `/api/schema/` (OpenAPI), without the admin API; open to anyone while `DJANGO_DEBUG=1`, staff only otherwise. The admin API has its own staff-only docs at `/api/admin/docs/` and `/api/admin/schema/` (split by the hooks in `config/schema.py`). Plain `APIView`s need `@extend_schema(request=..., responses=...)` to show their bodies; check with `manage.py spectacular --validate --fail-on-warn --file /tmp/schema.yml`
 - Postgres and Redis are bound to 127.0.0.1 on the ports in `.env`
 
 If a host port is taken, change the matching `*_HOST_PORT` in `.env`.
@@ -104,7 +107,7 @@ Thick ink borders, hard offset shadows, flat pastel fills, rounded corners, bold
 Color rules are strict:
 
 - `--primary` (yellow) and `--secondary` (lilac) are the **only** colors for decorating elements.
-- `--danger` (red) is **only** for terminal actions: exit, log out, delete (`.btn-danger`).
+- `--danger` (red) is **only** for terminal actions: exit, log out, delete, and Decline on Explore (`.btn-danger`).
 - `--confirm` (green) is **only** for apply and confirm actions (`.btn-confirm`).
 - Never use danger or confirm colors for decoration or status. Status indicators stay neutral.
 

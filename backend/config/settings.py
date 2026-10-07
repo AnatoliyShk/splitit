@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.postgres',
     "rest_framework",
+    "drf_spectacular",
     "apps.api",
     "apps.users",
     "apps.occasions",
@@ -129,6 +130,23 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'auth': '10/min',
     },
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# OpenAPI schema at /api/schema/, Swagger UI at /api/docs/ (admin API: /api/admin/schema/, /api/admin/docs/). Swagger's "Try it out" uses your session
+# cookie and sends the CSRF token itself, so log in on the site first
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Splitit API',
+    'DESCRIPTION': 'Occasions, tags, connections and the staff panel. Uses session auth with CSRF.',
+    'VERSION': '1.0.0',
+    # The schema itself isn't an endpoint of the API
+    'SERVE_INCLUDE_SCHEMA': False,
+    # The admin API (/api/admin/) is left out here; staff read it at /api/admin/docs/ (see config/urls.py)
+    'PREPROCESSING_HOOKS': ['config.schema.public_endpoints'],
+    # Anyone while developing; staff only in production, so the docs don't map the API for strangers
+    'SERVE_PERMISSIONS': [
+        'rest_framework.permissions.AllowAny' if DEBUG else 'rest_framework.permissions.IsAdminUser'
+    ],
 }
 
 

@@ -1,7 +1,8 @@
 import type { Page, Route } from '@playwright/test'
 import type { Connection, Network } from '../../src/types/connections'
 import type { ExploreOccasion } from '../../src/types/occasions'
-import type { User } from '../../src/types/users'
+import type { Tag } from '../../src/types/tags'
+import type { FilterPreference, User } from '../../src/types/users'
 
 export type TestUser = User
 
@@ -73,6 +74,10 @@ export type MockOptions = {
   explore?: TestOccasion[] | number
   /** The occasion the user is going to; explore then sends it as `active_occasion` with no other occasions. */
   active?: TestOccasion
+  /** Saved filters for GET /api/users/<uuid>/filter-preference/; defaults to none. A number makes it fail. */
+  filters?: FilterPreference | number
+  /** Every tag, for GET /api/tags/; defaults to none. A number makes it fail. */
+  tags?: Tag[] | number
   /** Extra handlers, keyed by "METHOD /api/path/". Take precedence over the defaults. */
   handlers?: Record<string, (route: Route, body: unknown) => Promise<void> | void>
 }
@@ -122,6 +127,16 @@ export async function mockApi(page: Page, options: MockOptions): Promise<Mock> {
       if (uuid && pathname === `/api/users/${uuid}/occasions/`) return respond(route, options.occasions)
       if (uuid && pathname === `/api/users/${uuid}/connections/`) return respond(route, options.connections)
       if (uuid && pathname === `/api/users/${uuid}/connections/graph/`) return respond(route, options.graph)
+      if (uuid && pathname === `/api/users/${uuid}/filter-preference/`) {
+        return respond(route, options.filters ?? { tags: [], weekdays: [] })
+      }
+      if (pathname === '/api/tags/') return respond(route, options.tags ?? [])
+    }
+    // Saving filters echoes them back, with the chosen tags looked up by id
+    if (method === 'PUT' && uuid && pathname === `/api/users/${uuid}/filter-preference/`) {
+      const { tag_ids, weekdays } = mock.bodies[key] as { tag_ids: number[]; weekdays: FilterPreference['weekdays'] }
+      const allTags = Array.isArray(options.tags) ? options.tags : []
+      return json(route, 200, { tags: allTags.filter((tag) => tag_ids.includes(tag.id)), weekdays })
     }
     return json(route, 404, { detail: 'Not mocked.' })
   })

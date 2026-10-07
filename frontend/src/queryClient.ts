@@ -23,6 +23,8 @@ export const queryKeys = {
   userOccasions: (userUuid: string) => ['users', userUuid, 'occasions'] as const,
   userConnections: (userUuid: string) => ['users', userUuid, 'connections'] as const,
   connectionsGraph: (userUuid: string) => ['users', userUuid, 'connections', 'graph'] as const,
+  filterPreference: (userUuid: string) => ['users', userUuid, 'filter-preference'] as const,
+  tags: ['tags'] as const,
   explore: ['occasions', 'explore'] as const,
   occasion: (occasionId: string) => ['occasions', occasionId] as const,
   panel: {

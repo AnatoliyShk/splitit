@@ -7,7 +7,8 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.db.models.functions import Lower
 from django.utils import timezone
-from rest_framework import mixins, status, viewsets
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
+from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.filters import SearchFilter
@@ -41,9 +42,40 @@ def upcoming_occasions():
     return Occasion.objects.filter(Q(start_datetime__gte=now) | Q(end_datetime__gt=now), cancelled_at=None)
 
 
+StatsSerializer = inline_serializer(
+    "PanelStats",
+    {
+        "users": inline_serializer(
+            "PanelUserStats",
+            {
+                "total": serializers.IntegerField(),
+                "active": serializers.IntegerField(),
+                "staff": serializers.IntegerField(),
+                "new_this_week": serializers.IntegerField(),
+            },
+        ),
+        "occasions": inline_serializer(
+            "PanelOccasionStats", {"total": serializers.IntegerField(), "upcoming": serializers.IntegerField()}
+        ),
+        "next_occasions": inline_serializer(
+            "PanelNextOccasion",
+            {
+                "id": serializers.IntegerField(),
+                "name": serializers.CharField(),
+                "start_datetime": serializers.DateTimeField(),
+                "end_datetime": serializers.DateTimeField(allow_null=True),
+                "attendees_count": serializers.IntegerField(),
+            },
+            many=True,
+        ),
+    },
+)
+
+
 class StatsView(APIView):
     permission_classes = [IsAdminUser]
 
+    @extend_schema(summary="Totals and the next occasions, for the overview", responses=StatsSerializer)
     def get(self, request):
         week_ago = timezone.now() - timedelta(days=7)
         users = User.objects.aggregate(
@@ -149,9 +181,10 @@ class OccasionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Occasion.objects.prefetch_related("users", "tags", "images").order_by("-start_datetime", "-id")
 
+    @extend_schema(request=None)
     @action(detail=True, methods=["post"])
     def finish(self, request, pk=None):
-        """POST /api/panel/occasions/<id>/finish/: end the occasion now, so its connections get counted."""
+        """POST /api/admin/occasions/<id>/finish/: end the occasion now, so its connections get counted."""
         occasion = self.get_object()
         now = timezone.now()
         self.check_still_on(occasion, now)
@@ -165,9 +198,10 @@ class OccasionViewSet(viewsets.ModelViewSet):
         deactivate_finished()
         return Response(self.get_serializer(occasion).data)
 
+    @extend_schema(request=None)
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
-        """POST /api/panel/occasions/<id>/cancel/: call the occasion off; its attendees can join another one."""
+        """POST /api/admin/occasions/<id>/cancel/: call the occasion off; its attendees can join another one."""
         occasion = self.get_object()
         now = timezone.now()
         self.check_still_on(occasion, now)
@@ -176,9 +210,10 @@ class OccasionViewSet(viewsets.ModelViewSet):
         deactivate_finished()
         return Response(self.get_serializer(occasion).data)
 
+    @extend_schema(request=None)
     @action(detail=True, methods=["post"])
     def revert_cancel(self, request, pk=None):
-        """POST /api/panel/occasions/<id>/revert_cancel/: undo a cancel while the occasion is still ahead.
+        """POST /api/admin/occasions/<id>/revert_cancel/: undo a cancel while the occasion is still ahead.
 
         Attendees who joined another occasion since stay with that one; the rest are active here again.
         """
@@ -193,9 +228,10 @@ class OccasionViewSet(viewsets.ModelViewSet):
         OccasionUser.objects.filter(occasion=occasion).exclude(user_id__in=busy).update(is_active=True)
         return Response(self.get_serializer(occasion).data)
 
+    @extend_schema(request=OccasionImageUploadSerializer)
     @action(detail=True, methods=["post"], url_path="images", parser_classes=[MultiPartParser])
     def upload_image(self, request, pk=None):
-        """POST /api/panel/occasions/<id>/images/ (multipart: image, order): put an image in a slot.
+        """POST /api/admin/occasions/<id>/images/ (multipart: image, order): put an image in a slot.
 
         Order 0 is the main image, 1-3 the gallery; an image already in that slot is replaced.
         """
@@ -210,9 +246,10 @@ class OccasionViewSet(viewsets.ModelViewSet):
         # Fetch again so the response lists the new image set
         return Response(self.get_serializer(self.get_object()).data, status=status.HTTP_201_CREATED)
 
+    @extend_schema(parameters=[OpenApiParameter("order", int, OpenApiParameter.PATH)])
     @action(detail=True, methods=["delete"], url_path=r"images/(?P<order>\d+)")
     def delete_image(self, request, pk=None, order=None):
-        """DELETE /api/panel/occasions/<id>/images/<order>/: empty that slot."""
+        """DELETE /api/admin/occasions/<id>/images/<order>/: empty that slot."""
         occasion = self.get_object()
         deleted, _ = occasion.images.filter(order=int(order)).delete()
         if not deleted:
@@ -226,9 +263,10 @@ class OccasionViewSet(viewsets.ModelViewSet):
         if occasion.ends_at <= now:
             raise ValidationError({"non_field_errors": ["This occasion is already over."]})
 
+    @extend_schema(request=None)
     @action(detail=False, methods=["post"], url_path="test")
     def create_test(self, request):
-        """POST /api/panel/occasions/test/: create a test occasion (see create_test_occasion)."""
+        """POST /api/admin/occasions/test/: create a test occasion (see create_test_occasion)."""
         occasion = create_test_occasion()
         return Response(self.get_serializer(occasion).data, status=status.HTTP_201_CREATED)
 

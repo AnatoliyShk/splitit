@@ -8,7 +8,7 @@ const tabs = [
   { to: '/admin/tags', label: 'Tags', end: false },
 ]
 
-// Staff-only area; the backend enforces the same rule on every /api/panel/ endpoint
+// Staff-only area; the backend enforces the same rule on every /api/admin/ endpoint
 export default function PanelLayout() {
   const { user, loading } = useAuth()
   const location = useLocation()

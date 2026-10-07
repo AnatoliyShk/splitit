@@ -31,7 +31,7 @@ test.describe('panel overview', () => {
   })
 
   test('shows the totals tiles with their notes', async ({ page }) => {
-    await mockApi(page, '/api/panel/stats/', { GET: () => ({ body: stats }) })
+    await mockApi(page, '/api/admin/stats/', { GET: () => ({ body: stats }) })
     await page.goto('/admin')
 
     const totals = page.getByRole('list', { name: 'Totals' })
@@ -48,7 +48,7 @@ test.describe('panel overview', () => {
   test('shows a loading message until stats arrive', async ({ page }) => {
     let release!: () => void
     const gate = new Promise<void>((resolvePromise) => (release = resolvePromise))
-    await mockApi(page, '/api/panel/stats/', {
+    await mockApi(page, '/api/admin/stats/', {
       GET: async () => {
         await gate
         return { body: stats }
@@ -63,7 +63,7 @@ test.describe('panel overview', () => {
   })
 
   test('lists next occasions with date, time range and attendee count', async ({ page }) => {
-    await mockApi(page, '/api/panel/stats/', { GET: () => ({ body: stats }) })
+    await mockApi(page, '/api/admin/stats/', { GET: () => ({ body: stats }) })
     await page.goto('/admin')
 
     const picnic = page.getByRole('link', { name: /Rooftop picnic/ })
@@ -81,8 +81,8 @@ test.describe('panel overview', () => {
   })
 
   test('clicking a next occasion opens its edit form', async ({ page }) => {
-    await mockApi(page, '/api/panel/stats/', { GET: () => ({ body: stats }) })
-    await mockApi(page, '/api/panel/occasions/7/', {
+    await mockApi(page, '/api/admin/stats/', { GET: () => ({ body: stats }) })
+    await mockApi(page, '/api/admin/occasions/7/', {
       GET: () => ({
         body: panelOccasion({
           id: 7,
@@ -100,8 +100,8 @@ test.describe('panel overview', () => {
   })
 
   test('"All occasions" link goes to the occasions list', async ({ page }) => {
-    await mockApi(page, '/api/panel/stats/', { GET: () => ({ body: stats }) })
-    await mockApi(page, '/api/panel/occasions/', {
+    await mockApi(page, '/api/admin/stats/', { GET: () => ({ body: stats }) })
+    await mockApi(page, '/api/admin/occasions/', {
       GET: () => ({ body: { count: 0, next: null, previous: null, results: [] } }),
     })
     await page.goto('/admin')
@@ -112,7 +112,7 @@ test.describe('panel overview', () => {
   })
 
   test('with no upcoming occasions it offers to create one', async ({ page }) => {
-    await mockApi(page, '/api/panel/stats/', {
+    await mockApi(page, '/api/admin/stats/', {
       GET: () => ({ body: { ...stats, occasions: { total: 3, upcoming: 0 }, next_occasions: [] } }),
     })
     await page.goto('/admin')
@@ -126,7 +126,7 @@ test.describe('panel overview', () => {
   })
 
   test('uses singular wording for a single upcoming occasion', async ({ page }) => {
-    await mockApi(page, '/api/panel/stats/', {
+    await mockApi(page, '/api/admin/stats/', {
       GET: () => ({
         body: { ...stats, occasions: { total: 3, upcoming: 1 }, next_occasions: [stats.next_occasions[0]] },
       }),
@@ -137,7 +137,7 @@ test.describe('panel overview', () => {
   })
 
   test('shows an alert when stats fail to load', async ({ page }) => {
-    await mockApi(page, '/api/panel/stats/', { GET: () => ({ status: 500, body: { detail: 'Stats are down.' } }) })
+    await mockApi(page, '/api/admin/stats/', { GET: () => ({ status: 500, body: { detail: 'Stats are down.' } }) })
     await page.goto('/admin')
 
     await expect(page.getByRole('alert')).toHaveText('Stats are down.')
@@ -146,7 +146,7 @@ test.describe('panel overview', () => {
   })
 
   test('shows a connection error when the server is unreachable', async ({ page }) => {
-    await page.route('**/api/panel/stats/', (route) => route.abort('connectionrefused'))
+    await page.route('**/api/admin/stats/', (route) => route.abort('connectionrefused'))
     await page.goto('/admin')
 
     await expect(page.getByRole('alert')).toHaveText("Can't reach the server. Check your connection and try again.")

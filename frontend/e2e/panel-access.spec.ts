@@ -20,7 +20,7 @@ test.describe('panel access', () => {
 
   test('logged-out visitor never calls the panel API', async ({ page }) => {
     await mockSession(page, null)
-    const calls = await mockApi(page, '/api/panel/stats/', { GET: () => ({ body: {} }) })
+    const calls = await mockApi(page, '/api/admin/stats/', { GET: () => ({ body: {} }) })
     await page.goto('/admin')
     await expect(page).toHaveURL(/\/login$/)
 
@@ -38,7 +38,7 @@ test.describe('panel access', () => {
   test('logging in from the redirect brings a staff user back to the panel', async ({ page }) => {
     await mockSession(page, null)
     await mockApi(page, '/api/auth/login/', { POST: () => ({ body: { user: staffUser } }) })
-    await mockApi(page, '/api/panel/stats/', {
+    await mockApi(page, '/api/admin/stats/', {
       GET: () => ({
         body: {
           users: { total: 1, active: 1, staff: 1, new_this_week: 0 },
@@ -79,8 +79,8 @@ test.describe('panel access', () => {
 
   test('non-staff user never calls the panel API', async ({ page }) => {
     await mockSession(page, memberUser)
-    const users = await mockApi(page, '/api/panel/users/', { GET: () => ({ body: pageOf([panelUser()]) }) })
-    const stats = await mockApi(page, '/api/panel/stats/', { GET: () => ({ body: {} }) })
+    const users = await mockApi(page, '/api/admin/users/', { GET: () => ({ body: pageOf([panelUser()]) }) })
+    const stats = await mockApi(page, '/api/admin/stats/', { GET: () => ({ body: {} }) })
     await page.goto('/admin/users')
     await expect(page.getByRole('heading', { name: 'Admins only' })).toBeVisible()
 
@@ -107,7 +107,7 @@ test.describe('panel access', () => {
 
   test('staff user sees the Admin link and the four panel tabs', async ({ page }) => {
     await mockSession(page, staffUser)
-    await mockApi(page, '/api/panel/stats/', {
+    await mockApi(page, '/api/admin/stats/', {
       GET: () => ({
         body: {
           users: { total: 1, active: 1, staff: 1, new_this_week: 0 },

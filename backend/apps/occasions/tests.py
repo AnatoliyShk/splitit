@@ -138,6 +138,47 @@ class ExploreApiTests(TestCase):
         self.assertEqual([occasion["name"] for occasion in explore_data["occasions"]], ["Running", "Sooner", "Later"])
         self.assertEqual(explore_data["occasions"][2]["attendees_count"], 1)
 
+    def save_filters(self, tags=(), weekdays=()):
+        from apps.users.models import FilterPreference, FilterPreferenceWeekday
+
+        filter_preference = FilterPreference.objects.create(user=self.me)
+        filter_preference.tags.set(tags)
+        FilterPreferenceWeekday.objects.bulk_create(
+            FilterPreferenceWeekday(filter_preference=filter_preference, weekday=weekday) for weekday in weekdays
+        )
+
+    def explore_names(self):
+        return [occasion["name"] for occasion in self.explore()["occasions"]]
+
+    def test_saved_tags_keep_occasions_with_any_of_them(self):
+        from apps.tags.models import Tag
+
+        jazz_tag = Tag.objects.create(name="Jazz")
+        art_tag = Tag.objects.create(name="Art")
+        Tag.objects.create(name="Unused")
+        # Two matching tags still list the occasion once
+        jazz_tag.occasions.add(self.sooner, self.later)
+        art_tag.occasions.add(self.later)
+        self.save_filters(tags=[jazz_tag, art_tag])
+        self.assertEqual(self.explore_names(), ["Sooner", "Later"])
+        self.assertEqual(self.explore()["occasions"][1]["attendees_count"], 1)
+
+    def test_saved_weekdays_keep_occasions_starting_on_them(self):
+        self.save_filters(weekdays=[self.sooner.start_datetime.isoweekday()])
+        self.assertEqual(self.explore_names(), ["Sooner"])
+
+    def test_tags_and_weekdays_must_both_match(self):
+        from apps.tags.models import Tag
+
+        jazz_tag = Tag.objects.create(name="Jazz")
+        jazz_tag.occasions.add(self.sooner, self.later)
+        self.save_filters(tags=[jazz_tag], weekdays=[self.later.start_datetime.isoweekday()])
+        self.assertEqual(self.explore_names(), ["Later"])
+
+    def test_empty_saved_filters_show_everything(self):
+        self.save_filters()
+        self.assertEqual(self.explore_names(), ["Running", "Sooner", "Later"])
+
     def test_names_the_attendees_i_have_a_connection_with(self):
         from apps.connections.models import Connection
         from apps.users.models import User

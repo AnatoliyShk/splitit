@@ -63,3 +63,62 @@ class User(AbstractUser):
 
     def get_short_name(self):
         return self.name
+
+
+class FilterPreference(models.Model):
+    """The Explore filters a user saved. Each kind of filter is its own table (tags, weekdays), so it stays in 5NF."""
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="filter_preference")
+    # Only show occasions with any of these tags
+    tags = models.ManyToManyField(
+        "tags.Tag",
+        related_name="filter_preferences",
+        blank=True,
+        db_table="filter_preference_tags",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "filter_preferences"
+
+    def __str__(self):
+        return f"Filters of {self.user}"
+
+
+class Weekday(models.IntegerChoices):
+    """ISO numbering, the same as Django's `__iso_week_day` lookup."""
+
+    MONDAY = 1
+    TUESDAY = 2
+    WEDNESDAY = 3
+    THURSDAY = 4
+    FRIDAY = 5
+    SATURDAY = 6
+    SUNDAY = 7
+
+
+class FilterPreferenceWeekday(models.Model):
+    """One day of the week a user wants occasions on; one row per day."""
+
+    filter_preference = models.ForeignKey(
+        FilterPreference, on_delete=models.CASCADE, related_name="weekdays"
+    )
+    weekday = models.PositiveSmallIntegerField(choices=Weekday.choices)
+
+    class Meta:
+        db_table = "filter_preference_weekdays"
+        ordering = ["weekday"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["filter_preference", "weekday"],
+                name="filter_preference_weekday_unique",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(weekday__gte=Weekday.MONDAY, weekday__lte=Weekday.SUNDAY),
+                name="filter_preference_weekday_iso",
+            ),
+        ]
+
+    def __str__(self):
+        return Weekday(self.weekday).label

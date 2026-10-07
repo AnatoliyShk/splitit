@@ -1,9 +1,13 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from rest_framework import serializers
 
-from .models import User
+from apps.tags.models import Tag
+from apps.tags.serializers import TagSerializer
+
+from .models import FilterPreference, FilterPreferenceWeekday, User, Weekday
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -86,3 +90,34 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError("Email or password is incorrect.")
         attrs["user"] = user
         return attrs
+
+
+class FilterPreferenceSerializer(serializers.Serializer):
+    """A user's saved Explore filters. Reads tags as {id, name}; writes them as `tag_ids`.
+
+    Saving replaces both lists: an empty list clears that filter.
+    """
+
+    tag_ids = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Tag.objects.all(), source="tags", write_only=True
+    )
+    weekdays = serializers.ListField(child=serializers.ChoiceField(choices=Weekday.choices))
+
+    def to_representation(self, filter_preference):
+        return {
+            "tags": TagSerializer(filter_preference.tags.order_by("name"), many=True).data,
+            "weekdays": list(filter_preference.weekdays.values_list("weekday", flat=True)),
+        }
+
+    @transaction.atomic
+    def create(self, validated_data):
+        filter_preference, _ = FilterPreference.objects.get_or_create(user=validated_data["user"])
+        filter_preference.tags.set(validated_data["tags"])
+        filter_preference.weekdays.all().delete()
+        FilterPreferenceWeekday.objects.bulk_create(
+            FilterPreferenceWeekday(filter_preference=filter_preference, weekday=weekday)
+            for weekday in sorted(set(validated_data["weekdays"]))
+        )
+        # The rows that changed are in the child tables; this marks the preference as changed too
+        filter_preference.save(update_fields=["updated_at"])
+        return filter_preference

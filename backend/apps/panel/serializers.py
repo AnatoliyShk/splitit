@@ -55,7 +55,7 @@ IMAGE_FORMATS = {"JPEG", "PNG", "WEBP"}
 
 
 class OccasionImageUploadSerializer(serializers.Serializer):
-    """POST body (multipart) for /api/panel/occasions/<id>/images/: the file and the slot it goes in."""
+    """POST body (multipart) for /api/admin/occasions/<id>/images/: the file and the slot it goes in."""
 
     order = serializers.IntegerField(min_value=0, max_value=MAX_IMAGE_ORDER)
     image = serializers.ImageField()

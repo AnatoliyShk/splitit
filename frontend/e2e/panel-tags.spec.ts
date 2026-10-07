@@ -11,10 +11,10 @@ function seed(): PanelTag[] {
   ]
 }
 
-// Stateful in-memory API for /api/panel/tags/ and /api/panel/tags/<id>/
+// Stateful in-memory API for /api/admin/tags/ and /api/admin/tags/<id>/
 async function openTags(page: Page, tags = seed()) {
   let nextId = 1000
-  const list = await mockApi(page, '/api/panel/tags/', {
+  const list = await mockApi(page, '/api/admin/tags/', {
     GET: ({ url }) => ({ body: paginate(tags, url, (tag) => [tag.name]) }),
     POST: ({ body }) => {
       const name = String((body as { name: string }).name).trim()
@@ -26,7 +26,7 @@ async function openTags(page: Page, tags = seed()) {
       return { status: 201, body: tag }
     },
   })
-  const detail = await mockApi(page, /^\/api\/panel\/tags\/\d+\/$/, {
+  const detail = await mockApi(page, /^\/api\/admin\/tags\/\d+\/$/, {
     PATCH: ({ url, body }) => {
       const id = Number(url.pathname.split('/').at(-2))
       const name = String((body as { name: string }).name).trim()
@@ -136,7 +136,7 @@ test.describe('panel tags', () => {
     })
 
     test('shows an alert when the list fails to load', async ({ page }) => {
-      await mockApi(page, '/api/panel/tags/', { GET: () => ({ status: 500, body: { detail: 'Server error.' } }) })
+      await mockApi(page, '/api/admin/tags/', { GET: () => ({ status: 500, body: { detail: 'Server error.' } }) })
       await page.goto('/admin/tags')
 
       await expect(page.getByRole('alert')).toHaveText('Server error.')
@@ -204,7 +204,7 @@ test.describe('panel tags', () => {
 
     test('a form-wide failure is shown under the field', async ({ page }) => {
       await openTags(page)
-      await mockApi(page, '/api/panel/tags/', {
+      await mockApi(page, '/api/admin/tags/', {
         GET: () => ({ body: { count: 0, next: null, previous: null, results: [] } }),
         POST: () => ({ status: 500, body: { detail: 'Could not save the tag.' } }),
       })
@@ -239,7 +239,7 @@ test.describe('panel tags', () => {
       await expect(renamed.getByRole('img', { name: 'Ready' })).toBeVisible()
       await expect(page.getByLabel('Rename “Jazz”')).toHaveCount(0)
       const patchCall = detail.find((call) => call.method === 'PATCH')!
-      expect(patchCall.url.pathname).toBe('/api/panel/tags/1/')
+      expect(patchCall.url.pathname).toBe('/api/admin/tags/1/')
       expect(patchCall.body).toEqual({ name: 'Smooth jazz' })
     })
 
@@ -337,12 +337,12 @@ test.describe('panel tags', () => {
       await expect(row(page, 'Hiking')).toHaveCount(0)
       await expect(page.getByText('2 total')).toBeVisible()
       const deleteCall = detail.find((call) => call.method === 'DELETE')!
-      expect(deleteCall.url.pathname).toBe('/api/panel/tags/2/')
+      expect(deleteCall.url.pathname).toBe('/api/admin/tags/2/')
     })
 
     test('a failed delete shows the error and keeps the tag', async ({ page }) => {
       await openTags(page)
-      await mockApi(page, '/api/panel/tags/2/', {
+      await mockApi(page, '/api/admin/tags/2/', {
         DELETE: () => ({ status: 500, body: { detail: 'Could not delete.' } }),
       })
 
@@ -367,7 +367,7 @@ test.describe('panel tags', () => {
     test('the confirm button is disabled while the delete is in flight', async ({ page }) => {
       await openTags(page)
       const gate = deferred()
-      await mockApi(page, '/api/panel/tags/2/', {
+      await mockApi(page, '/api/admin/tags/2/', {
         DELETE: async () => {
           await gate.promise
           return { status: 204 }

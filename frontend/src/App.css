@@ -1541,8 +1541,10 @@ h1 mark {
   align-items: flex-start;
   gap: 14px;
   width: 100%;
-  min-height: 320px;
-  padding: 32px;
+  /* Shared with the bottom strip, which reaches out to the card's edges */
+  --card-pad-y: 32px;
+  --card-pad-x: 32px;
+  padding: var(--card-pad-y) var(--card-pad-x);
   background: var(--surface);
   border: var(--border);
   border-radius: var(--radius);
@@ -1604,10 +1606,6 @@ h1 mark {
   font-weight: 700;
 }
 
-.explore-done {
-  min-height: 0;
-}
-
 /* The one-occasion-at-a-time rule, always shown above the cards */
 .explore-rule {
   width: 100%;
@@ -1626,6 +1624,99 @@ h1 mark {
 
 .explore-rule p {
   font-size: 15px;
+}
+
+/* Saved Explore filters: a collapsible panel above the deck */
+.explore-filters {
+  width: 100%;
+  background: var(--surface);
+  border: var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+
+.explore-filters summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 20px;
+  cursor: pointer;
+}
+
+.explore-filters-title {
+  font: 800 18px/1 var(--heading);
+}
+
+.explore-filters-summary {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explore-filters-form {
+  padding: 4px 20px 20px;
+}
+
+.filter-group {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.filter-group legend {
+  margin-bottom: 4px;
+  padding: 0;
+  font-weight: 700;
+}
+
+.filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* A checkbox drawn as a pill; checked takes the primary fill */
+.filter-option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+}
+
+/* The real checkbox, invisible but covering the pill, so clicks and taps land on it */
+.filter-option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.filter-option:has(input:checked) {
+  color: var(--on-pastel);
+  background: var(--primary);
+}
+
+.filter-option:has(input:focus-visible) {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
 }
 
 /* The occasion the user is going to, shown instead of the deck */
@@ -1669,8 +1760,8 @@ h1 mark {
   }
 
   .explore-card {
-    min-height: 280px;
-    padding: 24px 20px;
+    --card-pad-y: 24px;
+    --card-pad-x: 20px;
   }
 }
 
@@ -1686,6 +1777,85 @@ h1 mark {
   object-fit: cover;
   border: var(--border);
   border-radius: var(--radius-sm);
+}
+
+/* "Show details" on an Explore card: sits above the card link's overlay so it gets the click */
+/* The card's bottom strip toggles the details. It sits above the card link's overlay so it gets the click,
+   and stretches to the card's edges (the negative margins undo the card's padding) */
+.explore-details-toggle {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  align-self: stretch;
+  min-height: 52px;
+  margin: 0 calc(-1 * var(--card-pad-x)) calc(-1 * var(--card-pad-y));
+  padding: 0 var(--card-pad-x);
+  font: 700 15px/1 var(--sans);
+  color: var(--text);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-top: var(--border);
+  /* The card's corner radius, less its border */
+  border-radius: 0 0 calc(var(--radius) - 3px) calc(var(--radius) - 3px);
+}
+
+.explore-details-toggle:hover,
+.explore-details-toggle[aria-expanded='true'] {
+  color: var(--on-pastel);
+  background: var(--secondary);
+}
+
+/* Inside the strip, so the card's edge doesn't hide it */
+.explore-details-toggle:focus-visible {
+  outline-offset: -6px;
+}
+
+.explore-details-chevron {
+  transition: transform 200ms ease;
+}
+
+.explore-details-toggle[aria-expanded='true'] .explore-details-chevron {
+  transform: rotate(180deg);
+}
+
+/* Rolls open by growing its one grid row from 0 to the content's height */
+.explore-details {
+  display: grid;
+  grid-template-rows: 0fr;
+  width: 100%;
+  /* Cancels the card's gap above it, so a closed card ends at the button; the body adds it back inside */
+  margin-top: -14px;
+  /* Hidden (also from screen readers and Tab) once the closing roll has finished */
+  visibility: hidden;
+  transition:
+    grid-template-rows 200ms ease,
+    visibility 0s 200ms;
+}
+
+.explore-details[data-open='true'] {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition: grid-template-rows 200ms ease;
+}
+
+.explore-details-body {
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.explore-details-body > :first-child {
+  margin-top: 14px;
+}
+
+.explore-details-body .explore-going {
+  margin-top: 0;
+  padding-top: 0;
 }
 
 /* A card's title link whose ::after covers the card, so the whole card is clickable */

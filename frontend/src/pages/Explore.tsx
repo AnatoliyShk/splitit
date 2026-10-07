@@ -3,8 +3,10 @@ import { useState } from 'react'
 import { Link, Navigate, useLocation } from 'react-router'
 import { ApiError, apiGet, apiPost, useFieldErrors } from '../api'
 import { useAuth } from '../auth'
+import { ExploreFilters } from '../components/ExploreFilters'
 import { FormAlert } from '../components/Field'
 import { OccasionCard } from '../components/OccasionCard'
+import { hasFilters, useFilterPreference } from '../filterPreference'
 import { queryKeys } from '../queryClient'
 import type { ExploreOccasion } from '../types/occasions'
 import { formatDateTime } from './panel/shared'
@@ -38,6 +40,7 @@ export default function Explore() {
   const [declinedIds, setDeclinedIds] = useState<ReadonlySet<number>>(new Set())
   const [statusMessage, setStatusMessage] = useState('')
 
+  const filterPreferenceQuery = useFilterPreference(user)
   const exploreQuery = useQuery({
     queryKey: queryKeys.explore,
     // Already sorted soonest first, without occasions the user is going to
@@ -79,6 +82,7 @@ export default function Explore() {
   ]
   const occasionIndex = declinedOccasions.length
   const activeOccasion = exploreData?.active_occasion
+  const filtered = hasFilters(filterPreferenceQuery.data)
   const occasion = activeOccasion ? undefined : occasions?.[occasionIndex]
 
   function decline() {
@@ -112,6 +116,21 @@ export default function Explore() {
         </p>
       </aside>
 
+      {/* Above the filters and the card, so they stay in the same place whatever the card shows */}
+      {occasion && (
+        <div className="explore-actions" role="group" aria-label={`Respond to ${occasion.name}`}>
+          <button className="btn btn-danger" type="button" onClick={decline} disabled={joinMutation.isPending}>
+            Decline
+          </button>
+          <button className="btn btn-confirm" type="button" onClick={accept} disabled={joinMutation.isPending}>
+            {joinMutation.isPending ? 'Joining…' : 'Accept'}
+          </button>
+        </div>
+      )}
+
+      {/* Filters only apply to the deck, which is paused while an occasion is active */}
+      {exploreData && !activeOccasion && <ExploreFilters user={user} />}
+
       <FormAlert messages={errors.non_field_errors} />
       <p className="visually-hidden" role="status">
         {statusMessage}
@@ -123,28 +142,25 @@ export default function Explore() {
 
       {occasions && !activeOccasion && !occasion && (
         <div className="explore-card explore-done">
-          <h2>{occasions.length === 0 ? 'No new occasions right now' : "You're all caught up"}</h2>
-          <p className="muted">Check back later for more occasions, or see the ones you're going to.</p>
+          {occasions.length === 0 && filtered ? (
+            <>
+              <h2>No occasions match your filters</h2>
+              <p className="muted">Change or clear your filters above to see more.</p>
+            </>
+          ) : (
+            <>
+              <h2>{occasions.length === 0 ? 'No new occasions right now' : "You're all caught up"}</h2>
+              <p className="muted">Check back later for more occasions, or see the ones you're going to.</p>
+            </>
+          )}
           <Link className="btn btn-primary" to="/profile">
             Your occasions
           </Link>
         </div>
       )}
 
-      {occasion && (
-        <>
-          {/* Keyed by occasion id so the entrance animation replays for each card */}
-          <OccasionCard key={occasion.id} occasion={occasion} />
-          <div className="explore-actions">
-            <button className="btn" type="button" onClick={decline} disabled={joinMutation.isPending}>
-              Decline
-            </button>
-            <button className="btn btn-confirm" type="button" onClick={accept} disabled={joinMutation.isPending}>
-              {joinMutation.isPending ? 'Joining…' : 'Accept'}
-            </button>
-          </div>
-        </>
-      )}
+      {/* Keyed by occasion id so the entrance animation replays for each card */}
+      {occasion && <OccasionCard key={occasion.id} occasion={occasion} />}
     </section>
   )
 }

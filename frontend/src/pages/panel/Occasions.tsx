@@ -86,7 +86,7 @@ export default function Occasions() {
     queryKey: queryKeys.panel.occasions(listParams),
     queryFn: () =>
       apiGet<Page<PanelOccasion>>(
-        `/api/panel/occasions/?${listQueryString(listParams)}`,
+        `/api/admin/occasions/?${listQueryString(listParams)}`,
       ),
     // Keep the current page on screen while the next one loads
     placeholderData: keepPreviousData,
@@ -113,8 +113,8 @@ export default function Occasions() {
       action: RowAction;
     }) =>
       action === "delete"
-        ? apiDelete(`/api/panel/occasions/${occasion.id}/`)
-        : apiPost(`/api/panel/occasions/${occasion.id}/${action}/`),
+        ? apiDelete(`/api/admin/occasions/${occasion.id}/`)
+        : apiPost(`/api/admin/occasions/${occasion.id}/${action}/`),
     onMutate: () => {
       testMutation.reset();
     },
@@ -138,7 +138,7 @@ export default function Occasions() {
 
   // Random time and 1-3 random attendees; the server creates test users if there are none
   const testMutation = useMutation({
-    mutationFn: () => apiPost<PanelOccasion>("/api/panel/occasions/test/"),
+    mutationFn: () => apiPost<PanelOccasion>("/api/admin/occasions/test/"),
     onMutate: () => {
       rowMutation.reset();
     },

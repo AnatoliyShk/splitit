@@ -72,6 +72,7 @@ async function apiSend<T>(method: string, path: string, body?: unknown): Promise
 
 export const apiPost = <T>(path: string, body?: unknown) => apiSend<T>('POST', path, body)
 export const apiPatch = <T>(path: string, body: unknown) => apiSend<T>('PATCH', path, body)
+export const apiPut = <T>(path: string, body: unknown) => apiSend<T>('PUT', path, body)
 export const apiDelete = (path: string) => apiSend<null>('DELETE', path)
 
 // multipart/form-data (file uploads): no Content-Type header, so the browser adds one with the boundary

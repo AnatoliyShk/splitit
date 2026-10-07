@@ -40,10 +40,10 @@ function seed(): PanelOccasion[] {
 
 // In-memory list endpoint; DELETE removes from the same array
 async function openOccasions(page: Page, occasions = seed()) {
-  const calls = await mockApi(page, '/api/panel/occasions/', {
+  const calls = await mockApi(page, '/api/admin/occasions/', {
     GET: ({ url }) => ({ body: paginate(occasions, url, (occasion) => [occasion.name]) }),
   })
-  const deletes = await mockApi(page, /^\/api\/panel\/occasions\/\d+\/$/, {
+  const deletes = await mockApi(page, /^\/api\/admin\/occasions\/\d+\/$/, {
     DELETE: ({ url }) => {
       const id = Number(url.pathname.split('/').at(-2))
       occasions.splice(
@@ -190,7 +190,7 @@ test.describe('panel occasions list', () => {
   })
 
   test('shows an alert when the list fails to load', async ({ page }) => {
-    await mockApi(page, '/api/panel/occasions/', { GET: () => ({ status: 500, body: { detail: 'Server error.' } }) })
+    await mockApi(page, '/api/admin/occasions/', { GET: () => ({ status: 500, body: { detail: 'Server error.' } }) })
     await page.goto('/admin/occasions')
 
     await expect(page.getByRole('alert')).toHaveText('Server error.')
@@ -231,13 +231,13 @@ test.describe('panel occasions list', () => {
       await expect(row(page, 'Jazz night')).toHaveCount(0)
       await expect(row(page, 'Open mic')).toBeVisible()
       expect(deletes).toHaveLength(1)
-      expect(deletes[0].url.pathname).toBe('/api/panel/occasions/10/')
+      expect(deletes[0].url.pathname).toBe('/api/admin/occasions/10/')
       expect(calls.length).toBeGreaterThan(before)
     })
 
     test('a failed delete shows the error and keeps the row', async ({ page }) => {
       await openOccasions(page)
-      await mockApi(page, '/api/panel/occasions/10/', {
+      await mockApi(page, '/api/admin/occasions/10/', {
         DELETE: () => ({ status: 500, body: { detail: 'Could not delete.' } }),
       })
 
@@ -276,7 +276,7 @@ test.describe('panel occasions list', () => {
 
     test('finishing asks for confirmation, then posts to the finish endpoint', async ({ page }) => {
       const { occasions } = await openOccasions(page)
-      const finishes = await mockApi(page, '/api/panel/occasions/10/finish/', {
+      const finishes = await mockApi(page, '/api/admin/occasions/10/finish/', {
         POST: () => {
           occasions[0].end_datetime = '2020-01-01T00:00:00Z'
           occasions[0].start_datetime = '2019-12-31T00:00:00Z'
@@ -308,7 +308,7 @@ test.describe('panel occasions list', () => {
 
     test('cancelling asks for confirmation, then marks the row cancelled', async ({ page }) => {
       const { occasions } = await openOccasions(page)
-      const cancels = await mockApi(page, '/api/panel/occasions/10/cancel/', {
+      const cancels = await mockApi(page, '/api/admin/occasions/10/cancel/', {
         POST: () => {
           occasions[0].cancelled_at = '2026-01-01T00:00:00Z'
           return { body: occasions[0] }
@@ -331,7 +331,7 @@ test.describe('panel occasions list', () => {
 
     test('Keep closes the confirmation without cancelling', async ({ page }) => {
       await openOccasions(page)
-      const cancels = await mockApi(page, '/api/panel/occasions/10/cancel/', { POST: () => ({ body: {} }) })
+      const cancels = await mockApi(page, '/api/admin/occasions/10/cancel/', { POST: () => ({ body: {} }) })
 
       await row(page, 'Jazz night').getByRole('button', { name: 'Cancel', exact: true }).click()
       await page.getByRole('group', { name: 'Cancel Jazz night?' }).getByRole('button', { name: 'Keep' }).click()
@@ -352,7 +352,7 @@ test.describe('panel occasions list', () => {
 
     test('posts to the test endpoint, refreshes the table and shows a status message', async ({ page }) => {
       const { occasions, calls } = await openOccasions(page)
-      const posts = await mockApi(page, '/api/panel/occasions/test/', {
+      const posts = await mockApi(page, '/api/admin/occasions/test/', {
         POST: () => {
           occasions.push(created)
           return { status: 201, body: created }
@@ -376,7 +376,7 @@ test.describe('panel occasions list', () => {
     test('the button shows a busy state while the occasion is being created', async ({ page }) => {
       const { occasions } = await openOccasions(page)
       const gate = deferred()
-      await mockApi(page, '/api/panel/occasions/test/', {
+      await mockApi(page, '/api/admin/occasions/test/', {
         POST: async () => {
           await gate.promise
           occasions.push(created)
@@ -395,7 +395,7 @@ test.describe('panel occasions list', () => {
 
     test('a failure shows an alert and no status message', async ({ page }) => {
       await openOccasions(page)
-      await mockApi(page, '/api/panel/occasions/test/', {
+      await mockApi(page, '/api/admin/occasions/test/', {
         POST: () => ({ status: 500, body: { detail: 'Could not create a test occasion.' } }),
       })
 
@@ -408,7 +408,7 @@ test.describe('panel occasions list', () => {
 
     test('an unreachable server shows a connection error', async ({ page }) => {
       await openOccasions(page)
-      await page.route('**/api/panel/occasions/test/', (route) => route.abort('connectionrefused'))
+      await page.route('**/api/admin/occasions/test/', (route) => route.abort('connectionrefused'))
 
       await page.getByRole('button', { name: 'Create test occasion' }).click()
 
@@ -418,7 +418,7 @@ test.describe('panel occasions list', () => {
     test('a second click replaces the previous status message', async ({ page }) => {
       const { occasions } = await openOccasions(page)
       let createdCount = 0
-      await mockApi(page, '/api/panel/occasions/test/', {
+      await mockApi(page, '/api/admin/occasions/test/', {
         POST: () => {
           createdCount += 1
           const testOccasion = panelOccasion({

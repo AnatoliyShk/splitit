@@ -15,7 +15,7 @@ export default function Tags() {
 
   const tagsQuery = useQuery({
     queryKey: queryKeys.panel.tags(listParams),
-    queryFn: () => apiGet<Page<PanelTag>>(`/api/panel/tags/?${listQueryString(listParams)}`),
+    queryFn: () => apiGet<Page<PanelTag>>(`/api/admin/tags/?${listQueryString(listParams)}`),
     // Keep the current page on screen while the next one loads
     placeholderData: keepPreviousData,
   })
@@ -25,7 +25,7 @@ export default function Tags() {
 
   const [newTagName, setNewTagName] = useState('')
   const createMutation = useMutation({
-    mutationFn: (tagName: string) => apiPost('/api/panel/tags/', { name: tagName }),
+    mutationFn: (tagName: string) => apiPost('/api/admin/tags/', { name: tagName }),
     onSuccess: () => {
       setNewTagName('')
       return refreshTags()
@@ -40,7 +40,7 @@ export default function Tags() {
 
   const renameMutation = useMutation({
     mutationFn: ({ tag, tagName }: { tag: PanelTag; tagName: string }) =>
-      apiPatch<PanelTag>(`/api/panel/tags/${tag.id}/`, { name: tagName }),
+      apiPatch<PanelTag>(`/api/admin/tags/${tag.id}/`, { name: tagName }),
     onSuccess: (renamedTag) => {
       queryClient.setQueryData<Page<PanelTag>>(
         queryKeys.panel.tags(listParams),
@@ -56,7 +56,7 @@ export default function Tags() {
   const editErrors = useFieldErrors(renameMutation.error)
 
   const deleteMutation = useMutation({
-    mutationFn: (tag: PanelTag) => apiDelete(`/api/panel/tags/${tag.id}/`),
+    mutationFn: (tag: PanelTag) => apiDelete(`/api/admin/tags/${tag.id}/`),
     onSuccess: () => {
       setConfirmTagId(null)
       // Step back a page if this deleted the last row on it

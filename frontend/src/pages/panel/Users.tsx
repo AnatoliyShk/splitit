@@ -19,7 +19,7 @@ export default function Users() {
 
   const usersQuery = useQuery({
     queryKey: queryKeys.panel.users(listParams),
-    queryFn: () => apiGet<Page<PanelUser>>(`/api/panel/users/?${listQueryString(listParams)}`),
+    queryFn: () => apiGet<Page<PanelUser>>(`/api/admin/users/?${listQueryString(listParams)}`),
     // Keep the current page on screen while the next one loads
     placeholderData: keepPreviousData,
   })
@@ -27,7 +27,7 @@ export default function Users() {
 
   const updateMutation = useMutation({
     mutationFn: ({ panelUser, changes }: { panelUser: PanelUser; changes: UserChanges }) =>
-      apiPatch<PanelUser>(`/api/panel/users/${panelUser.id}/`, changes),
+      apiPatch<PanelUser>(`/api/admin/users/${panelUser.id}/`, changes),
     onSuccess: (updatedUser) => {
       queryClient.setQueryData<Page<PanelUser>>(
         queryKeys.panel.users(listParams),

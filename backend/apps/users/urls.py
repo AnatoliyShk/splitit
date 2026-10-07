@@ -10,3 +10,8 @@ urlpatterns = [
     path("login/", views.LoginView.as_view()),
     path("logout/", views.LogoutView.as_view()),
 ]
+
+# REST resources nested under a user, mounted at /api/
+user_urlpatterns = [
+    path("users/<uuid:user_uuid>/filter-preference/", views.FilterPreferenceView.as_view()),
+]

@@ -1,6 +1,6 @@
 // Shapes of the tag API responses; each mirrors a backend serializer
 
-/** A tag as the panel reads and writes it (OccasionTagSerializer). */
+/** A tag with its id (TagSerializer, and the panel's OccasionTagSerializer). */
 export type Tag = { id: number; name: string }
 
 /** Public occasion lists send tags by name only. */

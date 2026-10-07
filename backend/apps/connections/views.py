@@ -1,6 +1,7 @@
 from django.core.cache import cache
 from django.db.models import Case, F, When, Window
 from django.db.models.functions import RowNumber
+from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -26,11 +27,33 @@ class MyConnectionSerializer(serializers.Serializer):
     shared_occasions = serializers.IntegerField()
 
 
+NetworkSerializer = inline_serializer(
+    "Network",
+    {
+        "nodes": inline_serializer(
+            "NetworkNode",
+            {
+                "uuid": serializers.UUIDField(),
+                "name": serializers.CharField(),
+                "degree": serializers.ChoiceField(choices=[0, 1, 2]),
+            },
+            many=True,
+        ),
+        "edges": inline_serializer(
+            "NetworkEdge",
+            {"source": serializers.UUIDField(), "target": serializers.UUIDField(), "strength": serializers.FloatField()},
+            many=True,
+        ),
+    },
+)
+
+
 class UserConnectionsView(APIView):
     """GET /api/users/<uuid>/connections/: that user's strongest connections. Cached per user."""
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="A user's strongest connections", responses=MyConnectionSerializer(many=True))
     def get(self, request, user_uuid):
         user = user_from_url(request, user_uuid)
         cache_key = my_connections_key(user.pk)
@@ -61,6 +84,7 @@ class UserConnectionsGraphView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="A user's connection network, for drawing", responses=NetworkSerializer)
     def get(self, request, user_uuid):
         user = user_from_url(request, user_uuid)
         people = {user.pk: (user, 0)}  # user id -> (user, degree)

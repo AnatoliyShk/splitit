@@ -1,5 +1,6 @@
 from django.db.models import Count, Exists, OuterRef, Prefetch, Q
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -7,7 +8,8 @@ from rest_framework.views import APIView
 
 from apps.connections.models import Connection
 from apps.users.access import user_from_url
-from apps.users.models import User
+from apps.tags.models import Tag
+from apps.users.models import FilterPreference, User
 
 from .models import MAIN_IMAGE_ORDER, Occasion, OccasionUser
 from .services import AlreadyGoing, active_occasions, join
@@ -64,6 +66,16 @@ class ExploreOccasionSerializer(UserOccasionSerializer):
         fields = (*UserOccasionSerializer.Meta.fields, "known_attendees")
 
 
+DetailSerializer = inline_serializer("Detail", {"detail": serializers.CharField()})
+ExploreResponseSerializer = inline_serializer(
+    "ExploreResponse",
+    {
+        "active_occasion": ExploreOccasionSerializer(allow_null=True),
+        "occasions": ExploreOccasionSerializer(many=True),
+    },
+)
+
+
 def with_details(occasions):
     return occasions.annotate(attendees_count=Count("users")).prefetch_related("tags", "images")
 
@@ -77,11 +89,32 @@ def with_known_attendees(occasions, user):
     return occasions.prefetch_related(Prefetch("users", queryset=known, to_attr="known_attendees"))
 
 
+def matching_filter_preference(occasions, user):
+    """Narrow occasions to the user's saved Explore filters: any of their tags, starting on one of their weekdays.
+
+    An empty list doesn't filter, and neither does having nothing saved.
+    """
+    filter_preference = FilterPreference.objects.filter(user=user).first()
+    if filter_preference is None:
+        return occasions
+    tag_ids = list(filter_preference.tags.values_list("id", flat=True))
+    weekdays = list(filter_preference.weekdays.values_list("weekday", flat=True))
+    if tag_ids:
+        # Exists rather than a join, so an occasion with two matching tags isn't listed twice
+        tagged = Tag.occasions.through.objects.filter(occasion=OuterRef("pk"), tag_id__in=tag_ids)
+        occasions = occasions.filter(Exists(tagged))
+    if weekdays:
+        # In the server's TIME_ZONE (UTC)
+        occasions = occasions.filter(start_datetime__iso_week_day__in=weekdays)
+    return occasions
+
+
 class UserOccasionsView(APIView):
     """GET /api/users/<uuid>/occasions/: occasions that user is going to, soonest first."""
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="Occasions a user is going to", responses=UserOccasionSerializer(many=True))
     def get(self, request, user_uuid):
         user = user_from_url(request, user_uuid)
         # Filter by id first: annotating user.occasions directly would count only this user per occasion
@@ -95,12 +128,14 @@ class ExploreOccasionsView(APIView):
     """GET /api/occasions/explore/: the requester's active occasion, or the upcoming ones they could join.
 
     A user goes to one occasion at a time: while `active_occasion` is set, `occasions` is empty.
-    Otherwise it lists upcoming occasions the requester isn't going to yet, soonest first.
+    Otherwise it lists upcoming occasions the requester isn't going to yet that match their saved filters,
+    soonest first.
     """
 
     permission_classes = [IsAuthenticated]
     limit = 50
 
+    @extend_schema(summary="Your active occasion, or upcoming ones to join", responses=ExploreResponseSerializer)
     def get(self, request):
         def details(occasions):
             return with_known_attendees(with_details(occasions), request.user)
@@ -108,9 +143,10 @@ class ExploreOccasionsView(APIView):
         active_occasion = details(active_occasions(request.user)).order_by("start_datetime").first()
         occasions = []
         if active_occasion is None:
-            occasions = details(Occasion.objects.upcoming().exclude(users=request.user)).order_by(
-                "start_datetime", "id"
-            )[: self.limit]
+            upcoming_occasions = matching_filter_preference(
+                Occasion.objects.upcoming().exclude(users=request.user), request.user
+            )
+            occasions = details(upcoming_occasions).order_by("start_datetime", "id")[: self.limit]
         return Response(
             {
                 "active_occasion": active_occasion and ExploreOccasionSerializer(active_occasion).data,
@@ -127,6 +163,11 @@ class JoinOccasionView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Go to an upcoming occasion",
+        request=None,
+        responses={204: None, 404: DetailSerializer, 409: DetailSerializer},
+    )
     def post(self, request, occasion_id):
         occasion = Occasion.objects.upcoming().filter(id=occasion_id).first()
         if occasion is None:
@@ -150,6 +191,7 @@ class OccasionDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(summary="One occasion with its images", responses=OccasionDetailSerializer)
     def get(self, request, occasion_id):
         going = OccasionUser.objects.filter(occasion=OuterRef("pk"), user=request.user)
         occasion = get_object_or_404(with_details(Occasion.objects.annotate(is_going=Exists(going))), id=occasion_id)

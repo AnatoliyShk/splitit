@@ -24,7 +24,7 @@ class PanelTestCase(APITestCase):
 
 
 class PermissionTests(PanelTestCase):
-    urls = ("/api/panel/stats/", "/api/panel/users/", "/api/panel/occasions/", "/api/panel/tags/")
+    urls = ("/api/admin/stats/", "/api/admin/users/", "/api/admin/occasions/", "/api/admin/tags/")
 
     def test_anonymous_is_rejected(self):
         self.client.logout()
@@ -55,7 +55,7 @@ class StatsTests(PanelTestCase):
         running.users.add(self.member)
         Occasion.objects.create(name="Soon", start_datetime=now + timedelta(days=3))
 
-        stats = self.client.get("/api/panel/stats/").json()
+        stats = self.client.get("/api/admin/stats/").json()
         self.assertEqual(stats["users"], {"total": 2, "active": 2, "staff": 1, "new_this_week": 2})
         self.assertEqual(stats["occasions"], {"total": 4, "upcoming": 2})
         self.assertEqual([occasion["name"] for occasion in stats["next_occasions"]], ["Running", "Soon"])
@@ -64,13 +64,13 @@ class StatsTests(PanelTestCase):
 
 class UserManagementTests(PanelTestCase):
     def test_list_and_search(self):
-        users_page = self.client.get("/api/panel/users/", {"search": "memb"}).json()
+        users_page = self.client.get("/api/admin/users/", {"search": "memb"}).json()
         self.assertEqual(users_page["count"], 1)
         self.assertEqual(users_page["results"][0]["email"], "member@example.com")
 
     def test_toggle_access_flags(self):
         response = self.client.patch(
-            f"/api/panel/users/{self.member.pk}/", {"is_staff": True, "is_active": False}, format="json"
+            f"/api/admin/users/{self.member.pk}/", {"is_staff": True, "is_active": False}, format="json"
         )
         self.assertEqual(response.status_code, 200)
         self.member.refresh_from_db()
@@ -78,24 +78,24 @@ class UserManagementTests(PanelTestCase):
         self.assertFalse(self.member.is_active)
 
     def test_profile_fields_are_read_only(self):
-        self.client.patch(f"/api/panel/users/{self.member.pk}/", {"email": "x@example.com"}, format="json")
+        self.client.patch(f"/api/admin/users/{self.member.pk}/", {"email": "x@example.com"}, format="json")
         self.member.refresh_from_db()
         self.assertEqual(self.member.email, "member@example.com")
 
     def test_cannot_change_own_access(self):
-        response = self.client.patch(f"/api/panel/users/{self.admin.pk}/", {"is_staff": False}, format="json")
+        response = self.client.patch(f"/api/admin/users/{self.admin.pk}/", {"is_staff": False}, format="json")
         self.assertEqual(response.status_code, 403)
 
     def test_staff_cannot_change_superuser(self):
         boss = User.objects.create_superuser("boss@example.com", PASSWORD, name="Boss")
-        response = self.client.patch(f"/api/panel/users/{boss.pk}/", {"is_active": False}, format="json")
+        response = self.client.patch(f"/api/admin/users/{boss.pk}/", {"is_active": False}, format="json")
         self.assertEqual(response.status_code, 403)
 
 
 class OccasionManagementTests(PanelTestCase):
     def test_create_update_delete(self):
         response = self.client.post(
-            "/api/panel/occasions/",
+            "/api/admin/occasions/",
             {
                 "name": "Trip",
                 "start_datetime": "2026-10-10T18:00:00+03:00",
@@ -110,17 +110,17 @@ class OccasionManagementTests(PanelTestCase):
         self.assertEqual(occasion["duration_minutes"], 2 * 24 * 60 + 150)
         self.assertEqual(occasion["attendees"][0]["name"], "Member")
 
-        response = self.client.patch(f"/api/panel/occasions/{occasion['id']}/", {"users": []}, format="json")
+        response = self.client.patch(f"/api/admin/occasions/{occasion['id']}/", {"users": []}, format="json")
         self.assertEqual(response.json()["attendees"], [])
 
-        response = self.client.delete(f"/api/panel/occasions/{occasion['id']}/")
+        response = self.client.delete(f"/api/admin/occasions/{occasion['id']}/")
         self.assertEqual(response.status_code, 204)
         self.assertFalse(Occasion.objects.exists())
 
     def test_tags_are_set_by_id_and_read_back_with_names(self):
         jazz, blues = Tag.objects.create(name="jazz"), Tag.objects.create(name="Blues")
         response = self.client.post(
-            "/api/panel/occasions/",
+            "/api/admin/occasions/",
             {"name": "Gig", "start_datetime": "2026-10-10T18:00:00Z", "tag_ids": [jazz.pk, blues.pk]},
             format="json",
         )
@@ -130,15 +130,15 @@ class OccasionManagementTests(PanelTestCase):
         # Sorted case-insensitively, like the tag list
         self.assertEqual(occasion["tags"], [{"id": blues.pk, "name": "Blues"}, {"id": jazz.pk, "name": "jazz"}])
 
-        response = self.client.patch(f"/api/panel/occasions/{occasion['id']}/", {"tag_ids": [jazz.pk]}, format="json")
+        response = self.client.patch(f"/api/admin/occasions/{occasion['id']}/", {"tag_ids": [jazz.pk]}, format="json")
         self.assertEqual(response.json()["tags"], [{"id": jazz.pk, "name": "jazz"}])
         # Leaving tag_ids out keeps them
-        response = self.client.patch(f"/api/panel/occasions/{occasion['id']}/", {"name": "Gig 2"}, format="json")
+        response = self.client.patch(f"/api/admin/occasions/{occasion['id']}/", {"name": "Gig 2"}, format="json")
         self.assertEqual(response.json()["tags"], [{"id": jazz.pk, "name": "jazz"}])
 
     def test_unknown_tag_is_rejected(self):
         response = self.client.post(
-            "/api/panel/occasions/",
+            "/api/admin/occasions/",
             {"name": "Gig", "start_datetime": "2026-10-10T18:00:00Z", "tag_ids": [999]},
             format="json",
         )
@@ -149,7 +149,7 @@ class OccasionManagementTests(PanelTestCase):
         for end in ("2026-10-10T17:00:00Z", "2026-10-10T18:00:00Z"):
             with self.subTest(end=end):
                 response = self.client.post(
-                    "/api/panel/occasions/",
+                    "/api/admin/occasions/",
                     {"name": "Bad", "start_datetime": "2026-10-10T18:00:00Z", "end_datetime": end},
                     format="json",
                 )
@@ -159,20 +159,20 @@ class OccasionManagementTests(PanelTestCase):
     def test_partial_update_checks_end_against_stored_start(self):
         occasion = Occasion.objects.create(name="Trip", start_datetime="2026-10-10T18:00:00Z")
         response = self.client.patch(
-            f"/api/panel/occasions/{occasion.pk}/", {"end_datetime": "2026-10-10T09:00:00Z"}, format="json"
+            f"/api/admin/occasions/{occasion.pk}/", {"end_datetime": "2026-10-10T09:00:00Z"}, format="json"
         )
         self.assertEqual(response.status_code, 400)
 
     def test_open_ended_occasion_has_no_duration(self):
         response = self.client.post(
-            "/api/panel/occasions/", {"name": "Open", "start_datetime": "2026-10-10T18:00:00Z"}, format="json"
+            "/api/admin/occasions/", {"name": "Open", "start_datetime": "2026-10-10T18:00:00Z"}, format="json"
         )
         self.assertIsNone(response.json()["duration_minutes"])
 
     def test_finish_running_occasion_ends_it_now(self):
         start = timezone.now() - timedelta(hours=1)
         occasion = Occasion.objects.create(name="Live", start_datetime=start, end_datetime=start + timedelta(hours=3))
-        response = self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
+        response = self.client.post(f"/api/admin/occasions/{occasion.pk}/finish/")
         self.assertEqual(response.status_code, 200)
         occasion.refresh_from_db()
         self.assertEqual(occasion.start_datetime, start)
@@ -181,14 +181,14 @@ class OccasionManagementTests(PanelTestCase):
     def test_finish_future_occasion_moves_it_to_end_now(self):
         start = timezone.now() + timedelta(days=2)
         occasion = Occasion.objects.create(name="Soon", start_datetime=start, end_datetime=start + timedelta(hours=2))
-        self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
+        self.client.post(f"/api/admin/occasions/{occasion.pk}/finish/")
         occasion.refresh_from_db()
         self.assertLessEqual(occasion.end_datetime, timezone.now())
         self.assertEqual(occasion.duration, timedelta(hours=2))
 
     def test_finish_open_ended_future_occasion_lasts_an_hour(self):
         occasion = Occasion.objects.create(name="Open", start_datetime=timezone.now() + timedelta(days=1))
-        self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
+        self.client.post(f"/api/admin/occasions/{occasion.pk}/finish/")
         occasion.refresh_from_db()
         self.assertEqual(occasion.duration, timedelta(hours=1))
 
@@ -199,7 +199,7 @@ class OccasionManagementTests(PanelTestCase):
         default_task_backend.clear()
         occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
         with self.captureOnCommitCallbacks(execute=True):
-            self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
+            self.client.post(f"/api/admin/occasions/{occasion.pk}/finish/")
         [job] = [
             task_result
             for task_result in default_task_backend.results
@@ -210,48 +210,48 @@ class OccasionManagementTests(PanelTestCase):
 
     def test_finish_ended_occasion_is_rejected(self):
         occasion = Occasion.objects.create(name="Past", start_datetime=timezone.now() - timedelta(days=1))
-        response = self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
+        response = self.client.post(f"/api/admin/occasions/{occasion.pk}/finish/")
         self.assertEqual(response.status_code, 400)
         self.assertIn("non_field_errors", response.json())
 
     def test_finish_frees_its_attendees_straight_away(self):
         occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
         occasion.users.add(self.member)
-        self.client.post(f"/api/panel/occasions/{occasion.pk}/finish/")
+        self.client.post(f"/api/admin/occasions/{occasion.pk}/finish/")
         self.assertFalse(OccasionUser.objects.get(occasion=occasion, user=self.member).is_active)
 
     def test_cancel_marks_it_cancelled_and_frees_its_attendees(self):
         occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
         occasion.users.add(self.member)
-        response = self.client.post(f"/api/panel/occasions/{occasion.pk}/cancel/")
+        response = self.client.post(f"/api/admin/occasions/{occasion.pk}/cancel/")
         self.assertEqual(response.status_code, 200)
         self.assertIsNotNone(response.json()["cancelled_at"])
         self.assertFalse(OccasionUser.objects.get(occasion=occasion, user=self.member).is_active)
         # Still listed, with its attendees, but no longer upcoming
         self.assertEqual(response.json()["attendees"][0]["id"], self.member.pk)
-        self.assertEqual(self.client.get("/api/panel/stats/").json()["occasions"]["upcoming"], 0)
+        self.assertEqual(self.client.get("/api/admin/stats/").json()["occasions"]["upcoming"], 0)
 
     def test_cancel_or_finish_twice_is_rejected(self):
         occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
-        self.client.post(f"/api/panel/occasions/{occasion.pk}/cancel/")
+        self.client.post(f"/api/admin/occasions/{occasion.pk}/cancel/")
         for action in ("cancel", "finish"):
-            response = self.client.post(f"/api/panel/occasions/{occasion.pk}/{action}/")
+            response = self.client.post(f"/api/admin/occasions/{occasion.pk}/{action}/")
             self.assertEqual(response.status_code, 400)
             self.assertEqual(response.json()["non_field_errors"], ["This occasion was cancelled."])
 
     def test_cancel_ended_occasion_is_rejected(self):
         occasion = Occasion.objects.create(name="Past", start_datetime=timezone.now() - timedelta(days=1))
-        response = self.client.post(f"/api/panel/occasions/{occasion.pk}/cancel/")
+        response = self.client.post(f"/api/admin/occasions/{occasion.pk}/cancel/")
         self.assertEqual(response.status_code, 400)
         self.assertIsNone(Occasion.objects.get(pk=occasion.pk).cancelled_at)
 
     def test_cancel_is_staff_only(self):
         occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
         self.client.force_login(self.member)
-        self.assertEqual(self.client.post(f"/api/panel/occasions/{occasion.pk}/cancel/").status_code, 403)
+        self.assertEqual(self.client.post(f"/api/admin/occasions/{occasion.pk}/cancel/").status_code, 403)
 
     def test_create_test_occasion_with_existing_users(self):
-        response = self.client.post("/api/panel/occasions/test/")
+        response = self.client.post("/api/admin/occasions/test/")
         self.assertEqual(response.status_code, 201)
         occasion = Occasion.objects.get(pk=response.json()["id"])
         self.assertGreater(occasion.start_datetime, timezone.now())
@@ -264,7 +264,7 @@ class OccasionManagementTests(PanelTestCase):
 
     def test_create_test_occasion_creates_users_when_there_are_none(self):
         self.member.delete()
-        response = self.client.post("/api/panel/occasions/test/")
+        response = self.client.post("/api/admin/occasions/test/")
         attendees = response.json()["attendees"]
         self.assertTrue(1 <= len(attendees) <= 3)
         created = User.objects.filter(email__startswith="test-")
@@ -273,7 +273,7 @@ class OccasionManagementTests(PanelTestCase):
 
     def test_create_test_occasion_is_staff_only(self):
         self.client.force_login(self.member)
-        self.assertEqual(self.client.post("/api/panel/occasions/test/").status_code, 403)
+        self.assertEqual(self.client.post("/api/admin/occasions/test/").status_code, 403)
         self.assertFalse(Occasion.objects.exists())
 
 
@@ -282,47 +282,47 @@ class TagManagementTests(PanelTestCase):
         jazz = Tag.objects.create(name="jazz")
         Tag.objects.create(name="Art")
         jazz.occasions.add(Occasion.objects.create(name="Gig", start_datetime=timezone.now()))
-        tags_page = self.client.get("/api/panel/tags/").json()
+        tags_page = self.client.get("/api/admin/tags/").json()
         tag_counts = [(tag["name"], tag["occasions_count"]) for tag in tags_page["results"]]
         self.assertEqual(tag_counts, [("Art", 0), ("jazz", 1)])
 
     def test_create_rename_delete(self):
-        response = self.client.post("/api/panel/tags/", {"name": "  Hiking "}, format="json")
+        response = self.client.post("/api/admin/tags/", {"name": "  Hiking "}, format="json")
         self.assertEqual(response.status_code, 201)
         tag = response.json()
         self.assertEqual((tag["name"], tag["occasions_count"]), ("Hiking", 0))
 
-        response = self.client.patch(f"/api/panel/tags/{tag['id']}/", {"name": "Hikes"}, format="json")
+        response = self.client.patch(f"/api/admin/tags/{tag['id']}/", {"name": "Hikes"}, format="json")
         self.assertEqual(response.json()["name"], "Hikes")
 
-        self.assertEqual(self.client.delete(f"/api/panel/tags/{tag['id']}/").status_code, 204)
+        self.assertEqual(self.client.delete(f"/api/admin/tags/{tag['id']}/").status_code, 204)
         self.assertFalse(Tag.objects.exists())
 
     def test_list_shows_whether_each_tag_has_an_embedding(self):
         Tag.objects.create(name="Art", embedding=[1.0] * EMBEDDING_DIMENSIONS)
         Tag.objects.create(name="Jazz")
-        tags_page = self.client.get("/api/panel/tags/").json()
+        tags_page = self.client.get("/api/admin/tags/").json()
         tag_embeddings = [(tag["name"], tag["has_embedding"]) for tag in tags_page["results"]]
         self.assertEqual(tag_embeddings, [("Art", True), ("Jazz", False)])
 
     def test_duplicate_name_is_rejected_case_insensitively(self):
         Tag.objects.create(name="Jazz")
-        response = self.client.post("/api/panel/tags/", {"name": "JAZZ"}, format="json")
+        response = self.client.post("/api/admin/tags/", {"name": "JAZZ"}, format="json")
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["name"], ["A tag with this name already exists."])
 
     def test_renaming_to_own_name_with_new_case_is_allowed(self):
         tag = Tag.objects.create(name="jazz")
-        response = self.client.patch(f"/api/panel/tags/{tag.pk}/", {"name": "Jazz"}, format="json")
+        response = self.client.patch(f"/api/admin/tags/{tag.pk}/", {"name": "Jazz"}, format="json")
         self.assertEqual(response.status_code, 200)
 
 
 class TagListCacheTests(PanelTestCase):
     def names(self, **params):
-        return [tag["name"] for tag in self.client.get("/api/panel/tags/", params).json()["results"]]
+        return [tag["name"] for tag in self.client.get("/api/admin/tags/", params).json()["results"]]
 
     def row(self, name):
-        return next(tag for tag in self.client.get("/api/panel/tags/").json()["results"] if tag["name"] == name)
+        return next(tag for tag in self.client.get("/api/admin/tags/").json()["results"] if tag["name"] == name)
 
     def test_repeat_requests_are_served_from_cache(self):
         tag = Tag.objects.create(name="Jazz")
@@ -338,13 +338,13 @@ class TagListCacheTests(PanelTestCase):
     def test_api_writes_show_in_the_next_list(self):
         self.assertEqual(self.names(), [])
         with self.captureOnCommitCallbacks(execute=True):
-            tag = self.client.post("/api/panel/tags/", {"name": "Jazz"}, format="json").json()
+            tag = self.client.post("/api/admin/tags/", {"name": "Jazz"}, format="json").json()
         self.assertEqual(self.names(), ["Jazz"])
         with self.captureOnCommitCallbacks(execute=True):
-            self.client.patch(f"/api/panel/tags/{tag['id']}/", {"name": "Blues"}, format="json")
+            self.client.patch(f"/api/admin/tags/{tag['id']}/", {"name": "Blues"}, format="json")
         self.assertEqual(self.names(), ["Blues"])
         with self.captureOnCommitCallbacks(execute=True):
-            self.client.delete(f"/api/panel/tags/{tag['id']}/")
+            self.client.delete(f"/api/admin/tags/{tag['id']}/")
         self.assertEqual(self.names(), [])
 
     def test_occasion_links_and_occasion_deletes_refresh_counts(self):
@@ -370,7 +370,7 @@ class TagListCacheTests(PanelTestCase):
         Tag.objects.create(name="Jazz")
         self.assertEqual(self.names(), ["Jazz"])
         self.client.force_login(self.member)
-        self.assertEqual(self.client.get("/api/panel/tags/").status_code, 403)
+        self.assertEqual(self.client.get("/api/admin/tags/").status_code, 403)
 
 
 def image_file(name="photo.png", fmt="PNG", size=(4, 3)):
@@ -394,7 +394,7 @@ class OccasionImageTests(PanelTestCase):
         self.media = self.enterContext(tempfile.TemporaryDirectory())
         self.enterContext(override_settings(MEDIA_ROOT=self.media))
         self.occasion = Occasion.objects.create(name="Gig", start_datetime=timezone.now() + timedelta(days=1))
-        self.url = f"/api/panel/occasions/{self.occasion.pk}/images/"
+        self.url = f"/api/admin/occasions/{self.occasion.pk}/images/"
 
     def upload(self, order, file=None):
         with self.captureOnCommitCallbacks(execute=True):
@@ -416,7 +416,7 @@ class OccasionImageTests(PanelTestCase):
     def test_images_come_back_in_order(self):
         for order in (2, 0, 1):
             self.upload(order)
-        occasion_data = self.client.get(f"/api/panel/occasions/{self.occasion.pk}/").json()
+        occasion_data = self.client.get(f"/api/admin/occasions/{self.occasion.pk}/").json()
         self.assertEqual([image["order"] for image in occasion_data["images"]], [0, 1, 2])
 
     def test_uploading_to_a_taken_slot_replaces_the_image_and_its_file(self):
@@ -440,7 +440,7 @@ class OccasionImageTests(PanelTestCase):
         self.upload(0)
         self.upload(1)
         with self.captureOnCommitCallbacks(execute=True):
-            self.client.delete(f"/api/panel/occasions/{self.occasion.pk}/")
+            self.client.delete(f"/api/admin/occasions/{self.occasion.pk}/")
         self.assertEqual(self.stored_files(), [])
 
     def test_order_must_be_a_slot_from_0_to_3(self):

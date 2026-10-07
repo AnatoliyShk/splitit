@@ -24,7 +24,7 @@ function seed(): PanelUser[] {
 }
 
 async function openUsers(page: Page, users = seed()) {
-  const calls = await mockApi(page, '/api/panel/users/', {
+  const calls = await mockApi(page, '/api/admin/users/', {
     GET: ({ url }) => ({ body: paginate(users, url, (user) => [user.email, user.name]) }),
   })
   await page.goto('/admin/users')
@@ -32,11 +32,11 @@ async function openUsers(page: Page, users = seed()) {
   return { users, calls }
 }
 
-// PATCH /api/panel/users/<id>/ applies the change to the in-memory list and echoes the user back
+// PATCH /api/admin/users/<id>/ applies the change to the in-memory list and echoes the user back
 function mockPatch(page: Page, users: PanelUser[]) {
-  return mockApi(page, /^\/api\/panel\/users\/\d+\/$/, {
+  return mockApi(page, /^\/api\/admin\/users\/\d+\/$/, {
     PATCH: ({ url, body }) => {
-      const user = users.find((panelUser) => url.pathname === `/api/panel/users/${panelUser.id}/`)!
+      const user = users.find((panelUser) => url.pathname === `/api/admin/users/${panelUser.id}/`)!
       Object.assign(user, body)
       return { body: user }
     },
@@ -208,7 +208,7 @@ test.describe('panel users', () => {
       await expect(ann).not.toContainText('Member')
       await expect(ann.getByRole('button', { name: 'Remove admin' })).toBeVisible()
       expect(patches).toHaveLength(1)
-      expect(patches[0].url.pathname).toBe('/api/panel/users/2/')
+      expect(patches[0].url.pathname).toBe('/api/admin/users/2/')
       expect(patches[0].body).toEqual({ is_staff: true })
     })
 
@@ -252,7 +252,7 @@ test.describe('panel users', () => {
       const { users } = await openUsers(page)
       let release!: () => void
       const gate = new Promise<void>((resolvePromise) => (release = resolvePromise))
-      await mockApi(page, '/api/panel/users/2/', {
+      await mockApi(page, '/api/admin/users/2/', {
         PATCH: async ({ body }) => {
           await gate
           return { body: { ...users[1], ...(body as object) } }
@@ -270,7 +270,7 @@ test.describe('panel users', () => {
 
     test('a rejected change shows the server message and leaves the row unchanged', async ({ page }) => {
       await openUsers(page)
-      await mockApi(page, '/api/panel/users/2/', {
+      await mockApi(page, '/api/admin/users/2/', {
         PATCH: () => ({ status: 403, body: { detail: 'You cannot change this user.' } }),
       })
 
@@ -284,7 +284,7 @@ test.describe('panel users', () => {
   })
 
   test('shows an alert when the list fails to load', async ({ page }) => {
-    await mockApi(page, '/api/panel/users/', { GET: () => ({ status: 500, body: { detail: 'Server error.' } }) })
+    await mockApi(page, '/api/admin/users/', { GET: () => ({ status: 500, body: { detail: 'Server error.' } }) })
     await page.goto('/admin/users')
 
     await expect(page.getByRole('alert')).toHaveText('Server error.')

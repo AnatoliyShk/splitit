@@ -43,7 +43,7 @@ export default function OccasionForm() {
   const { id: occasionId } = useParams()
   const occasionQuery = useQuery({
     queryKey: queryKeys.panel.occasion(occasionId ?? ''),
-    queryFn: () => apiGet<PanelOccasion>(`/api/panel/occasions/${occasionId}/`),
+    queryFn: () => apiGet<PanelOccasion>(`/api/admin/occasions/${occasionId}/`),
     enabled: Boolean(occasionId),
     // Always load the latest copy: the form starts from it and never picks up later changes
     gcTime: 0,
@@ -99,7 +99,7 @@ function OccasionEditor({ occasionId, occasion, loadErrors }: OccasionEditorProp
 
   // Applies the image edits one slot at a time; each success leaves the pending list, so a retry redoes only the rest
   async function saveImages(savedOccasionId: number) {
-    const imagesUrl = `/api/panel/occasions/${savedOccasionId}/images/`
+    const imagesUrl = `/api/admin/occasions/${savedOccasionId}/images/`
     for (const order of IMAGE_SLOTS) {
       if (!(order in imageChanges)) continue
       const file = imageChanges[order]
@@ -135,9 +135,9 @@ function OccasionEditor({ occasionId, occasion, loadErrors }: OccasionEditorProp
       const existingId = occasionId ?? createdId
       let savedOccasion: PanelOccasion
       if (existingId) {
-        savedOccasion = await apiPatch<PanelOccasion>(`/api/panel/occasions/${existingId}/`, body)
+        savedOccasion = await apiPatch<PanelOccasion>(`/api/admin/occasions/${existingId}/`, body)
       } else {
-        savedOccasion = await apiPost<PanelOccasion>('/api/panel/occasions/', body)
+        savedOccasion = await apiPost<PanelOccasion>('/api/admin/occasions/', body)
         setCreatedId(savedOccasion.id)
       }
       await saveImages(savedOccasion.id)

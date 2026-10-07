@@ -20,7 +20,7 @@ export function AttendeePicker({ value, onChange, errors }: AttendeePickerProps)
   const searchParams = { page: 1, search: searchQuery }
   const searchResultsQuery = useQuery({
     queryKey: queryKeys.panel.users(searchParams),
-    queryFn: () => apiGet<Page<Attendee>>(`/api/panel/users/?${listQueryString(searchParams)}`),
+    queryFn: () => apiGet<Page<Attendee>>(`/api/admin/users/?${listQueryString(searchParams)}`),
     // Results only render while there's a query, so an empty one needs no request
     enabled: Boolean(searchQuery),
     // Keep the last matches on screen while the next search loads

@@ -8,7 +8,7 @@ import { formatRange, plural, type Stats } from './shared'
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'short' })
 
 export default function Overview() {
-  const statsQuery = useQuery({ queryKey: queryKeys.panel.stats, queryFn: () => apiGet<Stats>('/api/panel/stats/') })
+  const statsQuery = useQuery({ queryKey: queryKeys.panel.stats, queryFn: () => apiGet<Stats>('/api/admin/stats/') })
   const stats = statsQuery.data
   const errors = useFieldErrors(statsQuery.error)
 

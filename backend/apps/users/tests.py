@@ -1,8 +1,11 @@
 from django.core.cache import cache
-from django.test import override_settings
+from django.db import IntegrityError, transaction
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient, APITestCase
 
-from .models import User
+from apps.tags.models import Tag
+
+from .models import User, FilterPreference, FilterPreferenceWeekday, Weekday
 
 PASSWORD = "correct-horse-battery"
 
@@ -171,3 +174,104 @@ class UserUuidTests(APITestCase):
         user = User.objects.create_user("a@example.com", PASSWORD, name="A")
         self.client.force_login(user)
         self.assertEqual(self.client.get("/api/auth/me/").json()["user"]["uuid"], str(user.uuid))
+
+
+class FilterPreferenceTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="ana@example.com", password=PASSWORD, name="Ana")
+        self.filter_preference = FilterPreference.objects.create(user=self.user)
+
+    def test_one_filter_preference_per_user(self):
+        with self.assertRaises(IntegrityError):
+            FilterPreference.objects.create(user=self.user)
+
+    def test_stores_tags_and_weekdays(self):
+        jazz_tag = Tag.objects.create(name="Jazz")
+        self.filter_preference.tags.add(jazz_tag)
+        FilterPreferenceWeekday.objects.bulk_create(
+            FilterPreferenceWeekday(filter_preference=self.filter_preference, weekday=weekday)
+            for weekday in (Weekday.SUNDAY, Weekday.SATURDAY)
+        )
+        self.assertEqual(list(self.user.filter_preference.tags.all()), [jazz_tag])
+        self.assertEqual(
+            list(self.user.filter_preference.weekdays.values_list("weekday", flat=True)),
+            [Weekday.SATURDAY, Weekday.SUNDAY],
+        )
+
+    def test_a_weekday_is_saved_once(self):
+        FilterPreferenceWeekday.objects.create(filter_preference=self.filter_preference, weekday=Weekday.FRIDAY)
+        with self.assertRaises(IntegrityError):
+            FilterPreferenceWeekday.objects.create(filter_preference=self.filter_preference, weekday=Weekday.FRIDAY)
+
+    def test_weekday_must_be_iso_numbered(self):
+        for invalid_weekday in (0, 8):
+            with self.subTest(weekday=invalid_weekday), self.assertRaises(IntegrityError), transaction.atomic():
+                FilterPreferenceWeekday.objects.create(
+                    filter_preference=self.filter_preference, weekday=invalid_weekday
+                )
+
+    def test_deleting_a_tag_removes_it_from_filters(self):
+        jazz_tag = Tag.objects.create(name="Jazz")
+        self.filter_preference.tags.add(jazz_tag)
+        jazz_tag.delete()
+        self.assertEqual(self.filter_preference.tags.count(), 0)
+
+    def test_deleting_the_user_deletes_their_filters(self):
+        FilterPreferenceWeekday.objects.create(filter_preference=self.filter_preference, weekday=Weekday.MONDAY)
+        self.user.delete()
+        self.assertFalse(FilterPreference.objects.exists())
+        self.assertFalse(FilterPreferenceWeekday.objects.exists())
+
+
+class FilterPreferenceApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="ana@example.com", password=PASSWORD, name="Ana")
+        self.other_user = User.objects.create_user(email="ben@example.com", password=PASSWORD, name="Ben")
+        self.jazz_tag = Tag.objects.create(name="Jazz")
+        self.art_tag = Tag.objects.create(name="Art")
+        self.client.force_login(self.user)
+
+    def url(self, user):
+        return f"/api/users/{user.uuid}/filter-preference/"
+
+    def test_nothing_saved_reads_as_no_filters(self):
+        response = self.client.get(self.url(self.user))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"tags": [], "weekdays": []})
+        self.assertFalse(FilterPreference.objects.exists())
+
+    def test_put_saves_tags_and_weekdays(self):
+        response = self.client.put(
+            self.url(self.user),
+            {"tag_ids": [self.jazz_tag.id, self.art_tag.id], "weekdays": [7, 6, 6]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        expected_filters = {
+            "tags": [{"id": self.art_tag.id, "name": "Art"}, {"id": self.jazz_tag.id, "name": "Jazz"}],
+            "weekdays": [6, 7],
+        }
+        self.assertEqual(response.json(), expected_filters)
+        self.assertEqual(self.client.get(self.url(self.user)).json(), expected_filters)
+
+    def test_put_replaces_the_saved_filters(self):
+        self.client.put(self.url(self.user), {"tag_ids": [self.jazz_tag.id], "weekdays": [1, 2]}, format="json")
+        response = self.client.put(self.url(self.user), {"tag_ids": [], "weekdays": [5]}, format="json")
+        self.assertEqual(response.json(), {"tags": [], "weekdays": [5]})
+        self.assertEqual(FilterPreference.objects.count(), 1)
+        self.assertEqual(FilterPreferenceWeekday.objects.count(), 1)
+
+    def test_rejects_unknown_tags_and_weekdays(self):
+        response = self.client.put(self.url(self.user), {"tag_ids": [999], "weekdays": [0, 8]}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(set(response.json()), {"tag_ids", "weekdays"})
+        self.assertFalse(FilterPreference.objects.exists())
+
+    def test_other_users_filters_are_hidden(self):
+        self.assertEqual(self.client.get(self.url(self.other_user)).status_code, 404)
+        response = self.client.put(self.url(self.other_user), {"tag_ids": [], "weekdays": []}, format="json")
+        self.assertEqual(response.status_code, 404)
+
+    def test_requires_login(self):
+        self.client.logout()
+        self.assertEqual(self.client.get(self.url(self.user)).status_code, 403)

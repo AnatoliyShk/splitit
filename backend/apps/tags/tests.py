@@ -69,3 +69,17 @@ class TagAdminTests(TestCase):
         for url in ("/django-admin/tags/tag/", "/django-admin/tags/tag/add/", f"/django-admin/tags/tag/{tag.pk}/change/"):
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 200)
+
+
+class TagListApiTests(TestCase):
+    def test_lists_every_tag_a_to_z(self):
+        user = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana")
+        jazz_tag = Tag.objects.create(name="jazz")
+        art_tag = Tag.objects.create(name="Art")
+        self.client.force_login(user)
+        response = self.client.get("/api/tags/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [{"id": art_tag.id, "name": "Art"}, {"id": jazz_tag.id, "name": "jazz"}])
+
+    def test_requires_login(self):
+        self.assertEqual(self.client.get("/api/tags/").status_code, 403)

@@ -21,7 +21,7 @@ export function TagPicker({ value, onChange, errors }: TagPickerProps) {
   const searchParams = { page: 1, search: searchQuery }
   const searchResultsQuery = useQuery({
     queryKey: queryKeys.panel.tags(searchParams),
-    queryFn: () => apiGet<Page<PanelTag>>(`/api/panel/tags/?${listQueryString(searchParams)}`),
+    queryFn: () => apiGet<Page<PanelTag>>(`/api/admin/tags/?${listQueryString(searchParams)}`),
     // Results only render while there's a query, so an empty one needs no request
     enabled: Boolean(searchQuery),
     // Keep the last matches on screen while the next search loads
