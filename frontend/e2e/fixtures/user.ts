@@ -1,8 +1,8 @@
 import type { Page, Route } from '@playwright/test'
-import type { Connection, Network } from '../../src/types/connections'
-import type { ExploreOccasion } from '../../src/types/occasions'
-import type { Tag } from '../../src/types/tags'
-import type { FilterPreference, User } from '../../src/types/users'
+import type { Connection, Network } from '../../src/types/api/connections'
+import type { ExploreOccasion } from '../../src/types/api/occasions'
+import type { Tag } from '../../src/types/api/tags'
+import type { FilterPreference, User } from '../../src/types/api/users'
 
 export type TestUser = User
 

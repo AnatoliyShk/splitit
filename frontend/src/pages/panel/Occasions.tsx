@@ -11,11 +11,12 @@ import {
   apiGet,
   apiPost,
   useFieldErrors,
-  type Page,
 } from "../../api";
 import { Field, FormAlert } from "../../components/Field";
 import { Pager } from "../../components/Pager";
 import { listQueryString, queryKeys } from "../../queryClient";
+import type { PanelOccasion } from "../../types/api/admin";
+import type { Page } from "../../types/api/pagination";
 import {
   formatDate,
   formatDuration,
@@ -23,7 +24,6 @@ import {
   formatTimesShort,
   PAGE_SIZE,
   useDebounced,
-  type PanelOccasion,
 } from "./shared";
 
 // Not over or cancelled yet: same rule as the server (an occasion with no end is over once it starts)

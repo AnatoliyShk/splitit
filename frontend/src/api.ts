@@ -1,8 +1,5 @@
 import { useMemo } from 'react'
 
-// DRF PageNumberPagination response
-export type Page<T> = { count: number; next: string | null; previous: string | null; results: T[] }
-
 // DRF error shape: field name -> messages; form-wide errors use `non_field_errors`
 export type FieldErrors = Record<string, string[]>
 

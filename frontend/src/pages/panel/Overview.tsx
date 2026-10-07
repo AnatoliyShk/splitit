@@ -3,7 +3,8 @@ import { Link } from 'react-router'
 import { apiGet, useFieldErrors } from '../../api'
 import { FormAlert } from '../../components/Field'
 import { queryKeys } from '../../queryClient'
-import { formatRange, plural, type Stats } from './shared'
+import type { Stats } from '../../types/api/admin'
+import { formatRange, plural } from './shared'
 
 const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'short' })
 

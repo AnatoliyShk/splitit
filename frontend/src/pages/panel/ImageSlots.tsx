@@ -1,17 +1,9 @@
 import { useEffect, useMemo } from 'react'
-import { IMAGE_SLOTS, IMAGE_TYPES, slotLabel, type ImageChanges, type SavedImages } from './shared'
+import type { ImageSlotsProps } from '../../types/ui/imageSlots'
+import { IMAGE_SLOTS, IMAGE_TYPES, slotLabel } from './shared'
 
 
-type Props = {
-  saved: SavedImages
-  changes: ImageChanges
-  errors: Record<number, string[]>
-  onPick: (order: number, file: File) => void
-  onRemove: (order: number) => void
-  onUndo: (order: number) => void
-}
-
-export function ImageSlots({ saved, changes, errors, onPick, onRemove, onUndo }: Props) {
+export function ImageSlots({ saved, changes, errors, onPick, onRemove, onUndo }: ImageSlotsProps) {
   // Local previews for files that aren't uploaded yet
   const previews = useMemo(() => {
     const previewUrls: Record<number, string> = {}

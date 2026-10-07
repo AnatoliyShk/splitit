@@ -8,11 +8,8 @@ import { FormAlert } from '../components/Field'
 import { OccasionCard } from '../components/OccasionCard'
 import { hasFilters, useFilterPreference } from '../filterPreference'
 import { queryKeys } from '../queryClient'
-import type { ExploreOccasion } from '../types/occasions'
+import type { ExploreData, ExploreOccasion } from '../types/api/occasions'
 import { formatDateTime } from './panel/shared'
-
-// A user goes to one occasion at a time: while `active_occasion` is set, `occasions` is empty
-type ExploreData = { active_occasion: ExploreOccasion | null; occasions: ExploreOccasion[] }
 
 function ActiveOccasion({ occasion }: { occasion: ExploreOccasion }) {
   // Same rule as the server: an occasion with no end is over once it starts

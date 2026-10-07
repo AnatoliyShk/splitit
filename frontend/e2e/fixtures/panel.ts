@@ -1,6 +1,6 @@
 import type { Page, Request } from '@playwright/test'
-import type { User } from '../../src/types/users'
-import type { Attendee, PanelOccasion, PanelTag, PanelUser } from '../../src/pages/panel/shared'
+import type { User } from '../../src/types/api/users'
+import type { Attendee, PanelOccasion, PanelTag, PanelUser } from '../../src/types/api/admin'
 
 export type { Attendee, PanelOccasion, PanelTag, PanelUser }
 

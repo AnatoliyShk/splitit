@@ -5,7 +5,7 @@ import { useAuth } from '../auth'
 import { FormAlert } from '../components/Field'
 import { TagList } from '../components/TagList'
 import { queryKeys } from '../queryClient'
-import type { OccasionDetail } from '../types/occasions'
+import type { OccasionDetail } from '../types/api/occasions'
 import { formatRange } from './panel/shared'
 
 const NOT_FOUND: FieldErrors = { non_field_errors: ["This occasion doesn't exist or was deleted."] }

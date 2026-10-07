@@ -1,11 +1,13 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { apiGet, apiPatch, useFieldErrors, type Page } from '../../api'
+import { apiGet, apiPatch, useFieldErrors } from '../../api'
 import { useAuth } from '../../auth'
 import { Field, FormAlert } from '../../components/Field'
 import { Pager } from '../../components/Pager'
 import { listQueryString, queryKeys } from '../../queryClient'
-import { formatDate, PAGE_SIZE, useDebounced, type PanelUser } from './shared'
+import type { PanelUser } from '../../types/api/admin'
+import type { Page } from '../../types/api/pagination'
+import { formatDate, PAGE_SIZE, useDebounced } from './shared'
 
 type UserChanges = Partial<Pick<PanelUser, 'is_active' | 'is_staff'>>
 

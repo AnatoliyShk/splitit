@@ -1,14 +1,11 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { apiGet, type Page } from '../api'
+import { apiGet } from '../api'
 import { listQueryString, queryKeys } from '../queryClient'
-import { useDebounced, type Attendee } from '../pages/panel/shared'
-
-type AttendeePickerProps = {
-  value: Attendee[]
-  onChange: (attendees: Attendee[]) => void
-  errors?: string[]
-}
+import { useDebounced } from '../pages/panel/shared'
+import type { Attendee } from '../types/api/admin'
+import type { Page } from '../types/api/pagination'
+import type { AttendeePickerProps } from '../types/ui/attendeePicker'
 
 const MAX_RESULTS = 6
 

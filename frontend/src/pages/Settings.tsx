@@ -4,7 +4,7 @@ import { Link, Navigate, useLocation } from 'react-router'
 import { apiPatch, apiPost, useFieldErrors, type FieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { Field, FormAlert } from '../components/Field'
-import type { User } from '../types/users'
+import type { User } from '../types/api/users'
 
 // After a failed submit, move focus to the first invalid field so it's announced
 function useFocusFirstInvalid(formRef: RefObject<HTMLFormElement | null>, errors: FieldErrors) {

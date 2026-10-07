@@ -1,35 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { OccasionCore, UserOccasion } from '../../types/occasions'
-import type { Tag } from '../../types/tags'
 
 export const PAGE_SIZE = 20 // matches PanelPagination on the backend
-
-export type PanelUser = {
-  id: number
-  email: string
-  name: string
-  is_active: boolean
-  is_staff: boolean
-  is_superuser: boolean
-  date_joined: string
-  last_login: string | null
-  occasions_count: number
-}
-
-export type Attendee = { id: number; name: string; email: string }
-
-// Order 0 is the main image (shown on occasion cards); 1-3 are the gallery on the occasion's page
-export type OccasionImage = { order: number; url: string }
 
 // The image slots and upload limits; they match the server
 export const IMAGE_SLOTS = [0, 1, 2, 3] as const
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-
-// Saved image URLs by slot, as the server has them
-export type SavedImages = Record<number, string>
-// Edits waiting for Save: a File to upload into the slot, or null to empty it
-export type ImageChanges = Record<number, File | null>
 
 export function slotLabel(order: number) {
   return order === 0 ? 'Main image' : `Gallery ${order}`
@@ -40,29 +16,6 @@ export function imageProblem(file: File) {
   if (!IMAGE_TYPES.includes(file.type)) return 'Use a JPEG, PNG or WebP image.'
   if (file.size > MAX_IMAGE_BYTES) return 'The image must be 5 MB or smaller.'
   return null
-}
-
-export type PanelOccasion = OccasionCore & {
-  cancelled_at: UserOccasion['cancelled_at']
-  duration_minutes: number | null
-  attendees: Attendee[]
-  tags: Tag[]
-  images: OccasionImage[]
-  created_at: string
-  updated_at: string
-}
-
-export type PanelTag = Tag & {
-  occasions_count: number
-  has_embedding: boolean
-  created_at: string
-  updated_at: string
-}
-
-export type Stats = {
-  users: { total: number; active: number; staff: number; new_this_week: number }
-  occasions: { total: number; upcoming: number }
-  next_occasions: (OccasionCore & Pick<UserOccasion, 'attendees_count'>)[]
 }
 
 // The API sends ISO datetimes in UTC; everything below shows them in the viewer's time zone

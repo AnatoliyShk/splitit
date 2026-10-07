@@ -1,13 +1,4 @@
-import type { TagName } from '../types/tags'
-
-// A status shown before the tags, e.g. "Cancelled"; `off` draws it dashed
-export type StatusTag = { label: string; off?: boolean }
-
-type TagListProps = {
-  tagNames: TagName[]
-  statusTags?: StatusTag[]
-  className?: string
-}
+import type { TagListProps } from '../types/ui/tagList'
 
 // An occasion's tag names as a list of pills, after any status tags. Renders nothing when both are empty
 export function TagList({ tagNames, statusTags = [], className }: TagListProps) {

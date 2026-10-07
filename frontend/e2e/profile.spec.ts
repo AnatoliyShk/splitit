@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import type { Network } from '../src/types/connections'
+import type { Network } from '../src/types/api/connections'
 import { ADMIN, makeOccasion, mockApi, USER, type TestConnection } from './fixtures/user'
 
 const connections: TestConnection[] = [

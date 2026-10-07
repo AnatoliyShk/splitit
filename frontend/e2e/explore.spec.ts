@@ -10,6 +10,8 @@ const occasions: TestOccasion[] = [
 const join = (id: number) => `POST /api/occasions/${id}/join/`
 // Tags and who's going are folded away on each card until this is clicked
 const showDetails = (page: Page) => page.getByRole('button', { name: 'Show details' }).click()
+// The Filters panel's header button; its name also holds the saved filters' summary
+const filtersToggle = (page: Page) => page.getByRole('button', { name: /^Filters/ })
 
 test('redirects to the login page when logged out', async ({ page }) => {
   await mockApi(page, { user: null })
@@ -406,9 +408,10 @@ test.describe('filters', () => {
   test('starts collapsed, showing that nothing is filtered', async ({ page }) => {
     await mockApi(page, { user: USER, explore: occasions, tags })
     await page.goto('/explore')
-    const filters = page.locator('details.explore-filters')
-    await expect(filters.locator('summary')).toContainText('All occasions')
+    await expect(filtersToggle(page)).toContainText('All occasions')
+    await expect(filtersToggle(page)).toHaveAttribute('aria-expanded', 'false')
     await expect(page.getByRole('group', { name: 'Tags' })).toBeHidden()
+    await expect(page.getByRole('checkbox', { name: 'Monday' })).toBeHidden()
   })
 
   test('saves the chosen tags and days and reloads the deck', async ({ page }) => {
@@ -416,7 +419,7 @@ test.describe('filters', () => {
     await page.goto('/explore')
     await expect(page.getByRole('article', { name: 'Rooftop Yoga' })).toBeVisible()
 
-    await page.getByText('Filters', { exact: true }).click()
+    await filtersToggle(page).click()
     const save = page.getByRole('button', { name: 'Save filters' })
     await expect(save).toBeDisabled()
     await page.getByRole('group', { name: 'Tags' }).getByText('wellness', { exact: true }).click()
@@ -427,7 +430,7 @@ test.describe('filters', () => {
 
     await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible()
     expect(mock.bodies[`PUT /api/users/${USER.uuid}/filter-preference/`]).toEqual({ tag_ids: [2], weekdays: [6, 7] })
-    await expect(page.locator('details.explore-filters summary')).toContainText(/wellness · Sat, Sun/)
+    await expect(filtersToggle(page)).toContainText(/wellness · Sat, Sun/)
     expect(exploreRequests(mock.requests)).toBeGreaterThan(requestsBeforeSave)
     await expect(save).toBeDisabled()
   })
@@ -440,9 +443,9 @@ test.describe('filters', () => {
       filters: { tags: [tags[0]], weekdays: [5] },
     })
     await page.goto('/explore')
-    await expect(page.locator('details.explore-filters summary')).toContainText(/games · Fri/)
+    await expect(filtersToggle(page)).toContainText(/games · Fri/)
 
-    await page.getByText('Filters', { exact: true }).click()
+    await filtersToggle(page).click()
     await expect(page.getByRole('checkbox', { name: 'games' })).toBeChecked()
     await expect(page.getByRole('checkbox', { name: 'wellness' })).not.toBeChecked()
     await expect(page.getByRole('checkbox', { name: 'Friday' })).toBeChecked()
@@ -451,7 +454,7 @@ test.describe('filters', () => {
     await expect(page.getByRole('checkbox', { name: 'games' })).not.toBeChecked()
     await expect(page.getByRole('checkbox', { name: 'Friday' })).not.toBeChecked()
     await page.getByRole('button', { name: 'Save filters' }).click()
-    await expect(page.locator('details.explore-filters summary')).toContainText('All occasions')
+    await expect(filtersToggle(page)).toContainText('All occasions')
     expect(mock.bodies[`PUT /api/users/${USER.uuid}/filter-preference/`]).toEqual({ tag_ids: [], weekdays: [] })
   })
 
@@ -472,25 +475,25 @@ test.describe('filters', () => {
       },
     })
     await page.goto('/explore')
-    await page.getByText('Filters', { exact: true }).click()
+    await filtersToggle(page).click()
     await page.getByRole('checkbox', { name: 'Monday' }).check()
     await page.getByRole('button', { name: 'Save filters' }).click()
-    await expect(page.locator('details.explore-filters').getByRole('alert')).toHaveText('Mocked failure.')
-    await expect(page.locator('details.explore-filters summary')).toContainText('All occasions')
+    await expect(page.locator('.explore-filters').getByRole('alert')).toHaveText('Mocked failure.')
+    await expect(filtersToggle(page)).toContainText('All occasions')
   })
 
   test('are hidden while an occasion is active', async ({ page }) => {
     await mockApi(page, { user: USER, active: makeOccasion(21, 'Pottery Class', 4), tags })
     await page.goto('/explore')
     await expect(page.getByRole('article', { name: 'Pottery Class' })).toBeVisible()
-    await expect(page.locator('details.explore-filters')).toHaveCount(0)
+    await expect(filtersToggle(page)).toHaveCount(0)
   })
 
   test('are hidden when the saved filters cannot be loaded', async ({ page }) => {
     await mockApi(page, { user: USER, explore: occasions, filters: 500 })
     await page.goto('/explore')
     await expect(page.getByRole('article', { name: 'Rooftop Yoga' })).toBeVisible()
-    await expect(page.locator('details.explore-filters')).toHaveCount(0)
+    await expect(filtersToggle(page)).toHaveCount(0)
     await expect(page.getByRole('alert')).toHaveCount(0)
   })
 })

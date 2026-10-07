@@ -1,9 +1,4 @@
-type PagerProps = {
-  page: number
-  count: number
-  pageSize: number
-  onChange: (page: number) => void
-}
+import type { PagerProps } from '../types/ui/pager'
 
 export function Pager({ page, count, pageSize, onChange }: PagerProps) {
   const pages = Math.max(1, Math.ceil(count / pageSize))

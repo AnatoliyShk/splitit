@@ -34,3 +34,6 @@ export type OccasionDetail = UserOccasion & {
   gallery: string[]
   is_going: boolean
 }
+
+/** GET /api/occasions/explore/. A user goes to one occasion at a time: while `active_occasion` is set, `occasions` is empty. */
+export type ExploreData = { active_occasion: ExploreOccasion | null; occasions: ExploreOccasion[] }

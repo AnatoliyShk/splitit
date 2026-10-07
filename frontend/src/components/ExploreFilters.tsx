@@ -3,9 +3,10 @@ import { useState, type SubmitEvent } from 'react'
 import { apiGet, apiPut, useFieldErrors } from '../api'
 import { hasFilters, useFilterPreference } from '../filterPreference'
 import { queryKeys } from '../queryClient'
-import type { Tag } from '../types/tags'
-import type { FilterPreference, User, Weekday } from '../types/users'
+import type { Tag } from '../types/api/tags'
+import type { FilterPreference, User, Weekday } from '../types/api/users'
 import { FormAlert } from './Field'
+import { RollOut } from './RollOut'
 
 const WEEKDAYS: Weekday[] = [1, 2, 3, 4, 5, 6, 7]
 // 2024-01-01 was a Monday, so day n of that week is ISO weekday n
@@ -81,79 +82,85 @@ function FiltersEditor({ user, savedFilters }: { user: User; savedFilters: Filte
   }
 
   return (
-    <details className="explore-filters" onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>
-        <span className="explore-filters-title">Filters</span>
-        <span className="explore-filters-summary">{filtersSummary(savedFilters)}</span>
-      </summary>
+    <div className="explore-filters">
+      <RollOut
+        toggle={
+          <>
+            <span className="explore-filters-title">Filters</span>
+            <span className="explore-filters-summary">{filtersSummary(savedFilters)}</span>
+          </>
+        }
+        toggleClassName="explore-filters-toggle"
+        onOpenChange={setOpen}
+      >
+        <form className="form explore-filters-form" onSubmit={onSubmit}>
+          <FormAlert messages={errors.non_field_errors} />
 
-      <form className="form explore-filters-form" onSubmit={onSubmit}>
-        <FormAlert messages={errors.non_field_errors} />
+          <fieldset className="filter-group">
+            <legend>Tags</legend>
+            <p className="field-hint">Show occasions with any of these tags.</p>
+            {!tags && !tagsQuery.error && <p className="muted">Loading…</p>}
+            {tags && tags.length === 0 && <p className="muted">No tags yet.</p>}
+            {tags && tags.length > 0 && (
+              <div className="filter-options">
+                {tags.map((tag) => (
+                  <label className="filter-option" key={tag.id}>
+                    <input
+                      type="checkbox"
+                      checked={selectedTagIds.has(tag.id)}
+                      onChange={() => edit(() => setSelectedTagIds((tagIds) => toggled(tagIds, tag.id)))}
+                    />
+                    {tag.name}
+                  </label>
+                ))}
+              </div>
+            )}
+          </fieldset>
 
-        <fieldset className="filter-group">
-          <legend>Tags</legend>
-          <p className="field-hint">Show occasions with any of these tags.</p>
-          {!tags && !tagsQuery.error && <p className="muted">Loading…</p>}
-          {tags && tags.length === 0 && <p className="muted">No tags yet.</p>}
-          {tags && tags.length > 0 && (
+          <fieldset className="filter-group">
+            <legend>Days</legend>
+            <p className="field-hint">Show occasions starting on these days.</p>
             <div className="filter-options">
-              {tags.map((tag) => (
-                <label className="filter-option" key={tag.id}>
+              {WEEKDAYS.map((weekday) => (
+                <label className="filter-option" key={weekday}>
                   <input
                     type="checkbox"
-                    checked={selectedTagIds.has(tag.id)}
-                    onChange={() => edit(() => setSelectedTagIds((tagIds) => toggled(tagIds, tag.id)))}
+                    aria-label={longWeekdayFormat.format(weekdayDate(weekday))}
+                    checked={selectedWeekdays.has(weekday)}
+                    onChange={() => edit(() => setSelectedWeekdays((weekdays) => toggled(weekdays, weekday)))}
                   />
-                  {tag.name}
+                  {shortWeekdayFormat.format(weekdayDate(weekday))}
                 </label>
               ))}
             </div>
-          )}
-        </fieldset>
+          </fieldset>
 
-        <fieldset className="filter-group">
-          <legend>Days</legend>
-          <p className="field-hint">Show occasions starting on these days.</p>
-          <div className="filter-options">
-            {WEEKDAYS.map((weekday) => (
-              <label className="filter-option" key={weekday}>
-                <input
-                  type="checkbox"
-                  aria-label={longWeekdayFormat.format(weekdayDate(weekday))}
-                  checked={selectedWeekdays.has(weekday)}
-                  onChange={() => edit(() => setSelectedWeekdays((weekdays) => toggled(weekdays, weekday)))}
-                />
-                {shortWeekdayFormat.format(weekdayDate(weekday))}
-              </label>
-            ))}
+          <div className="form-actions">
+            {saveMutation.isSuccess && (
+              <p className="form-status" role="status">
+                Saved
+              </p>
+            )}
+            <button
+              className="btn btn-sm"
+              type="button"
+              disabled={selectedTagIds.size === 0 && selectedWeekdays.size === 0}
+              onClick={() =>
+                edit(() => {
+                  setSelectedTagIds(new Set())
+                  setSelectedWeekdays(new Set())
+                })
+              }
+            >
+              Clear
+            </button>
+            <button className="btn btn-sm btn-confirm" type="submit" disabled={!changed || saveMutation.isPending}>
+              {saveMutation.isPending ? 'Saving…' : 'Save filters'}
+            </button>
           </div>
-        </fieldset>
-
-        <div className="form-actions">
-          {saveMutation.isSuccess && (
-            <p className="form-status" role="status">
-              Saved
-            </p>
-          )}
-          <button
-            className="btn btn-sm"
-            type="button"
-            disabled={selectedTagIds.size === 0 && selectedWeekdays.size === 0}
-            onClick={() =>
-              edit(() => {
-                setSelectedTagIds(new Set())
-                setSelectedWeekdays(new Set())
-              })
-            }
-          >
-            Clear
-          </button>
-          <button className="btn btn-sm btn-confirm" type="submit" disabled={!changed || saveMutation.isPending}>
-            {saveMutation.isPending ? 'Saving…' : 'Save filters'}
-          </button>
-        </div>
-      </form>
-    </details>
+        </form>
+      </RollOut>
+    </div>
   )
 }
 

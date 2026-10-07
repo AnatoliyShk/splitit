@@ -1,15 +1,11 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { apiGet, type Page } from '../api'
+import { apiGet } from '../api'
 import { listQueryString, queryKeys } from '../queryClient'
-import { plural, useDebounced, type PanelTag } from '../pages/panel/shared'
-import type { Tag } from '../types/tags'
-
-type TagPickerProps = {
-  value: Tag[]
-  onChange: (tags: Tag[]) => void
-  errors?: string[]
-}
+import { plural, useDebounced } from '../pages/panel/shared'
+import type { PanelTag } from '../types/api/admin'
+import type { Page } from '../types/api/pagination'
+import type { TagPickerProps } from '../types/ui/tagPicker'
 
 const MAX_RESULTS = 6
 

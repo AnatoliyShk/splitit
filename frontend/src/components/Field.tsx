@@ -1,11 +1,4 @@
-import type { InputHTMLAttributes } from 'react'
-
-type FieldProps = InputHTMLAttributes<HTMLInputElement> & {
-  id: string
-  label: string
-  hint?: string
-  errors?: string[]
-}
+import type { FieldProps } from '../types/ui/field'
 
 export function Field({ id, label, hint, errors, ...input }: FieldProps) {
   const hintId = `${id}-hint`

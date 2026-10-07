@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiGet } from './api'
 import { queryKeys } from './queryClient'
-import type { FilterPreference, User } from './types/users'
+import type { FilterPreference, User } from './types/api/users'
 
 /** The user's saved Explore filters; shares its cache with the filter panel. */
 export function useFilterPreference(user: User | null) {

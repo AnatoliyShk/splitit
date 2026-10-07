@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { User } from './types/users'
+import type { User } from './types/api/users'
 
 export type Auth = {
   user: User | null

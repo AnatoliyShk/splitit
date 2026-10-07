@@ -1626,7 +1626,61 @@ h1 mark {
   font-size: 15px;
 }
 
-/* Saved Explore filters: a collapsible panel above the deck */
+/* RollOut (components/RollOut.tsx): a toggle button and the content it rolls open.
+   Each use adds its own classes for how the toggle looks and where it sits */
+.roll-out-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 52px;
+  font: 700 15px/1 var(--sans);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+/* Inside the toggle, so a container's edge doesn't hide it */
+.roll-out-toggle:focus-visible {
+  outline-offset: -6px;
+}
+
+.roll-out-chevron {
+  flex: none;
+  transition: transform 200ms ease;
+}
+
+.roll-out-toggle[aria-expanded='true'] .roll-out-chevron {
+  transform: rotate(180deg);
+}
+
+/* Rolls open by growing its one grid row from 0 to the content's height */
+.roll-out {
+  display: grid;
+  grid-template-rows: 0fr;
+  width: 100%;
+  /* Hidden (also from screen readers and Tab) once the closing roll has finished */
+  visibility: hidden;
+  transition:
+    grid-template-rows 200ms ease,
+    visibility 0s 200ms;
+}
+
+.roll-out[data-open='true'] {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition: grid-template-rows 200ms ease;
+}
+
+.roll-out-body {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Saved Explore filters: a RollOut panel above the deck */
 .explore-filters {
   width: 100%;
   background: var(--surface);
@@ -1635,14 +1689,11 @@ h1 mark {
   box-shadow: var(--shadow-sm);
 }
 
-.explore-filters summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* The panel's header, a RollOut toggle: title, then what's saved and the chevron on the right */
+.explore-filters-toggle {
   gap: 12px;
-  min-height: 52px;
   padding: 0 20px;
-  cursor: pointer;
+  border-radius: calc(var(--radius-sm) - 3px);
 }
 
 .explore-filters-title {
@@ -1651,6 +1702,7 @@ h1 mark {
 
 .explore-filters-summary {
   min-width: 0;
+  margin-left: auto;
   overflow: hidden;
   font-size: 14px;
   font-weight: 700;
@@ -1779,25 +1831,15 @@ h1 mark {
   border-radius: var(--radius-sm);
 }
 
-/* "Show details" on an Explore card: sits above the card link's overlay so it gets the click */
-/* The card's bottom strip toggles the details. It sits above the card link's overlay so it gets the click,
+/* An Explore card's bottom strip (a RollOut toggle). It sits above the card link's overlay so it gets the click,
    and stretches to the card's edges (the negative margins undo the card's padding) */
 .explore-details-toggle {
   position: relative;
   z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
   align-self: stretch;
-  min-height: 52px;
+  width: auto;
   margin: 0 calc(-1 * var(--card-pad-x)) calc(-1 * var(--card-pad-y));
   padding: 0 var(--card-pad-x);
-  font: 700 15px/1 var(--sans);
-  color: var(--text);
-  cursor: pointer;
-  background: none;
-  border: 0;
   border-top: var(--border);
   /* The card's corner radius, less its border */
   border-radius: 0 0 calc(var(--radius) - 3px) calc(var(--radius) - 3px);
@@ -1809,51 +1851,22 @@ h1 mark {
   background: var(--secondary);
 }
 
-/* Inside the strip, so the card's edge doesn't hide it */
-.explore-details-toggle:focus-visible {
-  outline-offset: -6px;
-}
-
-.explore-details-chevron {
-  transition: transform 200ms ease;
-}
-
-.explore-details-toggle[aria-expanded='true'] .explore-details-chevron {
-  transform: rotate(180deg);
-}
-
-/* Rolls open by growing its one grid row from 0 to the content's height */
+/* The card's tags and who's going, rolled out above the strip */
 .explore-details {
-  display: grid;
-  grid-template-rows: 0fr;
-  width: 100%;
-  /* Cancels the card's gap above it, so a closed card ends at the button; the body adds it back inside */
+  /* Cancels the card's gap above it, so a closed card ends at the strip; the body adds it back inside */
   margin-top: -14px;
-  /* Hidden (also from screen readers and Tab) once the closing roll has finished */
-  visibility: hidden;
-  transition:
-    grid-template-rows 200ms ease,
-    visibility 0s 200ms;
 }
 
-.explore-details[data-open='true'] {
-  grid-template-rows: 1fr;
-  visibility: visible;
-  transition: grid-template-rows 200ms ease;
-}
-
-.explore-details-body {
+.explore-details .roll-out-body {
   display: grid;
   gap: 14px;
-  min-height: 0;
-  overflow: hidden;
 }
 
-.explore-details-body > :first-child {
+.explore-details .roll-out-body > :first-child {
   margin-top: 14px;
 }
 
-.explore-details-body .explore-going {
+.explore-details .explore-going {
   margin-top: 0;
   padding-top: 0;
 }

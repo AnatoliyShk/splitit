@@ -31,10 +31,11 @@ frontend/           Vite React app
   src/App.tsx       layout (header, footer) and routes
   src/pages/        Home (landing), Login, Register, Profile, Settings (name/password, linked from Profile), Explore (accept/decline upcoming occasions; the ExploreFilters panel saves tag and weekday filters), OccasionPage (/occasions/:id, main image + gallery; Explore cards and Profile rows link to it)
   src/pages/panel/  admin control panel at /admin (staff only)
-  src/components/   shared UI (form fields, auth card, OccasionCard for Explore, TagList of tag names)
+  src/components/   shared UI (form fields, auth card, OccasionCard for Explore, TagList of tag names, RollOut: a toggle that rolls content open, used by the Explore card and filters; use it for any new collapsible section)
   src/api.ts        fetch helpers with CSRF handling; useFieldErrors() turns query/mutation errors into form errors
   src/queryClient.ts  TanStack QueryClient (retry policy) and `queryKeys`, every query key in one place
-  src/types/        API response types shared across pages, one file per backend app (users, occasions, tags, connections); types used by one file stay in it, panel-only types in pages/panel/shared.ts
+  src/types/api/    backend response shapes, one file per API area (users, occasions, tags, connections, admin, pagination); each mirrors a serializer
+  src/types/ui/     component props and UI state, one file per component (rollOut, tagList, field, ...); small helper types used inside one file stay in it
   src/auth.ts       useAuth() hook; state lives in AuthProvider.tsx
   src/filterPreference.ts  useFilterPreference(): the user's saved Explore filters
   src/index.css     design tokens (colors, borders, shadows, fonts)

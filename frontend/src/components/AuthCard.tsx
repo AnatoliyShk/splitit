@@ -1,16 +1,8 @@
-import { useEffect, useRef, type ReactNode, type SubmitEvent } from 'react'
+import { useEffect, useRef } from 'react'
 import { Navigate, NavLink, useLocation } from 'react-router'
-import type { FieldErrors } from '../api'
 import { useAuth } from '../auth'
+import type { AuthCardProps } from '../types/ui/authCard'
 import { FormAlert } from './Field'
-
-type AuthCardProps = {
-  title: string
-  subtitle: string
-  errors: FieldErrors
-  onSubmit: (event: SubmitEvent<HTMLFormElement>) => void
-  children: ReactNode
-}
 
 const tabs = [
   { to: '/login', label: 'Log in' },

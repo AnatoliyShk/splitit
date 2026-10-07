@@ -6,7 +6,10 @@ import { AttendeePicker } from '../../components/AttendeePicker'
 import { Field, FormAlert } from '../../components/Field'
 import { TagPicker } from '../../components/TagPicker'
 import { queryKeys } from '../../queryClient'
-import type { Tag } from '../../types/tags'
+import type { Attendee, OccasionImage, PanelOccasion } from '../../types/api/admin'
+import type { Tag } from '../../types/api/tags'
+import type { ImageChanges, SavedImages } from '../../types/ui/imageSlots'
+import type { OccasionEditorProps } from '../../types/ui/occasionForm'
 import { ImageSlots } from './ImageSlots'
 import {
   formatDate,
@@ -15,11 +18,6 @@ import {
   imageProblem,
   timeZone,
   toLocalInput,
-  type Attendee,
-  type ImageChanges,
-  type OccasionImage,
-  type PanelOccasion,
-  type SavedImages,
 } from './shared'
 
 function savedFrom(images: OccasionImage[]): SavedImages {
@@ -55,13 +53,6 @@ export default function OccasionForm() {
     return <OccasionEditor occasionId={occasionId} occasion={null} loadErrors={loadErrors} />
   }
   return <OccasionEditor occasionId={occasionId} occasion={occasionQuery.data ?? null} loadErrors={loadErrors} />
-}
-
-type OccasionEditorProps = {
-  // Set when editing; the form for a new occasion has none
-  occasionId: string | undefined
-  occasion: PanelOccasion | null
-  loadErrors: FieldErrors
 }
 
 function OccasionEditor({ occasionId, occasion, loadErrors }: OccasionEditorProps) {

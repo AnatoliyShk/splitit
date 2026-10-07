@@ -3,7 +3,7 @@ import { useMemo, type ReactNode } from 'react'
 import { apiGet, apiPost } from './api'
 import { AuthContext, type Auth } from './auth'
 import { queryKeys } from './queryClient'
-import type { User } from './types/users'
+import type { User } from './types/api/users'
 
 type UserResponse = { user: User | null }
 

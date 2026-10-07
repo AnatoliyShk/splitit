@@ -1,10 +1,12 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type SubmitEvent } from 'react'
-import { apiDelete, apiGet, apiPatch, apiPost, useFieldErrors, type Page } from '../../api'
+import { apiDelete, apiGet, apiPatch, apiPost, useFieldErrors } from '../../api'
 import { Field, FormAlert } from '../../components/Field'
 import { Pager } from '../../components/Pager'
 import { listQueryString, queryKeys } from '../../queryClient'
-import { formatDate, PAGE_SIZE, plural, useDebounced, type PanelTag } from './shared'
+import type { PanelTag } from '../../types/api/admin'
+import type { Page } from '../../types/api/pagination'
+import { formatDate, PAGE_SIZE, plural, useDebounced } from './shared'
 
 export default function Tags() {
   const queryClient = useQueryClient()

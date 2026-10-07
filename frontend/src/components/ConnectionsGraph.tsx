@@ -6,7 +6,7 @@ import Sigma from 'sigma'
 import type { NodeHoverDrawingFunction, NodeLabelDrawingFunction } from 'sigma/rendering'
 import { apiGet } from '../api'
 import { queryKeys } from '../queryClient'
-import type { Network } from '../types/connections'
+import type { Network } from '../types/api/connections'
 
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)')
 

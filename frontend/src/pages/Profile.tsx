@@ -6,9 +6,9 @@ import { useAuth } from '../auth'
 import { FormAlert } from '../components/Field'
 import { TagList } from '../components/TagList'
 import { queryKeys } from '../queryClient'
-import type { Connection } from '../types/connections'
-import type { UserOccasion } from '../types/occasions'
-import type { User } from '../types/users'
+import type { Connection } from '../types/api/connections'
+import type { UserOccasion } from '../types/api/occasions'
+import type { User } from '../types/api/users'
 import { formatDate, formatRange } from './panel/shared'
 
 // Sigma and graphology are big; load them only when someone has connections to draw
