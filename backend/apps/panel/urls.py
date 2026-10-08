@@ -6,6 +6,7 @@ from . import views
 router = SimpleRouter()
 router.register("users", views.UserViewSet, basename="panel-user")
 router.register("occasions", views.OccasionViewSet, basename="panel-occasion")
+router.register("templates", views.TemplateViewSet, basename="panel-template")
 router.register("tags", views.TagViewSet, basename="panel-tag")
 
 urlpatterns = [

@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { apiGet, apiPatch, useFieldErrors } from '../../api'
+import { apiGet, apiPatch, apiPost, useFieldErrors } from '../../api'
 import { useAuth } from '../../auth'
 import { Field, FormAlert } from '../../components/Field'
 import { Pager } from '../../components/Pager'
@@ -43,14 +43,33 @@ export default function Users() {
     },
   })
   const busyUserId = updateMutation.isPending ? updateMutation.variables.panelUser.id : null
-  const errors = useFieldErrors(updateMutation.error, usersQuery.error)
+
+  const testMutation = useMutation({
+    mutationFn: () => apiPost<PanelUser>('/api/admin/users/test/'),
+    onMutate: () => updateMutation.reset(),
+    // Refresh first, so the message never points at a row the table doesn't show yet
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.panel.users() }),
+  })
+  const testUser = testMutation.isSuccess ? testMutation.data : null
+  const errors = useFieldErrors(updateMutation.error, testMutation.error, usersQuery.error)
 
   return (
     <>
       <div className="panel-head">
         <h1>Users</h1>
-        {usersPage && <span className="muted">{usersPage.count} total</span>}
+        <div className="panel-head-actions">
+          {usersPage && <span className="muted">{usersPage.count} total</span>}
+          <button className="btn" type="button" onClick={() => testMutation.mutate()} disabled={testMutation.isPending}>
+            {testMutation.isPending ? 'Creating…' : 'Create test user'}
+          </button>
+        </div>
       </div>
+
+      {testUser && (
+        <p className="form-status" role="status">
+          Created {testUser.name} ({testUser.email}). It has no password, so it can't log in.
+        </p>
+      )}
 
       <div className="panel-toolbar">
         <Field

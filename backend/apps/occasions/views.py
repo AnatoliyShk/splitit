@@ -1,8 +1,5 @@
-import logging
+from datetime import UTC
 
-from django.conf import settings
-from django.core.files.base import ContentFile
-from django.db import transaction
 from django.db.models import Count, Exists, OuterRef, Prefetch, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -16,13 +13,26 @@ from rest_framework.views import APIView
 from apps.connections.models import Connection
 from apps.users.access import user_from_url
 from apps.tags.models import Tag
-from apps.users.models import FilterPreference, User
+from apps.users.models import FilterPreference, Gender, User
 
-from .models import MAIN_IMAGE_ORDER, Occasion, OccasionImage, OccasionUser
-from .importing import EventNotRead, read_event, upsert_tags
-from .services import AlreadyGoing, active_occasions, create_occasion, join
-
-logger = logging.getLogger(__name__)
+from .models import MAIN_IMAGE_ORDER, Occasion, OccasionTemplate, OccasionUser
+from .importing import (
+    EventNotRead,
+    EventReadFailed,
+    ImportUnavailable,
+    ensure_free_to_add,
+    ensure_import_enabled,
+    fetch_event,
+    save_imported_occasion,
+)
+from .services import (
+    AlreadyGoing,
+    active_occasions,
+    create_occasion,
+    create_occasion_from_template,
+    deactivate_finished,
+    join,
+)
 
 
 class PublicUserSerializer(serializers.Serializer):
@@ -67,16 +77,38 @@ class UserOccasionSerializer(serializers.ModelSerializer):
         return PublicUserSerializer(creator).data
 
 
-class OccasionCreateSerializer(serializers.ModelSerializer):
-    """What a regular user sends to create an occasion; tags as ids."""
+class OccasionTemplateSerializer(serializers.ModelSerializer):
+    tags = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
+    # URL of the image every occasion made from it starts with on previews (cards, lists), or null
+    main_image = serializers.SerializerMethodField()
 
-    tag_ids = serializers.PrimaryKeyRelatedField(
-        source="tags", queryset=Tag.objects.all(), many=True, required=False
-    )
+    class Meta:
+        model = OccasionTemplate
+        fields = ("id", "name", "description", "duration_minutes", "tags", "main_image")
+
+    def get_main_image(self, template) -> str | None:
+        # Reads the prefetched images, so a list costs no query per template
+        main_image = next((image for image in template.images.all() if image.order == MAIN_IMAGE_ORDER), None)
+        return main_image.image.url if main_image else None
+
+
+class TemplateOccasionSerializer(serializers.Serializer):
+    """The one thing a user picks when making an occasion from a template: when it starts."""
+
+    start_datetime = serializers.DateTimeField()
+
+    def validate_start_datetime(self, value):
+        if value <= timezone.now():
+            raise serializers.ValidationError("The start must be in the future.")
+        return value
+
+
+class ImportedOccasionSerializer(serializers.ModelSerializer):
+    """Checks the fields read from an event's page before the occasion is created."""
 
     class Meta:
         model = Occasion
-        fields = ("name", "description", "start_datetime", "end_datetime", "tag_ids")
+        fields = ("name", "description", "start_datetime", "end_datetime")
         extra_kwargs = {"name": {"error_messages": {"blank": "Enter a name."}}}
 
     def validate_name(self, value):
@@ -86,8 +118,10 @@ class OccasionCreateSerializer(serializers.ModelSerializer):
         return name
 
     def validate_start_datetime(self, value):
-        if value <= timezone.now():
-            raise serializers.ValidationError("The start must be in the future.")
+        # Today is fine: a date without a time is read as midnight, which has already passed
+        today_start = timezone.now().astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        if value < today_start:
+            raise serializers.ValidationError("The start can't be before today.")
         return value
 
     def validate(self, attrs):
@@ -107,24 +141,62 @@ class OccasionImportSerializer(serializers.Serializer):
         return value
 
 
+class EventInvalid(Exception):
+    """The event read from a page can't become an occasion (usually it starts in the past)."""
+
+    def __init__(self, messages):
+        super().__init__(" ".join(messages))
+        self.messages = messages
+
+
+def validated_import_url(request_data):
+    """The link from the request; a bad one raises ValidationError (a 400 under `url`)."""
+    url_serializer = OccasionImportSerializer(data=request_data)
+    url_serializer.is_valid(raise_exception=True)
+    return url_serializer.validated_data["url"]
+
+
+def validated_event_fields(event):
+    """The event's Occasion fields, checked (other keys, like `tag_names`, are ignored); raises EventInvalid."""
+    occasion_serializer = ImportedOccasionSerializer(data=event)
+    if not occasion_serializer.is_valid():
+        raise EventInvalid(
+            [message for field_errors in occasion_serializer.errors.values() for message in field_errors]
+        )
+    return occasion_serializer.validated_data
+
+
 class OccasionDetailSerializer(UserOccasionSerializer):
     # Gallery image URLs in order, without the main image
     gallery = serializers.SerializerMethodField()
     is_going = serializers.BooleanField(read_only=True)
+    # The requester made it, so they can cancel it
+    is_mine = serializers.BooleanField(read_only=True)
 
     class Meta(UserOccasionSerializer.Meta):
-        fields = (*UserOccasionSerializer.Meta.fields, "gallery", "is_going")
+        fields = (*UserOccasionSerializer.Meta.fields, "gallery", "is_going", "is_mine")
 
     def get_gallery(self, occasion) -> list[str]:
         return [image.image.url for image in occasion.images.all() if image.order != MAIN_IMAGE_ORDER]
 
 
+GenderCountsSerializer = inline_serializer(
+    "GenderCounts", {gender.value: serializers.IntegerField() for gender in Gender}
+)
+
+
 class ExploreOccasionSerializer(UserOccasionSerializer):
     # Attendees the requester has a connection with, by name (see with_known_attendees)
     known_attendees = PublicUserSerializer(many=True, read_only=True)
+    # How many attendees are men, women or didn't say (see with_details)
+    gender_counts = serializers.SerializerMethodField()
 
     class Meta(UserOccasionSerializer.Meta):
-        fields = (*UserOccasionSerializer.Meta.fields, "known_attendees")
+        fields = (*UserOccasionSerializer.Meta.fields, "known_attendees", "gender_counts")
+
+    @extend_schema_field(GenderCountsSerializer)
+    def get_gender_counts(self, occasion):
+        return {gender.value: getattr(occasion, f"{gender.value}_count") for gender in Gender}
 
 
 DetailSerializer = inline_serializer("Detail", {"detail": serializers.CharField()})
@@ -139,7 +211,10 @@ ExploreResponseSerializer = inline_serializer(
 
 def with_details(occasions):
     return (
-        occasions.annotate(attendees_count=Count("users"))
+        occasions.annotate(
+            attendees_count=Count("users"),
+            **{f"{gender.value}_count": Count("users", filter=Q(users__gender=gender)) for gender in Gender},
+        )
         .select_related("created_by")
         .prefetch_related("tags", "images")
     )
@@ -251,6 +326,48 @@ class JoinOccasionView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class OccasionTemplatesView(APIView):
+    """GET /api/occasion-templates/: every template staff made, by name."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(summary="Occasion templates", responses=OccasionTemplateSerializer(many=True))
+    def get(self, request):
+        templates = OccasionTemplate.objects.prefetch_related("tags", "images")
+        return Response(OccasionTemplateSerializer(templates, many=True).data)
+
+
+class TemplateOccasionView(APIView):
+    """POST /api/occasion-templates/<id>/occasions/ {"start_datetime"}: the requester makes an occasion from a template.
+
+    Same as any occasion a regular user makes (see create_occasion): created by them, who goes to it, visible only to
+    them and the people directly connected to them. 409 while they're going to another occasion.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Create an occasion from a template",
+        request=TemplateOccasionSerializer,
+        responses={201: OccasionDetailSerializer, 404: DetailSerializer, 409: DetailSerializer},
+    )
+    def post(self, request, template_id):
+        template = OccasionTemplate.objects.filter(id=template_id).first()
+        if template is None:
+            return Response({"detail": "This template doesn't exist."}, status=status.HTTP_404_NOT_FOUND)
+        start_serializer = TemplateOccasionSerializer(data=request.data)
+        start_serializer.is_valid(raise_exception=True)
+        try:
+            occasion = create_occasion_from_template(
+                request.user, template, start_serializer.validated_data["start_datetime"]
+            )
+        except AlreadyGoing as already_going:
+            return already_going_response(already_going.occasion, "add")
+        return Response(
+            OccasionDetailSerializer(occasion_detail(occasion.id, request.user)).data, status=status.HTTP_201_CREATED
+        )
+
+
 class OccasionDetailView(APIView):
     """GET /api/occasions/<id>/: one occasion with its main image and gallery, for its own page."""
 
@@ -261,39 +378,40 @@ class OccasionDetailView(APIView):
         return Response(OccasionDetailSerializer(occasion_detail(occasion_id, request.user)).data)
 
 
-def occasion_detail(occasion_id, user):
-    """The occasion, with details and whether `user` is going, or a 404 if they may not see it."""
-    going = OccasionUser.objects.filter(occasion=OuterRef("pk"), user=user)
-    occasions = Occasion.objects.visible_to(user).annotate(is_going=Exists(going))
-    return get_object_or_404(with_details(occasions), id=occasion_id)
+class CancelOccasionView(APIView):
+    """POST /api/occasions/<id>/cancel/: the creator calls their own occasion off while it's still ahead or running.
 
-
-class CreateOccasionView(APIView):
-    """POST /api/occasions/: the requester creates an occasion and goes to it.
-
-    Made by a regular user, it's visible only to them and the people directly connected to them.
-    409 while they're going to another occasion (nothing is created).
+    Its attendees can join another occasion right away. 404 for anyone but the creator (also for staff-made ones,
+    which only the panel cancels); 400 when it is already cancelled or over.
     """
 
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
-        summary="Create an occasion and go to it",
-        request=OccasionCreateSerializer,
-        responses={201: OccasionDetailSerializer, 409: DetailSerializer},
+        summary="Cancel an occasion you made",
+        request=None,
+        responses={200: OccasionDetailSerializer, 400: DetailSerializer, 404: DetailSerializer},
     )
-    def post(self, request):
-        serializer = OccasionCreateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        fields = dict(serializer.validated_data)
-        tags = fields.pop("tags", [])
-        try:
-            occasion = create_occasion(request.user, tags, **fields)
-        except AlreadyGoing as already_going:
-            return already_going_response(already_going.occasion, "create")
-        return Response(
-            OccasionDetailSerializer(occasion_detail(occasion.id, request.user)).data, status=status.HTTP_201_CREATED
-        )
+    def post(self, request, occasion_id):
+        occasion = Occasion.objects.filter(id=occasion_id, created_by=request.user).first()
+        if occasion is None:
+            return Response({"detail": "This occasion doesn't exist."}, status=status.HTTP_404_NOT_FOUND)
+        if occasion.cancelled_at is not None:
+            return Response({"detail": "This occasion was cancelled."}, status=status.HTTP_400_BAD_REQUEST)
+        if occasion.ends_at <= timezone.now():
+            return Response({"detail": "This occasion is already over."}, status=status.HTTP_400_BAD_REQUEST)
+        occasion.cancelled_at = timezone.now()
+        occasion.save()
+        deactivate_finished()
+        return Response(OccasionDetailSerializer(occasion_detail(occasion.id, request.user)).data)
+
+
+def occasion_detail(occasion_id, user):
+    """The occasion, with details and whether `user` is going, or a 404 if they may not see it."""
+    going = OccasionUser.objects.filter(occasion=OuterRef("pk"), user=user)
+    made_by_user = Occasion.objects.filter(pk=OuterRef("pk"), created_by=user)
+    occasions = Occasion.objects.visible_to(user).annotate(is_going=Exists(going), is_mine=Exists(made_by_user))
+    return get_object_or_404(with_details(occasions), id=occasion_id)
 
 
 def already_going_response(occasion, action):
@@ -307,7 +425,10 @@ def already_going_response(occasion, action):
 
 
 class ImportOccasionView(APIView):
-    """POST /api/occasions/import/ {"url"}: Gemini reads the event's page, then it's created like POST /api/occasions/.
+    """POST /api/occasions/import/ {"url"}: Gemini reads the event's page, then the occasion is created from it.
+
+    The only way a regular user adds an occasion; made by them, it's visible only to them and the people directly
+    connected to them.
 
     The reply's tags are matched to existing ones ignoring case, and the missing ones created; the occasion is
     created by the requester, who goes to it, with a link-preview card (preview.py) as its main image.
@@ -324,53 +445,35 @@ class ImportOccasionView(APIView):
         responses={201: OccasionDetailSerializer, 409: DetailSerializer, 502: DetailSerializer, 503: DetailSerializer},
     )
     def post(self, request):
-        url_serializer = OccasionImportSerializer(data=request.data)
-        url_serializer.is_valid(raise_exception=True)
-        # Checked before asking Gemini, so a doomed import doesn't spend a call
-        active_occasion = active_occasions(request.user).order_by("start_datetime").first()
-        if active_occasion is not None:
-            return already_going_response(active_occasion, "add")
-        if not settings.GEMINI_API_KEY:
+        url = validated_import_url(request.data)
+        try:
+            ensure_free_to_add(request.user)
+            ensure_import_enabled()
+            event = fetch_event(url)
+            occasion_fields = validated_event_fields(event)
+            occasion = save_imported_occasion(request.user, occasion_fields, event["tag_names"], event["image_svg"])
+        except AlreadyGoing as already_going:
+            return already_going_response(already_going.occasion, "add")
+        except ImportUnavailable:
             return Response(
                 {"detail": "Adding occasions from a link isn't set up on this server."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-
-        try:
-            event = read_event(url_serializer.validated_data["url"])
         except EventNotRead:
             return Response(
                 {"url": ["Couldn't find an event with a title and a start time on that page."]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        except Exception:
-            logger.exception("Reading an event from a link failed")
+        except EventReadFailed:
             return Response(
                 {"detail": "Couldn't read that page right now. Try again in a moment."},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
-
-        tag_names = event.pop("tag_names")
-        image_svg = event.pop("image_svg")
-        occasion_serializer = OccasionCreateSerializer(data=event)
-        if not occasion_serializer.is_valid():
-            # Usually a start in the past; shown under the link, since that's what the user can change
-            messages = [message for field_errors in occasion_serializer.errors.values() for message in field_errors]
+        except EventInvalid as event_invalid:
+            # Shown under the link, since that's what the user can change
             return Response(
-                {"url": [f"That event can't be added: {' '.join(messages)}"]}, status=status.HTTP_400_BAD_REQUEST
+                {"url": [f"That event can't be added: {event_invalid}"]}, status=status.HTTP_400_BAD_REQUEST
             )
-
-        try:
-            # One transaction, so tags made for an occasion that then fails to save are rolled back with it
-            with transaction.atomic():
-                tags = upsert_tags(tag_names)
-                occasion = create_occasion(request.user, tags, **occasion_serializer.validated_data)
-                # Its link-preview card becomes the main image (cards, lists, the top of its page)
-                OccasionImage.objects.create(
-                    occasion=occasion, order=MAIN_IMAGE_ORDER, image=ContentFile(image_svg, name="preview.svg")
-                )
-        except AlreadyGoing as already_going:
-            return already_going_response(already_going.occasion, "add")
         return Response(
             OccasionDetailSerializer(occasion_detail(occasion.id, request.user)).data, status=status.HTTP_201_CREATED
         )

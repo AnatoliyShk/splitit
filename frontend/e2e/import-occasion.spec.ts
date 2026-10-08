@@ -22,6 +22,17 @@ test('shows the form on the profile', async ({ page }) => {
   await expect(add).toBeEnabled()
 })
 
+test('comes first on the profile, then the templates, your occasions and your connections', async ({ page }) => {
+  await mockApi(page, { user: USER, occasions: [], connections: [] })
+  await page.goto('/profile')
+  await expect(page.locator('.profile-card > h2')).toHaveText([
+    'Add an occasion from a link',
+    'Occasion templates',
+    'Your occasions',
+    'Your connections',
+  ])
+})
+
 test('adds the occasion from the link and opens its page', async ({ page }) => {
   const importedOccasion = {
     ...makeOccasion(41, 'Jazz night', 10, {

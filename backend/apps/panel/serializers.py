@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.occasions.models import MAX_IMAGE_ORDER, Occasion, OccasionImage
+from apps.occasions.models import MAX_IMAGE_ORDER, Occasion, OccasionImage, OccasionTemplate, OccasionTemplateImage
 from apps.tags.models import Tag
 from apps.users.models import User
 
@@ -122,6 +122,40 @@ class PanelOccasionSerializer(serializers.ModelSerializer):
         if start and end and end <= start:
             raise serializers.ValidationError({"end_datetime": "The end must be after the start."})
         return attrs
+
+
+class PanelTemplateImageSerializer(PanelOccasionImageSerializer):
+    class Meta(PanelOccasionImageSerializer.Meta):
+        model = OccasionTemplateImage
+
+
+class PanelTemplateSerializer(serializers.ModelSerializer):
+    # Tags are written as ids and read back with names, like an occasion's
+    tag_ids = serializers.PrimaryKeyRelatedField(
+        source="tags", queryset=Tag.objects.all(), many=True, required=False, write_only=True
+    )
+    tags = serializers.SerializerMethodField()
+    # Order 0 is the main image; 1-3 the gallery. Changed through the images endpoints, not here
+    images = PanelTemplateImageSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = OccasionTemplate
+        fields = (
+            "id",
+            "name",
+            "description",
+            "duration_minutes",
+            "tag_ids",
+            "tags",
+            "images",
+            "created_at",
+            "updated_at",
+        )
+        extra_kwargs = {"name": {"error_messages": {"blank": "Enter a name."}}}
+
+    def get_tags(self, template) -> list[dict]:
+        tags = sorted(template.tags.all(), key=lambda tag: tag.name.lower())
+        return OccasionTagSerializer(tags, many=True).data
 
 
 class PanelTagSerializer(serializers.ModelSerializer):

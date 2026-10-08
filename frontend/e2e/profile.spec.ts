@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import type { Network } from '../src/types/api/connections'
+import type { OccasionTemplate } from '../src/types/api/occasions'
 import { ADMIN, makeOccasion, mockApi, USER, type TestConnection } from './fixtures/user'
 
 const connections: TestConnection[] = [
@@ -126,7 +127,7 @@ test.describe('your occasions', () => {
       occasions: [makeOccasion(3, 'Board Game Night', 2, { attendees_count: 4, tags: ['games', 'social'] })],
     })
     await page.goto('/profile')
-    // Each occasion row is the link in a list item (the section's Create occasion link isn't in one)
+    // Each occasion row is the link in a list item
     const row = page.getByRole('region', { name: 'Your occasions' }).getByRole('listitem').getByRole('link')
     await expect(row).toContainText('Board Game Night')
     await expect(row).toContainText('4 going')
@@ -193,6 +194,7 @@ test.describe('your connections', () => {
   test('lists connections in the order the API returns them, strongest first', async ({ page }) => {
     await mockApi(page, { user: USER, occasions: [], connections, graph })
     await page.goto('/profile')
+    await page.getByRole('region', { name: 'Your connections' }).getByRole('button', { name: 'Show people (2)' }).click()
     const rows = page.getByRole('region', { name: 'Your connections' }).getByRole('listitem')
     await expect(rows).toHaveCount(2)
     await expect(rows.nth(0)).toContainText('Grace Hopper')
@@ -201,9 +203,26 @@ test.describe('your connections', () => {
     await expect(rows.nth(1)).toContainText('Strength 0.50')
   })
 
+  test('keeps the people list folded away until it is opened', async ({ page }) => {
+    await mockApi(page, { user: USER, occasions: [], connections, graph })
+    await page.goto('/profile')
+    const section = page.getByRole('region', { name: 'Your connections' })
+    const toggle = section.getByRole('button', { name: 'Show people (2)' })
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(section.getByRole('listitem')).toHaveCount(0)
+
+    await toggle.click()
+    await expect(section.getByRole('button', { name: 'Hide people' })).toHaveAttribute('aria-expanded', 'true')
+    await expect(section.getByRole('listitem')).toHaveCount(2)
+
+    await section.getByRole('button', { name: 'Hide people' }).click()
+    await expect(section.getByRole('listitem')).toHaveCount(0)
+  })
+
   test('pluralizes the shared occasions count', async ({ page }) => {
     await mockApi(page, { user: USER, occasions: [], connections, graph })
     await page.goto('/profile')
+    await page.getByRole('region', { name: 'Your connections' }).getByRole('button', { name: 'Show people (2)' }).click()
     const rows = page.getByRole('region', { name: 'Your connections' }).getByRole('listitem')
     await expect(rows.nth(0)).toContainText('3 shared occasions')
     await expect(rows.nth(1)).toContainText('1 shared occasion')
@@ -222,6 +241,7 @@ test.describe('your connections', () => {
     await mockApi(page, { user: USER, occasions: [], connections, graph: 500 })
     await page.goto('/profile')
     const section = page.getByRole('region', { name: 'Your connections' })
+    await section.getByRole('button', { name: 'Show people (2)' }).click()
     await expect(section.getByRole('listitem')).toHaveCount(2)
     await expect(section.getByRole('img')).toHaveCount(0)
   })
@@ -242,6 +262,125 @@ test.describe('your connections', () => {
     const section = page.getByRole('region', { name: 'Your connections' })
     await expect(section.getByRole('alert')).toHaveText('Mocked failure.')
     await expect(section.getByText('Loading…')).toHaveCount(0)
+  })
+})
+
+const templates: OccasionTemplate[] = [
+  { id: 1, name: 'Jazz night', description: 'A trio.', duration_minutes: 180, tags: ['jazz', 'music'], main_image: '/media/occasion_templates/1/main.png' },
+  { id: 2, name: 'Hangout', description: '', duration_minutes: null, tags: [], main_image: null },
+]
+
+test.describe('occasion templates', () => {
+  const section = (page: Page) => page.getByRole('region', { name: 'Occasion templates' })
+
+  test('lists the templates with their length, tags and a Create button', async ({ page }) => {
+    await mockApi(page, { user: USER, occasions: [], connections: [], templates })
+    await page.goto('/profile')
+
+    const rows = section(page).getByRole('listitem').filter({ has: page.getByRole('button', { name: /^Create an occasion from/ }) })
+    await expect(rows).toHaveCount(2)
+    await expect(rows.nth(0)).toContainText('Jazz night')
+    await expect(rows.nth(0)).toContainText('3 h')
+    await expect(rows.nth(0)).toContainText('jazz')
+    await expect(rows.nth(1)).toContainText('Hangout')
+    await expect(rows.nth(1)).toContainText('No fixed end')
+    await expect(section(page).getByRole('button', { name: 'Create an occasion from Jazz night' })).toHaveText('Create')
+  })
+
+  test('shows a template\'s main image beside it, and only when it has one', async ({ page }) => {
+    await mockApi(page, { user: USER, occasions: [], connections: [], templates })
+    await page.goto('/profile')
+
+    const jazz = section(page).getByRole('listitem').filter({ hasText: 'Jazz night' })
+    await expect(jazz.locator('img')).toHaveAttribute('src', '/media/occasion_templates/1/main.png')
+    await expect(section(page).getByRole('listitem').filter({ hasText: 'Hangout' }).locator('img')).toHaveCount(0)
+  })
+
+  test('says so when there are no templates', async ({ page }) => {
+    await mockApi(page, { user: USER, occasions: [], connections: [] })
+    await page.goto('/profile')
+
+    await expect(section(page).getByText('No templates yet.')).toBeVisible()
+  })
+
+  test('shows an alert when the templates fail to load', async ({ page }) => {
+    await mockApi(page, { user: USER, occasions: [], connections: [], templates: 500 })
+    await page.goto('/profile')
+
+    await expect(section(page).getByRole('alert')).toHaveText('Mocked failure.')
+  })
+
+  test('Create asks for a start, makes the occasion from the template and opens it', async ({ page }) => {
+    const mock = await mockApi(page, {
+      user: USER,
+      occasions: [],
+      connections: [],
+      templates,
+      handlers: {
+        'POST /api/occasion-templates/1/occasions/': (route) =>
+          route.fulfill({
+            status: 201,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              ...makeOccasion(31, 'Jazz night', 3),
+              gallery: [],
+              is_going: true,
+              is_mine: true,
+            }),
+          }),
+      },
+    })
+    await page.goto('/profile')
+
+    await section(page).getByRole('button', { name: 'Create an occasion from Jazz night' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Create “Jazz night”' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Create occasion' })).toBeDisabled()
+
+    await dialog.getByLabel('Starts').fill('2099-12-24T17:00')
+    await dialog.getByRole('button', { name: 'Create occasion' }).click()
+
+    await expect(page).toHaveURL(/\/occasions\/31$/)
+    const body = mock.bodies['POST /api/occasion-templates/1/occasions/'] as { start_datetime: string }
+    expect(new Date(body.start_datetime).getTime()).toBe(new Date('2099-12-24T17:00').getTime())
+  })
+
+  test('shows the refusal in the dialog and keeps it open', async ({ page }) => {
+    await mockApi(page, {
+      user: USER,
+      occasions: [],
+      connections: [],
+      templates,
+      handlers: {
+        'POST /api/occasion-templates/2/occasions/': (route) =>
+          route.fulfill({
+            status: 409,
+            contentType: 'application/json',
+            body: JSON.stringify({ detail: "You're already going to Pottery. You can add an occasion once it ends or is cancelled." }),
+          }),
+      },
+    })
+    await page.goto('/profile')
+
+    await section(page).getByRole('button', { name: 'Create an occasion from Hangout' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Create “Hangout”' })
+    await dialog.getByLabel('Starts').fill('2099-12-24T17:00')
+    await dialog.getByRole('button', { name: 'Create occasion' }).click()
+
+    await expect(dialog.getByRole('alert')).toContainText("You're already going to Pottery.")
+    await expect(page).toHaveURL(/\/profile$/)
+    await expect(dialog.getByRole('button', { name: 'Create occasion' })).toBeEnabled()
+  })
+
+  test('Cancel closes the dialog without creating anything', async ({ page }) => {
+    const mock = await mockApi(page, { user: USER, occasions: [], connections: [], templates })
+    await page.goto('/profile')
+
+    await section(page).getByRole('button', { name: 'Create an occasion from Jazz night' }).click()
+    await page.getByRole('dialog', { name: 'Create “Jazz night”' }).getByRole('button', { name: 'Cancel' }).click()
+
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    expect(mock.requests.filter((request) => request.startsWith('POST'))).toEqual([])
   })
 })
 

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { mockApi, mockStaffSession, openActions, paginate, panelUser, sessionUser, staffUser, type PanelUser } from './fixtures/panel'
+import { deferred, mockApi, mockStaffSession, openActions, paginate, panelUser, sessionUser, staffUser, type PanelUser } from './fixtures/panel'
 
 test.use({ timezoneId: 'UTC', locale: 'en-US' })
 
@@ -122,6 +122,61 @@ test.describe('panel users', () => {
     await gear.click()
     await page.getByRole('heading', { name: 'Users' }).click()
     await expect(gear).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test.describe('create test user', () => {
+    const created = panelUser({ id: 77, email: 'test-1a2b3c4d@example.com', name: 'Riley (test)' })
+
+    test('posts to the test endpoint, refreshes the table and shows a status message', async ({ page }) => {
+      const { users } = await openUsers(page)
+      const posts = await mockApi(page, '/api/admin/users/test/', {
+        POST: () => {
+          users.unshift(created)
+          return { status: 201, body: created }
+        },
+      })
+
+      await page.getByRole('button', { name: 'Create test user' }).click()
+
+      await expect(page.getByRole('status')).toContainText('Created Riley (test) (test-1a2b3c4d@example.com)')
+      // The table was reloaded before the message appeared, so the new row is there
+      await expect(row(page, 'test-1a2b3c4d@example.com')).toBeVisible()
+      await expect(page.getByText('7 total')).toBeVisible()
+      expect(posts).toHaveLength(1)
+    })
+
+    test('the button shows a busy state while the user is being created', async ({ page }) => {
+      const { users } = await openUsers(page)
+      const gate = deferred()
+      await mockApi(page, '/api/admin/users/test/', {
+        POST: async () => {
+          await gate.promise
+          users.unshift(created)
+          return { status: 201, body: created }
+        },
+      })
+
+      await page.getByRole('button', { name: 'Create test user' }).click()
+      await expect(page.getByRole('button', { name: 'Creating…' })).toBeDisabled()
+      await expect(page.getByRole('status')).toHaveCount(0)
+
+      gate.resolve()
+      await expect(page.getByRole('button', { name: 'Create test user' })).toBeEnabled()
+      await expect(page.getByRole('status')).toContainText('Riley (test)')
+    })
+
+    test('a failure shows an alert and no status message', async ({ page }) => {
+      await openUsers(page)
+      await mockApi(page, '/api/admin/users/test/', {
+        POST: () => ({ status: 500, body: { detail: 'Could not create a test user.' } }),
+      })
+
+      await page.getByRole('button', { name: 'Create test user' }).click()
+
+      await expect(page.getByRole('alert')).toHaveText('Could not create a test user.')
+      await expect(page.getByRole('status')).toHaveCount(0)
+      await expect(page.getByRole('button', { name: 'Create test user' })).toBeEnabled()
+    })
   })
 
   test('a superuser admin can manage other superusers', async ({ page }) => {

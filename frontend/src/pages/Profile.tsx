@@ -5,6 +5,8 @@ import { apiGet, useFieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { FormAlert } from '../components/Field'
 import { ImportOccasionForm } from '../components/ImportOccasionForm'
+import { OccasionTemplates } from '../components/OccasionTemplates'
+import { RollOut } from '../components/RollOut'
 import { TagList } from '../components/TagList'
 import { queryKeys } from '../queryClient'
 import type { Connection } from '../types/api/connections'
@@ -76,12 +78,7 @@ function MyOccasions({ user }: { user: User }) {
 
   return (
     <section className="profile-card" aria-labelledby="occasions-title">
-      <div className="profile-card-head">
-        <h2 id="occasions-title">Your occasions</h2>
-        <Link className="btn btn-sm" to="/occasions/new">
-          Create occasion
-        </Link>
-      </div>
+      <h2 id="occasions-title">Your occasions</h2>
       <FormAlert messages={errors.non_field_errors} />
       {!occasions && !errors.non_field_errors && <p className="muted">Loading…</p>}
       {occasions && occasions.length === 0 && (
@@ -137,22 +134,29 @@ function MyConnections({ user }: { user: User }) {
           <ConnectionsGraph userUuid={user.uuid} />
         </Suspense>
       )}
+      {/* The people behind the graph stay folded away until asked for */}
       {connections && connections.length > 0 && (
-        <ul className="occasion-list">
-          {connections.map((connection) => (
-            <li key={connection.uuid}>
-              <span className="occasion-info">
-                <strong>{connection.name}</strong>
-                <small>
-                  {connection.shared_occasions === 1
-                    ? '1 shared occasion'
-                    : `${connection.shared_occasions} shared occasions`}
-                </small>
-              </span>
-              <span className="occasion-going">Strength {strengthFormat.format(connection.strength)}</span>
-            </li>
-          ))}
-        </ul>
+        <RollOut
+          toggle={(open) => (open ? 'Hide people' : `Show people (${connections.length})`)}
+          toggleClassName="connections-toggle"
+          className="connections-roll-out"
+        >
+          <ul className="occasion-list">
+            {connections.map((connection) => (
+              <li key={connection.uuid}>
+                <span className="occasion-info">
+                  <strong>{connection.name}</strong>
+                  <small>
+                    {connection.shared_occasions === 1
+                      ? '1 shared occasion'
+                      : `${connection.shared_occasions} shared occasions`}
+                  </small>
+                </span>
+                <span className="occasion-going">Strength {strengthFormat.format(connection.strength)}</span>
+              </li>
+            ))}
+          </ul>
+        </RollOut>
       )}
     </section>
   )
@@ -204,11 +208,13 @@ export default function Profile() {
         </div>
       </div>
 
-      <MyConnections user={user} />
-
       <ImportOccasionForm user={user} />
 
+      <OccasionTemplates user={user} />
+
       <MyOccasions user={user} />
+
+      <MyConnections user={user} />
     </section>
   )
 }

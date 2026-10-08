@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Occasion, OccasionImage, OccasionUser
+from .models import Occasion, OccasionImage, OccasionTemplate, OccasionTemplateImage, OccasionUser
 
 
 class OccasionUserInline(admin.TabularInline):
@@ -21,3 +21,16 @@ class OccasionAdmin(admin.ModelAdmin):
     readonly_fields = ("cancelled_at",)
     # An explicit through model rules out filter_horizontal, so attendees are edited inline
     inlines = [OccasionImageInline, OccasionUserInline]
+
+
+class OccasionTemplateImageInline(admin.TabularInline):
+    model = OccasionTemplateImage
+    extra = 0
+
+
+@admin.register(OccasionTemplate)
+class OccasionTemplateAdmin(admin.ModelAdmin):
+    inlines = [OccasionTemplateImageInline]
+    list_display = ("name", "duration_minutes", "created_at")
+    search_fields = ("name",)
+    filter_horizontal = ("tags",)

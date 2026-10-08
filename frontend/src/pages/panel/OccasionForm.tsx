@@ -1,37 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState, type SubmitEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { apiDelete, apiGet, apiPatch, apiPost, apiUpload, errorsFrom, useFieldErrors, type FieldErrors } from '../../api'
+import { apiGet, apiPatch, apiPost, errorsFrom, useFieldErrors, type FieldErrors } from '../../api'
 import { AttendeePicker } from '../../components/AttendeePicker'
 import { Field, FormAlert, TextAreaField } from '../../components/Field'
 import { TagPicker } from '../../components/TagPicker'
 import { queryKeys } from '../../queryClient'
-import type { Attendee, OccasionImage, PanelOccasion } from '../../types/api/admin'
+import type { Attendee, PanelOccasion } from '../../types/api/admin'
 import type { Tag } from '../../types/api/tags'
-import type { ImageChanges, SavedImages } from '../../types/ui/imageSlots'
 import type { OccasionEditorProps } from '../../types/ui/occasionForm'
 import { ImageSlots } from './ImageSlots'
-import {
-  formatDate,
-  fromLocalInput,
-  IMAGE_SLOTS,
-  imageProblem,
-  timeZone,
-  toLocalInput,
-} from './shared'
-
-function savedFrom(images: OccasionImage[]): SavedImages {
-  return Object.fromEntries(images.map((image) => [image.order, image.url]))
-}
-
-function without<T>(record: Record<number, T>, key: number) {
-  const copy = { ...record }
-  delete copy[key]
-  return copy
-}
-
-// The occasion was saved but at least one image wasn't; each failed slot shows its own error
-class ImagesNotSaved extends Error {}
+import { formatDate, fromLocalInput, timeZone, toLocalInput } from './shared'
+import { ImagesNotSaved, useImageEdits } from './useImageEdits'
 
 const IMAGES_NOT_SAVED: FieldErrors = {
   non_field_errors: ['The occasion was saved, but some images weren’t. Fix them and save again.'],
@@ -66,57 +46,14 @@ function OccasionEditor({ occasionId, occasion, loadErrors }: OccasionEditorProp
   const [end, setEnd] = useState(occasion?.end_datetime ? toLocalInput(occasion.end_datetime) : '')
   const [attendees, setAttendees] = useState<Attendee[]>(occasion?.attendees ?? [])
   const [tags, setTags] = useState<Tag[]>(occasion?.tags ?? [])
-  const [savedImages, setSavedImages] = useState<SavedImages>(occasion ? savedFrom(occasion.images) : {})
-  const [imageChanges, setImageChanges] = useState<ImageChanges>({})
-  const [imageErrors, setImageErrors] = useState<Record<number, string[]>>({})
+  const { savedImages, imageChanges, imageErrors, clearImageErrors, pickImage, removeImage, undoImage, saveImages } =
+    useImageEdits(occasion?.images ?? [])
   // A new occasion that was created but whose images failed: saving again updates it instead of adding another
   const [createdId, setCreatedId] = useState<number | null>(null)
 
-  function pickImage(order: number, file: File) {
-    const problem = imageProblem(file)
-    setImageErrors((slotErrors) => (problem ? { ...slotErrors, [order]: [problem] } : without(slotErrors, order)))
-    if (!problem) setImageChanges((changes) => ({ ...changes, [order]: file }))
-  }
-
-  function removeImage(order: number) {
-    setImageErrors((slotErrors) => without(slotErrors, order))
-    // Nothing on the server to delete: just drop the picked file
-    setImageChanges((changes) => (order in savedImages ? { ...changes, [order]: null } : without(changes, order)))
-  }
-
-  function undoImage(order: number) {
-    setImageErrors((slotErrors) => without(slotErrors, order))
-    setImageChanges((changes) => without(changes, order))
-  }
-
-  // Applies the image edits one slot at a time; each success leaves the pending list, so a retry redoes only the rest
-  async function saveImages(savedOccasionId: number) {
-    const imagesUrl = `/api/admin/occasions/${savedOccasionId}/images/`
-    for (const order of IMAGE_SLOTS) {
-      if (!(order in imageChanges)) continue
-      const file = imageChanges[order]
-      try {
-        if (file) {
-          const formData = new FormData()
-          formData.append('order', String(order))
-          formData.append('image', file)
-          const updatedOccasion = await apiUpload<PanelOccasion>(imagesUrl, formData)
-          setSavedImages(savedFrom(updatedOccasion.images))
-        } else {
-          await apiDelete(`${imagesUrl}${order}/`)
-          setSavedImages((images) => without(images, order))
-        }
-        setImageChanges((changes) => without(changes, order))
-      } catch (error) {
-        setImageErrors((slotErrors) => ({ ...slotErrors, [order]: Object.values(errorsFrom(error)).flat() }))
-        throw new ImagesNotSaved()
-      }
-    }
-  }
-
   const saveMutation = useMutation({
     mutationFn: async () => {
-      setImageErrors({})
+      clearImageErrors()
       const body = {
         name,
         description,
@@ -133,7 +70,7 @@ function OccasionEditor({ occasionId, occasion, loadErrors }: OccasionEditorProp
         savedOccasion = await apiPost<PanelOccasion>('/api/admin/occasions/', body)
         setCreatedId(savedOccasion.id)
       }
-      await saveImages(savedOccasion.id)
+      await saveImages(`/api/admin/occasions/${savedOccasion.id}/images/`)
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.panel.all })

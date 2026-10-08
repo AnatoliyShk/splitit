@@ -5,6 +5,7 @@ const tabs = [
   { to: '/admin', label: 'Overview', end: true },
   { to: '/admin/users', label: 'Users', end: false },
   { to: '/admin/occasions', label: 'Occasions', end: false },
+  { to: '/admin/templates', label: 'Templates', end: false },
   { to: '/admin/tags', label: 'Tags', end: false },
 ]
 

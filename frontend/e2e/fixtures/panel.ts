@@ -1,8 +1,8 @@
 import type { Locator, Page, Request } from '@playwright/test'
 import type { User } from '../../src/types/api/users'
-import type { Attendee, PanelOccasion, PanelTag, PanelUser } from '../../src/types/api/admin'
+import type { Attendee, PanelOccasion, PanelTag, PanelTemplate, PanelUser } from '../../src/types/api/admin'
 
-export type { Attendee, PanelOccasion, PanelTag, PanelUser }
+export type { Attendee, PanelOccasion, PanelTag, PanelTemplate, PanelUser }
 
 export type SessionUser = User
 
@@ -17,6 +17,7 @@ export function sessionUser(overrides: Partial<SessionUser> = {}): SessionUser {
     is_staff: true,
     is_superuser: false,
     date_joined: '2025-01-01T10:00:00Z',
+    adult_confirmed_at: '2025-01-01T10:00:00Z',
     ...overrides,
   }
 }
@@ -80,6 +81,20 @@ export function panelTag(overrides: Partial<PanelTag> = {}): PanelTag {
 }
 
 // ---------- pagination ----------
+
+export function panelTemplate(overrides: Partial<PanelTemplate> = {}): PanelTemplate {
+  return {
+    id: 1,
+    name: 'Jazz night',
+    description: '',
+    duration_minutes: 180,
+    tags: [],
+    images: [],
+    created_at: '2025-03-15T09:00:00Z',
+    updated_at: '2025-03-15T09:00:00Z',
+    ...overrides,
+  }
+}
 
 export const PAGE_SIZE = 20
 

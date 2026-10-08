@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { formatTimes } from '../pages/panel/shared'
 import type { ExploreOccasion, KnownAttendee } from '../types/api/occasions'
+import { GenderBar } from './GenderBar'
 import { RollOut } from './RollOut'
 import { TagList } from './TagList'
 
@@ -98,8 +99,9 @@ export function OccasionCard({ occasion, mine = false }: { occasion: ExploreOcca
           <small>{monthFormat.format(startDate)}</small>
         </time>
         <div>
-          <h2 id="explore-occasion-name">
-            {/* Its ::after stretches over the whole card, so clicking anywhere on it opens the occasion */}
+          {/* Not shown: the name stays for screen readers and names the card. The link's ::after stretches over
+              the whole card, so clicking anywhere on it opens the occasion */}
+          <h2 id="explore-occasion-name" className="explore-name">
             <Link className="card-link" to={`/occasions/${occasion.id}`}>
               {occasion.name}
             </Link>
@@ -108,15 +110,18 @@ export function OccasionCard({ occasion, mine = false }: { occasion: ExploreOcca
           <p className="explore-when">{formatTimes(occasion.start_datetime, occasion.end_datetime)}</p>
           {/* Only regular users' occasions name their creator; staff ones don't */}
           {occasion.created_by && <p className="explore-creator">Created by {occasion.created_by.name}</p>}
+          {/* Under the times, beside the date badge. A short description shows whole; a long one shows its
+              first 100 characters until the details open */}
+          {occasion.description &&
+            (preview ? (
+              <LongDescription preview={preview} description={occasion.description} open={detailsOpen} />
+            ) : (
+              <p className="explore-description">{occasion.description}</p>
+            ))}
         </div>
       </div>
-      {/* A short description shows whole; a long one shows its first 100 characters until the details open */}
-      {occasion.description &&
-        (preview ? (
-          <LongDescription preview={preview} description={occasion.description} open={detailsOpen} />
-        ) : (
-          <p className="explore-description">{occasion.description}</p>
-        ))}
+      {/* Nobody going yet, nothing to split */}
+      {occasion.attendees_count > 0 && <GenderBar counts={occasion.gender_counts} />}
       {/* The card's bottom strip: clicking anywhere on it rolls the details open above it */}
       <RollOut
         togglePosition="after"

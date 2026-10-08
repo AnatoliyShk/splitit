@@ -6,7 +6,10 @@ export type Auth = {
   // True until the first /api/auth/me/ check finishes
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (name: string, email: string, password: string) => Promise<void>
+  // isAdult: the "I'm 18 or older" box; the server refuses the account without it
+  register: (name: string, email: string, password: string, isAdult: boolean) => Promise<void>
+  // For an account made before sign-up asked: true records it, false deletes the account and logs out
+  declareAge: (isAdult: boolean) => Promise<void>
   logout: () => Promise<void>
   // Replace the cached user after the profile is edited
   setUser: (user: User) => void

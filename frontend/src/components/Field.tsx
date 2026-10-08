@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { FieldProps, TextAreaFieldProps } from '../types/ui/field'
+import type { CheckboxFieldProps, FieldProps, TextAreaFieldProps } from '../types/ui/field'
 
 // Label, hint and errors around a control, wired up with aria-describedby
 function FieldFrame({
@@ -15,15 +15,24 @@ function FieldFrame({
   errors?: string[]
   control: (describedBy: string | undefined, hasErrors: boolean) => ReactNode
 }) {
-  const hintId = `${id}-hint`
-  const errorId = `${id}-error`
-  const hasErrors = Boolean(errors?.length)
-  const describedBy = [hint && hintId, hasErrors && errorId].filter(Boolean).join(' ')
-
+  const { describedBy, hasErrors, notes } = fieldNotes(id, hint, errors)
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
-      {control(describedBy || undefined, hasErrors)}
+      {control(describedBy, hasErrors)}
+      {notes}
+    </div>
+  )
+}
+
+// The hint and errors under a control, with the ids the control points to in aria-describedby
+function fieldNotes(id: string, hint: ReactNode, errors: string[] | undefined) {
+  const hintId = `${id}-hint`
+  const errorId = `${id}-error`
+  const hasErrors = Boolean(errors?.length)
+  const describedBy = [hint && hintId, hasErrors && errorId].filter(Boolean).join(' ') || undefined
+  const notes = (
+    <>
       {hint && (
         <p className="field-hint" id={hintId}>
           {hint}
@@ -36,8 +45,9 @@ function FieldFrame({
           ))}
         </ul>
       )}
-    </div>
+    </>
   )
+  return { describedBy, hasErrors, notes }
 }
 
 export function Field({ id, label, hint, errors, ...input }: FieldProps) {
@@ -80,6 +90,27 @@ export function TextAreaField({ id, label, hint, errors, ...textarea }: TextArea
         />
       )}
     />
+  )
+}
+
+/** A checkbox with its label beside it, for a yes/no statement the user makes (styles: `.check` in App.css). */
+export function CheckboxField({ id, label, hint, errors, ...input }: CheckboxFieldProps) {
+  const { describedBy, hasErrors, notes } = fieldNotes(id, hint, errors)
+  return (
+    <div className="field">
+      <label className="check" htmlFor={id}>
+        <input
+          id={id}
+          name={id}
+          type="checkbox"
+          aria-invalid={hasErrors || undefined}
+          aria-describedby={describedBy}
+          {...input}
+        />
+        {label}
+      </label>
+      {notes}
+    </div>
   )
 }
 

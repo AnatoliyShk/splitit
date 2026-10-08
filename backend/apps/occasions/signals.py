@@ -2,7 +2,7 @@ from django.db import transaction
 from django.db.models.signals import post_delete, post_save
 from django.utils import timezone
 
-from .models import Occasion, OccasionImage
+from .models import Occasion, OccasionImage, OccasionTemplateImage
 from .tasks import deactivate_finished_attendances
 
 
@@ -33,3 +33,6 @@ def connect():
     post_save.connect(occasion_saved, sender=Occasion, dispatch_uid="occasions-schedule-deactivate")
     # Also runs for each image when its occasion is deleted (cascade)
     post_delete.connect(image_deleted, sender=OccasionImage, dispatch_uid="occasions-delete-image-file")
+    post_delete.connect(
+        image_deleted, sender=OccasionTemplateImage, dispatch_uid="occasions-delete-template-image-file"
+    )

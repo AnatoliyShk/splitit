@@ -34,6 +34,76 @@ test.describe('browsing', () => {
     await expect(page.getByRole('button', { name: 'Accept' })).toBeEnabled()
   })
 
+  test("does not draw the occasion's name, but still names the card and opens the occasion on click", async ({ page }) => {
+    await mockApi(page, { user: USER, explore: occasions })
+    await page.goto('/explore')
+
+    const card = page.getByRole('article', { name: 'Rooftop Yoga' })
+    await expect(card).toBeVisible()
+    // Zero-size text: the name takes no room on the card
+    const nameBox = await card.getByRole('heading', { name: 'Rooftop Yoga' }).boundingBox()
+    expect(nameBox?.height ?? 0).toBe(0)
+    await expect(card.getByRole('link', { name: 'Rooftop Yoga' })).toHaveAttribute('href', /\/occasions\/\d+$/)
+
+    await card.locator('.explore-title').click()
+    await expect(page).toHaveURL(/\/occasions\/\d+$/)
+  })
+
+  test('shows who is going by gender, with the exact numbers on hover', async ({ page }) => {
+    await mockApi(page, {
+      user: USER,
+      explore: [makeOccasion(11, 'Rooftop Yoga', 1, { attendees_count: 6, gender_counts: { man: 3, woman: 2, undisclosed: 1 } })],
+    })
+    await page.goto('/explore')
+
+    const bar = page.getByRole('group', { name: 'Who is going, by gender' })
+    const men = bar.getByRole('img', { name: '3 men' })
+    const women = bar.getByRole('img', { name: '2 women' })
+    await expect(bar.getByRole('img', { name: '1 did not say' })).toBeVisible()
+    // Left to right: the male icon, the line, the female icon
+    expect((await men.boundingBox())!.x).toBeLessThan((await women.boundingBox())!.x)
+
+    await expect(men.getByText('3 men')).toBeHidden()
+    await men.hover()
+    await expect(men.getByText('3 men')).toBeVisible()
+    await women.hover()
+    await expect(women.getByText('2 women')).toBeVisible()
+    await expect(men.getByText('3 men')).toBeHidden()
+  })
+
+  test('sizes the line by the counts', async ({ page }) => {
+    await mockApi(page, {
+      user: USER,
+      explore: [makeOccasion(11, 'Rooftop Yoga', 1, { attendees_count: 4, gender_counts: { man: 3, woman: 0, undisclosed: 1 } })],
+    })
+    await page.goto('/explore')
+
+    const widthOf = async (kind: string) => (await page.locator(`.gender-segment-${kind}`).boundingBox())!.width
+    const manWidth = await widthOf('man')
+    const undisclosedWidth = await widthOf('undisclosed')
+    expect(manWidth / undisclosedWidth).toBeCloseTo(3, 0)
+    expect(await widthOf('woman')).toBe(0)
+  })
+
+  test('words one man and one woman in the singular', async ({ page }) => {
+    await mockApi(page, {
+      user: USER,
+      explore: [makeOccasion(11, 'Rooftop Yoga', 1, { attendees_count: 2, gender_counts: { man: 1, woman: 1, undisclosed: 0 } })],
+    })
+    await page.goto('/explore')
+
+    await expect(page.getByRole('img', { name: '1 man', exact: true })).toBeVisible()
+    await expect(page.getByRole('img', { name: '1 woman', exact: true })).toBeVisible()
+  })
+
+  test('hides the gender line while nobody is going', async ({ page }) => {
+    await mockApi(page, { user: USER, explore: [makeOccasion(11, 'Rooftop Yoga', 1, { attendees_count: 0 })] })
+    await page.goto('/explore')
+
+    await expect(page.getByRole('article', { name: 'Rooftop Yoga' })).toBeVisible()
+    await expect(page.getByRole('group', { name: 'Who is going, by gender' })).toHaveCount(0)
+  })
+
   test('words the attendee count for none, one and many', async ({ page }) => {
     await mockApi(page, { user: USER, explore: occasions })
     await page.goto('/explore')

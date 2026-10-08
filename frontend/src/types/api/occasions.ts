@@ -1,5 +1,5 @@
 import type { TagName } from './tags'
-import type { PublicUser } from './users'
+import type { Gender, PublicUser } from './users'
 
 // Shapes of the occasion API responses; each mirrors a backend serializer
 
@@ -23,11 +23,27 @@ export type UserOccasion = OccasionCore & {
   created_by: PublicUser | null
 }
 
+/** A template a user can make an occasion from (OccasionTemplateSerializer). */
+export type OccasionTemplate = {
+  id: number
+  name: string
+  description: string
+  // How long the occasion runs; null means no fixed end
+  duration_minutes: number | null
+  tags: TagName[]
+  // The template's main image, which the occasions made from it start with; null when it has none
+  main_image: string | null
+}
+
 /** An attendee the user has a connection with (PublicUserSerializer). */
 export type KnownAttendee = PublicUser
 
+/** How many attendees there are of each gender (ExploreOccasionSerializer.gender_counts). */
+export type GenderCounts = Record<Gender, number>
+
 /** An explore card (ExploreOccasionSerializer). */
 export type ExploreOccasion = UserOccasion & {
+  gender_counts: GenderCounts
   // Attendees the user has a connection with
   known_attendees: KnownAttendee[]
 }
@@ -37,6 +53,8 @@ export type OccasionDetail = UserOccasion & {
   // Up to 3 image URLs, in order, without the main image
   gallery: string[]
   is_going: boolean
+  // The requester made it, so they can cancel it
+  is_mine: boolean
 }
 
 /** GET /api/occasions/explore/. A user goes to one occasion at a time: while `active_occasion` is set, `occasions` is empty. */

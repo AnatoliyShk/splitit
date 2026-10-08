@@ -36,6 +36,12 @@ class UserManager(BaseUserManager):
         return self._create_user(email, password, **extra_fields)
 
 
+class Gender(models.TextChoices):
+    MAN = "man", "Man"
+    WOMAN = "woman", "Woman"
+    UNDISCLOSED = "undisclosed", "Do not want to tell"
+
+
 class User(AbstractUser):
     """Logs in with email; a single display name replaces first/last name."""
 
@@ -46,6 +52,11 @@ class User(AbstractUser):
     uuid = models.UUIDField(default=new_uuid, unique=True, editable=False)
     email = models.EmailField("email address", unique=True)
     name = models.CharField(max_length=150)
+    gender = models.CharField(max_length=11, choices=Gender.choices, default=Gender.UNDISCLOSED)
+    # When the user declared they're 18 or older (at sign-up, or on the confirmation screen for accounts made
+    # before it). Kept as the record of that declaration; until it's set, the API refuses everything but
+    # /api/auth/ (see apps.users.middleware)
+    adult_confirmed_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["name"]

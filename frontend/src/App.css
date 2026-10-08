@@ -241,9 +241,30 @@ h1 mark {
   gap: 14px;
 }
 
-/* Home: the block that leads to Explore */
+/* Home: the blocks that lead to Explore and to adding an occasion from a link */
 
-.explore-promo {
+/* Mobile: one card per row; desktop: all promo cards side by side in one row */
+.promos {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  width: 100%;
+}
+
+@media (min-width: 901px) {
+  .promos {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .promos > .promo {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+.promo {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -257,15 +278,20 @@ h1 mark {
   box-shadow: var(--shadow-lg);
 }
 
-.explore-promo h2 {
+/* The button sits at the card's bottom whatever the text height */
+.promo-action {
+  margin-top: auto;
+}
+
+.promo h2 {
   font-size: clamp(26px, 3vw, 32px);
 }
 
-.explore-promo p {
+.promo p {
   color: var(--text-muted);
 }
 
-/* Compass badge, styled like the date badge on Explore cards */
+/* Promo icon badge, styled like the date badge on Explore cards */
 .promo-badge {
   display: grid;
   place-items: center;
@@ -558,6 +584,7 @@ h1 mark {
 .panel-head-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 12px;
 }
 
@@ -596,6 +623,161 @@ h1 mark {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+/* CheckboxField: a statement the user ticks, the box beside its label; ticked takes the secondary (lilac) fill */
+.check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.check input {
+  display: grid;
+  place-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  background: var(--surface);
+  border: var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  appearance: none;
+  transition: box-shadow var(--ease);
+}
+
+.check input:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+/* The tick: two borders of a rotated box */
+.check input::before {
+  content: '';
+  width: 12px;
+  height: 7px;
+  margin-top: -3px;
+  border-bottom: 3px solid var(--on-pastel);
+  border-left: 3px solid var(--on-pastel);
+  transform: rotate(-45deg) scale(0);
+  transition: transform var(--ease);
+}
+
+.check input:checked {
+  background: var(--secondary);
+}
+
+.check input:checked::before {
+  transform: rotate(-45deg) scale(1);
+}
+
+.check input[aria-invalid='true'] {
+  border-style: dashed;
+}
+
+/* Links inside hints and running text: ink, underlined, never the browser's blue */
+.field-hint a,
+.policy a:not(.btn),
+.age-footnote a,
+.footer-link {
+  font-weight: 700;
+  color: var(--text);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+/* A button that reads as a link inside a sentence */
+.link-button {
+  min-height: 44px;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.link-button:disabled {
+  cursor: progress;
+}
+
+/* Age confirmation for accounts made before sign-up asked for it */
+.age-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 24px;
+  padding: 32px;
+  background: var(--surface);
+  border: var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+
+.age-under {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding-top: 24px;
+  border-top: var(--border);
+}
+
+.age-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.age-footnote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 0.3em;
+}
+
+@media (max-width: 480px) {
+  .age-card {
+    padding: 24px 18px;
+  }
+
+  .age-under .btn {
+    white-space: normal;
+    text-align: center;
+  }
+}
+
+/* Adults-only statement (/adults-only) */
+.policy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 0 72px;
+}
+
+.policy section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.policy ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-left: 1.2em;
 }
 
 /* Stat tiles */
@@ -1714,27 +1896,43 @@ h1 mark {
   box-shadow: var(--shadow-lg);
 }
 
-.explore-card h2 {
-  font-size: clamp(26px, 4vw, 34px);
-  overflow-wrap: anywhere;
+/* The occasion's name isn't drawn on the card. It keeps a link and a name for screen readers, and the link's ::after
+   still covers the card; zero size takes it out of the layout */
+.explore-name {
+  height: 0;
+  margin: 0;
+  font-size: 0;
+  line-height: 0;
 }
 
 .explore-going .muted {
   font-weight: 500;
 }
 
-/* Date badge and title side by side */
+/* Date badge, and the times and description beside it */
 .explore-title {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
+  width: 100%;
   min-width: 0;
 }
 
 .explore-title > div {
   display: grid;
-  gap: 4px;
+  flex: 1;
   min-width: 0;
+}
+
+/* Spacing between the lines by margin, since the hidden name above them is a grid row of its own */
+.explore-title > div > p + p {
+  margin-top: 4px;
+}
+
+/* The description under the times, a little apart from them */
+.explore-title > div > .explore-description,
+.explore-title > div > .explore-description-box {
+  margin-top: 8px;
 }
 
 .explore-day {
@@ -1767,6 +1965,138 @@ h1 mark {
   margin-top: auto;
   padding-top: 8px;
   font-weight: 700;
+}
+
+/* GenderBar (components/GenderBar.tsx): a line split by gender, a male icon on its left and a female icon on its
+   right. It sits above the card link's overlay so hovering an icon shows its number instead of opening the card */
+.gender-bar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.gender-stat {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  /* A 44px tap target around the 24px icon */
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+}
+
+.gender-stat:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: -3px;
+}
+
+.gender-line {
+  flex: 1;
+  min-width: 0;
+}
+
+.gender-man {
+  color: var(--gender-man);
+}
+
+.gender-woman {
+  color: var(--gender-woman);
+}
+
+.gender-icon {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Segments grow in proportion to their counts; an empty one has no width */
+.gender-track {
+  display: flex;
+  width: 100%;
+  height: 16px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+}
+
+.gender-segment {
+  flex-basis: 0;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.gender-segment-man {
+  background: var(--gender-man);
+}
+
+.gender-segment-undisclosed {
+  background: var(--gender-undisclosed);
+}
+
+.gender-segment-woman {
+  background: var(--gender-woman);
+}
+
+/* Above the icon or line; the icons sit near the card's edges, so theirs line up with the edge they're nearest */
+.gender-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  z-index: 10;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+  visibility: hidden;
+  background: var(--surface);
+  border: var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  transform: translateX(-50%);
+}
+
+.gender-man .gender-tooltip {
+  left: 0;
+  transform: none;
+}
+
+.gender-woman .gender-tooltip {
+  right: 0;
+  left: auto;
+  transform: none;
+}
+
+.gender-stat:hover .gender-tooltip,
+.gender-stat:focus .gender-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gender-tooltip {
+    transition:
+      opacity 150ms ease,
+      visibility 0s 150ms;
+  }
+
+  .gender-stat:hover .gender-tooltip,
+  .gender-stat:focus .gender-tooltip {
+    transition: opacity 150ms ease;
+  }
 }
 
 /* InfoTip (components/InfoTip.tsx): an info icon and the tooltip it opens. Open takes the secondary fill */
@@ -2088,15 +2418,6 @@ h1 mark {
   border-width: 3px;
 }
 
-/* A profile card's heading with an action beside it */
-.profile-card-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 /* Explore's Filters button, at the right of the title row. Lilac while saved filters are narrowing the deck */
 .explore-filters-open {
   flex: none;
@@ -2182,21 +2503,6 @@ h1 mark {
   outline-offset: 3px;
 }
 
-/* The occasion the user is going to, shown instead of the deck */
-.explore-active {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 16px;
-  width: 100%;
-}
-
-.explore-eyebrow {
-  font: 800 14px/1 var(--heading);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
 .explore-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2262,6 +2568,26 @@ h1 mark {
   background: var(--secondary);
 }
 
+/* Profile's connection list: a bordered button, lilac while open (chosen), rolling the people open under it */
+.connections-toggle {
+  padding: 0 16px;
+  background: var(--surface);
+  border: var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  transition: background-color var(--ease);
+}
+
+.connections-toggle[aria-expanded='true'] {
+  color: var(--on-pastel);
+  background: var(--secondary);
+}
+
+/* Room for the list's own borders and shadows, which the rolling body would otherwise clip */
+.connections-roll-out .roll-out-body {
+  padding: 14px 6px 8px 0;
+}
+
 /* The card's tags and who's going, rolled out above the strip */
 .explore-details {
   /* Cancels the card's gap above it, so a closed card ends at the strip; the body adds it back inside */
@@ -2324,6 +2650,34 @@ button.back-link {
   cursor: pointer;
 }
 
+/* Back button: a pill with an arrow that nudges left on hover */
+.back-button {
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px 0 14px;
+}
+
+.back-button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform var(--ease);
+}
+
+.back-button:hover svg {
+  transform: translateX(-3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back-button:hover svg {
+    transform: none;
+  }
+}
+
 .occasion-page {
   display: flex;
   flex-direction: column;
@@ -2337,6 +2691,43 @@ button.back-link {
 
 .occasion-page .form-alert {
   width: 100%;
+}
+
+/* Tells the user how to attend and when Explore opens again */
+.occasion-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 20px;
+  color: var(--on-pastel);
+  background: var(--secondary);
+  border: var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.occasion-notice h2 {
+  font-size: 22px;
+}
+
+.occasion-cancel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+}
+
+.occasion-cancel h2 {
+  font-size: 22px;
+}
+
+.occasion-cancel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .occasion-detail {

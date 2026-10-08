@@ -1,10 +1,11 @@
 import { expect, test, type Page } from '@playwright/test'
 import { fakeUser, json, mockCsrf, mockHealth, mockMe, setCsrfCookie } from './fixtures/auth'
 
-async function fillAndSubmit(page: Page, name: string, email: string, password: string) {
+async function fillAndSubmit(page: Page, name: string, email: string, password: string, isAdult = true) {
   await page.getByLabel('Name').fill(name)
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
+  if (isAdult) await page.getByRole('checkbox', { name: "I confirm that I'm 18 or older" }).check()
   await page.getByRole('button', { name: 'Create account' }).click()
 }
 
@@ -25,6 +26,11 @@ test.describe('Register page', () => {
     await expect(page.getByLabel('Password')).toHaveAttribute('type', 'password')
     await expect(page.getByText('At least 8 characters, not too common and not only numbers.')).toBeVisible()
     await expect(page.getByLabel('Password')).toHaveAccessibleDescription(/At least 8 characters/)
+    // The 18+ statement starts unticked, says why and links to the rules
+    const adultCheckbox = page.getByRole('checkbox', { name: "I confirm that I'm 18 or older" })
+    await expect(adultCheckbox).not.toBeChecked()
+    await expect(adultCheckbox).toHaveAccessibleDescription(/Splitit is for adults only/)
+    await expect(page.getByRole('link', { name: 'Read the age rules' })).toHaveAttribute('href', '/adults-only')
   })
 
   test('already logged-in visitor is redirected to the home page', async ({ page }) => {
@@ -62,7 +68,7 @@ test.describe('Register success', () => {
 
     await expect(page).toHaveURL(/\/$/)
     await expect(page.getByRole('link', { name: 'Profile' })).toBeVisible()
-    expect(body).toEqual({ name: 'Ana Smith', email: 'ana@example.com', password: 'a-strong-pass-9' })
+    expect(body).toEqual({ name: 'Ana Smith', email: 'ana@example.com', password: 'a-strong-pass-9', is_adult: true })
     expect(csrfHeader).toBe('reg-token')
   })
 
@@ -84,6 +90,24 @@ test.describe('Register success', () => {
 })
 
 test.describe('Register validation errors', () => {
+  test('sends the unticked 18+ box as false and shows the refusal under it', async ({ page }) => {
+    let body: unknown
+    await page.route('**/api/auth/register/', (route) => {
+      body = route.request().postDataJSON()
+      return json(route, 400, { is_adult: ['Splitit is only for people aged 18 or older.'] })
+    })
+    await page.goto('/register')
+
+    await fillAndSubmit(page, 'Ana Smith', 'ana@example.com', 'a-strong-pass-9', false)
+
+    const adultCheckbox = page.getByRole('checkbox', { name: "I confirm that I'm 18 or older" })
+    await expect(page.getByText('Splitit is only for people aged 18 or older.')).toBeVisible()
+    await expect(adultCheckbox).toHaveAttribute('aria-invalid', 'true')
+    await expect(adultCheckbox).toBeFocused()
+    await expect(page).toHaveURL(/\/register$/)
+    expect(body).toMatchObject({ is_adult: false })
+  })
+
   test('shows the duplicate email error and focuses the email field', async ({ page }) => {
     await page.route('**/api/auth/register/', (route) =>
       json(route, 400, { email: ['An account with this email already exists.'] }),

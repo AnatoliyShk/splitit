@@ -18,16 +18,17 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.occasions.models import Occasion, OccasionImage, OccasionUser
+from apps.occasions.models import Occasion, OccasionImage, OccasionTemplate, OccasionTemplateImage, OccasionUser
 from apps.occasions.services import deactivate_finished
 from apps.tags.cache import LIST_TTL, list_cache_key
 from apps.tags.models import Tag
-from apps.users.models import User
+from apps.users.models import Gender, User
 
 from .serializers import (
     OccasionImageUploadSerializer,
     PanelOccasionSerializer,
     PanelTagSerializer,
+    PanelTemplateSerializer,
     PanelUserSerializer,
 )
 
@@ -115,10 +116,19 @@ class UserViewSet(
     pagination_class = PanelPagination
     filter_backends = [SearchFilter]
     search_fields = ["email", "name"]
-    http_method_names = ["get", "patch", "head", "options"]
+    # POST is only the test-user action; there's no way to create a user at /api/admin/users/
+    http_method_names = ["get", "patch", "post", "head", "options"]
 
     def get_queryset(self):
         return User.objects.annotate(occasions_count=Count("occasions")).order_by("-date_joined")
+
+    @extend_schema(request=None)
+    @action(detail=False, methods=["post"], url_path="test")
+    def create_test(self, request):
+        """POST /api/admin/users/test/: create a test user (see create_test_user)."""
+        user = create_test_user()
+        # Fetch again for the annotated occasions_count
+        return Response(self.get_serializer(self.get_queryset().get(pk=user.pk)).data, status=status.HTTP_201_CREATED)
 
     def perform_update(self, serializer):
         target = serializer.instance
@@ -149,16 +159,20 @@ TEST_OCCASION_DESCRIPTION = (
 TEST_USER_NAMES = ["Alex", "Sam", "Jordan", "Taylor", "Morgan", "Riley", "Casey", "Jamie"]
 
 
+def create_test_user():
+    """A made-up member with a random name and gender. It has no password, so it can't log in."""
+    return User.objects.create_user(
+        f"test-{uuid.uuid4().hex[:8]}@example.com",
+        name=f"{random.choice(TEST_USER_NAMES)} (test)",
+        gender=random.choice(list(Gender)),
+        adult_confirmed_at=timezone.now(),
+    )
+
+
 def pick_test_attendees(count):
     """`count` random non-staff users, creating test accounts when there aren't enough."""
     users = list(User.objects.filter(is_staff=False, is_active=True).order_by("?")[:count])
-    for _ in range(count - len(users)):
-        # No password: these accounts exist only to fill occasions and can't log in
-        users.append(
-            User.objects.create_user(
-                f"test-{uuid.uuid4().hex[:8]}@example.com", name=f"{random.choice(TEST_USER_NAMES)} (test)"
-            )
-        )
+    users.extend(create_test_user() for _ in range(count - len(users)))
     return users
 
 
@@ -180,7 +194,49 @@ def create_test_occasion():
     return occasion
 
 
-class OccasionViewSet(viewsets.ModelViewSet):
+class ImageSlotsMixin:
+    """The image endpoints shared by occasions and templates, for a viewset whose objects have `images`.
+
+    Set `image_model` (the image rows' model) and `image_owner_field` (its foreign key back to the object).
+    """
+
+    image_model = None
+    image_owner_field = None
+
+    @extend_schema(request=OccasionImageUploadSerializer)
+    @action(detail=True, methods=["post"], url_path="images", parser_classes=[MultiPartParser])
+    def upload_image(self, request, pk=None):
+        """POST .../<id>/images/ (multipart: image, order): put an image in a slot.
+
+        Order 0 is the main image, 1-3 the gallery; an image already in that slot is replaced.
+        """
+        owner = self.get_object()
+        upload = OccasionImageUploadSerializer(data=request.data)
+        upload.is_valid(raise_exception=True)
+        order = upload.validated_data["order"]
+        with transaction.atomic():
+            # The replaced row's file is removed after commit (see apps.occasions.signals)
+            owner.images.filter(order=order).delete()
+            self.image_model.objects.create(
+                **{self.image_owner_field: owner, "order": order, "image": upload.validated_data["image"]}
+            )
+        # Fetch again so the response lists the new image set
+        return Response(self.get_serializer(self.get_object()).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(parameters=[OpenApiParameter("order", int, OpenApiParameter.PATH)])
+    @action(detail=True, methods=["delete"], url_path=r"images/(?P<order>\d+)")
+    def delete_image(self, request, pk=None, order=None):
+        """DELETE .../<id>/images/<order>/: empty that slot."""
+        owner = self.get_object()
+        deleted, _ = owner.images.filter(order=int(order)).delete()
+        if not deleted:
+            raise NotFound("There's no image in that slot.")
+        return Response(self.get_serializer(self.get_object()).data)
+
+
+class OccasionViewSet(ImageSlotsMixin, viewsets.ModelViewSet):
+    image_model = OccasionImage
+    image_owner_field = "occasion"
     permission_classes = [IsAdminUser]
     serializer_class = PanelOccasionSerializer
     pagination_class = PanelPagination
@@ -241,34 +297,6 @@ class OccasionViewSet(viewsets.ModelViewSet):
         OccasionUser.objects.filter(occasion=occasion).exclude(user_id__in=busy).update(is_active=True)
         return Response(self.get_serializer(occasion).data)
 
-    @extend_schema(request=OccasionImageUploadSerializer)
-    @action(detail=True, methods=["post"], url_path="images", parser_classes=[MultiPartParser])
-    def upload_image(self, request, pk=None):
-        """POST /api/admin/occasions/<id>/images/ (multipart: image, order): put an image in a slot.
-
-        Order 0 is the main image, 1-3 the gallery; an image already in that slot is replaced.
-        """
-        occasion = self.get_object()
-        upload = OccasionImageUploadSerializer(data=request.data)
-        upload.is_valid(raise_exception=True)
-        order = upload.validated_data["order"]
-        with transaction.atomic():
-            # The replaced row's file is removed after commit (see apps.occasions.signals)
-            occasion.images.filter(order=order).delete()
-            OccasionImage.objects.create(occasion=occasion, order=order, image=upload.validated_data["image"])
-        # Fetch again so the response lists the new image set
-        return Response(self.get_serializer(self.get_object()).data, status=status.HTTP_201_CREATED)
-
-    @extend_schema(parameters=[OpenApiParameter("order", int, OpenApiParameter.PATH)])
-    @action(detail=True, methods=["delete"], url_path=r"images/(?P<order>\d+)")
-    def delete_image(self, request, pk=None, order=None):
-        """DELETE /api/admin/occasions/<id>/images/<order>/: empty that slot."""
-        occasion = self.get_object()
-        deleted, _ = occasion.images.filter(order=int(order)).delete()
-        if not deleted:
-            raise NotFound("There's no image in that slot.")
-        return Response(self.get_serializer(self.get_object()).data)
-
     @staticmethod
     def check_still_on(occasion, now):
         if occasion.cancelled_at is not None:
@@ -282,6 +310,24 @@ class OccasionViewSet(viewsets.ModelViewSet):
         """POST /api/admin/occasions/test/: create a test occasion (see create_test_occasion)."""
         occasion = create_test_occasion()
         return Response(self.get_serializer(occasion).data, status=status.HTTP_201_CREATED)
+
+
+class TemplateViewSet(ImageSlotsMixin, viewsets.ModelViewSet):
+    """/api/admin/templates/: occasion templates, which users turn into occasions from their profile."""
+
+    image_model = OccasionTemplateImage
+    image_owner_field = "template"
+    permission_classes = [IsAdminUser]
+    serializer_class = PanelTemplateSerializer
+    pagination_class = PanelPagination
+    filter_backends = [SearchFilter]
+    search_fields = ["name"]
+
+    def get_queryset(self):
+        return OccasionTemplate.objects.prefetch_related("tags", "images").order_by(Lower("name"), "id")
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
 class TagViewSet(viewsets.ModelViewSet):

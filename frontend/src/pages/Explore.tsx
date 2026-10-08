@@ -11,26 +11,6 @@ import { Spinner } from '../components/Spinner'
 import { filtersApplied, useFilterPreference } from '../filterPreference'
 import { queryKeys } from '../queryClient'
 import type { ExploreData, ExploreOccasion } from '../types/api/occasions'
-import { formatDateTime } from './panel/shared'
-
-function ActiveOccasion({ occasion }: { occasion: ExploreOccasion }) {
-  // Same rule as the server: an occasion with no end is over once it starts
-  const endsAt = formatDateTime(occasion.end_datetime ?? occasion.start_datetime)
-  return (
-    <div className="explore-active">
-      {/* Why the deck is paused, above the card, so it's read first */}
-      <p className="muted">
-        You can join your next occasion once this one ends ({endsAt}) or if it's cancelled. Until then, Explore is
-        paused.
-      </p>
-      <Link className="btn btn-primary" to="/profile">
-        Your occasions
-      </Link>
-      <p className="explore-eyebrow">You're going to</p>
-      <OccasionCard occasion={occasion} mine />
-    </div>
-  )
-}
 
 export default function Explore() {
   const { user, loading } = useAuth()
@@ -72,6 +52,10 @@ export default function Explore() {
 
   if (loading) return null
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  // Going to an occasion pauses Explore, so send the user to that occasion's page
+  if (exploreQuery.data?.active_occasion) {
+    return <Navigate to={`/occasions/${exploreQuery.data.active_occasion.id}`} replace />
+  }
 
   const exploreData = exploreQuery.data
   const occasions = exploreData?.occasions.filter((occasion) => !declinedIds.has(occasion.id))
@@ -115,8 +99,6 @@ export default function Explore() {
         </div>
       )}
 
-      {activeOccasion && <ActiveOccasion occasion={activeOccasion} />}
-
       {exploreData && !activeOccasion && !occasion && (
         <div className="explore-card explore-done">
           {exploreData.occasions.length === 0 && filtered ? (
@@ -133,9 +115,6 @@ export default function Explore() {
           <div className="explore-done-actions">
             <Link className="btn btn-primary" to="/profile">
               Your occasions
-            </Link>
-            <Link className="btn" to="/occasions/new">
-              Create occasion
             </Link>
           </div>
         </div>

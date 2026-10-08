@@ -2,6 +2,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.tags.models import Tag
@@ -13,7 +14,17 @@ from .models import FilterPreference, FilterPreferenceWeekday, User, Weekday
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ("id", "uuid", "email", "name", "is_staff", "is_superuser", "date_joined")
+        fields = (
+            "id",
+            "uuid",
+            "email",
+            "name",
+            "gender",
+            "is_staff",
+            "is_superuser",
+            "date_joined",
+            "adult_confirmed_at",
+        )
         read_only_fields = fields
 
 
@@ -22,7 +33,7 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("name",)
+        fields = ("name", "gender")
         extra_kwargs = {"name": {"error_messages": {"blank": "Enter your name."}}}
 
     def validate_name(self, value):
@@ -49,14 +60,29 @@ class PasswordChangeSerializer(serializers.Serializer):
         return value
 
 
+ADULTS_ONLY_MESSAGE = "Splitit is only for people aged 18 or older."
+CONFIRM_AGE_MESSAGE = "Confirm that you're 18 or older."
+
+
+def validate_adult(value):
+    """The unticked "I'm 18 or older" box must have been ticked; anything else is refused."""
+    if value is not True:
+        raise serializers.ValidationError(ADULTS_ONLY_MESSAGE)
+    return value
+
+
 class RegisterSerializer(serializers.ModelSerializer):
     # Declared explicitly to replace the model's default unique check with a case-insensitive one
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
+    # The sign-up form's "I'm 18 or older" box; must be true. Recorded as adult_confirmed_at
+    is_adult = serializers.BooleanField(
+        write_only=True, validators=[validate_adult], error_messages={"required": CONFIRM_AGE_MESSAGE}
+    )
 
     class Meta:
         model = User
-        fields = ("email", "name", "password")
+        fields = ("email", "name", "password", "is_adult")
 
     def validate_email(self, value):
         email = User.objects.normalize_email(value)
@@ -73,7 +99,14 @@ class RegisterSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        return User.objects.create_user(**validated_data)
+        validated_data.pop("is_adult")
+        return User.objects.create_user(adult_confirmed_at=timezone.now(), **validated_data)
+
+
+class AgeDeclarationSerializer(serializers.Serializer):
+    """An account made before sign-up asked for it: true confirms 18 or older, false closes the account."""
+
+    is_adult = serializers.BooleanField(error_messages={"required": CONFIRM_AGE_MESSAGE})
 
 
 class LoginSerializer(serializers.Serializer):

@@ -1,6 +1,6 @@
 import type { Page, Route } from '@playwright/test'
 import type { Connection, Network } from '../../src/types/api/connections'
-import type { ExploreOccasion } from '../../src/types/api/occasions'
+import type { ExploreOccasion, OccasionTemplate } from '../../src/types/api/occasions'
 import type { Tag } from '../../src/types/api/tags'
 import type { FilterPreference, User } from '../../src/types/api/users'
 
@@ -16,10 +16,12 @@ export const USER: TestUser = {
   uuid: '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b',
   email: 'ada@example.com',
   name: 'Ada Lovelace',
+  gender: 'undisclosed',
   is_staff: false,
   is_superuser: false,
   // Midday UTC, so the formatted date is the same in any time zone: "Mar 15, 2025"
   date_joined: '2025-03-15T12:00:00Z',
+  adult_confirmed_at: '2025-03-15T12:00:00Z',
 }
 
 export const ADMIN: TestUser = { ...USER, is_staff: true }
@@ -52,6 +54,7 @@ export function makeOccasion(
     main_image: null,
     created_by: null,
     known_attendees: [],
+    gender_counts: { man: 0, woman: 0, undisclosed: overrides.attendees_count ?? 1 },
     ...overrides,
   }
 }
@@ -81,6 +84,8 @@ export type MockOptions = {
    * PUT and PATCH update them, so later GETs see the change. A number makes the GET fail.
    */
   filters?: (Omit<FilterPreference, 'is_enabled'> & { is_enabled?: boolean }) | number
+  /** Templates for GET /api/occasion-templates/; defaults to none. A number makes it fail. */
+  templates?: OccasionTemplate[] | number
   /** Every tag, for GET /api/tags/; defaults to none. A number makes it fail. */
   tags?: Tag[] | number
   /** Extra handlers, keyed by "METHOD /api/path/". Take precedence over the defaults. */
@@ -138,6 +143,7 @@ export async function mockApi(page: Page, options: MockOptions): Promise<Mock> {
         return respond(route, typeof options.filters === 'number' ? options.filters : savedFilters)
       }
       if (pathname === '/api/tags/') return respond(route, options.tags ?? [])
+      if (pathname === '/api/occasion-templates/') return respond(route, options.templates ?? [])
     }
     // Saving filters (PUT: both lists, PATCH: any fields) answers with them, the chosen tags looked up by id
     if ((method === 'PUT' || method === 'PATCH') && uuid && pathname === `/api/users/${uuid}/filter-preference/`) {

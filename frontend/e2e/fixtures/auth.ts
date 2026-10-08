@@ -8,6 +8,7 @@ export type FakeUser = {
   is_staff: boolean
   is_superuser: boolean
   date_joined: string
+  adult_confirmed_at: string | null
 }
 
 export const fakeUser: FakeUser = {
@@ -18,6 +19,7 @@ export const fakeUser: FakeUser = {
   is_staff: false,
   is_superuser: false,
   date_joined: '2026-01-01T10:00:00Z',
+  adult_confirmed_at: '2026-01-01T10:00:00Z',
 }
 
 export const fakeStaff: FakeUser = { ...fakeUser, id: 2, name: 'Sam Staff', email: 'sam@example.com', is_staff: true }

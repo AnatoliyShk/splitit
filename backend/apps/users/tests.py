@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
 from apps.tags.models import Tag
@@ -31,14 +34,31 @@ class AuthApiTests(APITestCase):
     def test_register_creates_user_and_logs_in(self):
         response = self.csrf_post(
             "/api/auth/register/",
-            {"email": "Ana@Example.com", "name": "Ana", "password": PASSWORD},
+            {"email": "Ana@Example.com", "name": "Ana", "password": PASSWORD, "is_adult": True},
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["user"]["email"], "ana@example.com")
         self.assertEqual(self.me()["name"], "Ana")
+        # The declaration is recorded with the account
+        self.assertIsNotNone(response.json()["user"]["adult_confirmed_at"])
+        self.assertIsNotNone(User.objects.get().adult_confirmed_at)
+
+    def test_register_refuses_without_the_18_plus_declaration(self):
+        details = {"email": "ana@example.com", "name": "Ana", "password": PASSWORD}
+        refusals = (
+            (None, "Confirm that you're 18 or older."),
+            (False, "Splitit is only for people aged 18 or older."),
+        )
+        for is_adult, message in refusals:
+            request_data = details if is_adult is None else {**details, "is_adult": is_adult}
+            response = self.csrf_post("/api/auth/register/", request_data)
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.json()["is_adult"], [message])
+        self.assertFalse(User.objects.exists())
+        self.assertIsNone(self.me())
 
     def test_register_rejects_duplicate_email_case_insensitively(self):
-        User.objects.create_user("ana@example.com", PASSWORD, name="Ana")
+        User.objects.create_user("ana@example.com", PASSWORD, name="Ana", adult_confirmed_at=timezone.now())
         response = self.csrf_post(
             "/api/auth/register/",
             {"email": "ANA@example.com", "name": "Ana 2", "password": PASSWORD},
@@ -49,14 +69,14 @@ class AuthApiTests(APITestCase):
     def test_register_rejects_weak_password(self):
         response = self.csrf_post(
             "/api/auth/register/",
-            {"email": "ana@example.com", "name": "Ana", "password": "123"},
+            {"email": "ana@example.com", "name": "Ana", "password": "123", "is_adult": True},
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("password", response.json())
         self.assertFalse(User.objects.exists())
 
     def test_login_and_logout(self):
-        User.objects.create_user("ana@example.com", PASSWORD, name="Ana")
+        User.objects.create_user("ana@example.com", PASSWORD, name="Ana", adult_confirmed_at=timezone.now())
         response = self.csrf_post("/api/auth/login/", {"email": "ANA@example.com", "password": PASSWORD})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.me()["email"], "ana@example.com")
@@ -66,14 +86,14 @@ class AuthApiTests(APITestCase):
         self.assertIsNone(self.me())
 
     def test_login_rejects_wrong_password(self):
-        User.objects.create_user("ana@example.com", PASSWORD, name="Ana")
+        User.objects.create_user("ana@example.com", PASSWORD, name="Ana", adult_confirmed_at=timezone.now())
         response = self.csrf_post("/api/auth/login/", {"email": "ana@example.com", "password": "nope"})
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["non_field_errors"], ["Email or password is incorrect."])
         self.assertIsNone(self.me())
 
     def test_login_requires_csrf_token(self):
-        User.objects.create_user("ana@example.com", PASSWORD, name="Ana")
+        User.objects.create_user("ana@example.com", PASSWORD, name="Ana", adult_confirmed_at=timezone.now())
         response = self.client.post(
             "/api/auth/login/", {"email": "ana@example.com", "password": PASSWORD}, format="json"
         )
@@ -86,9 +106,65 @@ class AuthApiTests(APITestCase):
         self.assertEqual(response.status_code, 429)
 
 
+class AdultConfirmationTests(APITestCase):
+    """Accounts made before sign-up asked for the 18+ declaration: blocked from the API until they make it."""
+
+    def setUp(self):
+        from apps.occasions.models import Occasion
+
+        self.unconfirmed = User.objects.create_user("old@example.com", PASSWORD, name="Old")
+        self.client.force_login(self.unconfirmed)
+        self.occasion = Occasion.objects.create(
+            name="Mine", start_datetime=timezone.now() + timedelta(days=2), created_by=self.unconfirmed
+        )
+
+    def test_api_is_blocked_until_confirmed(self):
+        for url in ("/api/occasions/explore/", "/api/tags/", f"/api/users/{self.unconfirmed.uuid}/occasions/"):
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 403, url)
+            self.assertEqual(response.json()["code"], "age_confirmation_required")
+        # The session check and the health check still answer, so the app can show the confirmation screen
+        self.assertIsNone(self.client.get("/api/auth/me/").json()["user"]["adult_confirmed_at"])
+        self.assertEqual(self.client.get("/api/health/").status_code, 200)
+
+    def test_staff_are_blocked_too(self):
+        staff = User.objects.create_user("staff@example.com", PASSWORD, name="Staff", is_staff=True)
+        self.client.force_login(staff)
+        self.assertEqual(self.client.get("/api/admin/stats/").status_code, 403)
+
+    def test_confirming_records_the_time_and_unblocks(self):
+        response = self.client.post("/api/auth/age/", {"is_adult": True}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.json()["user"]["adult_confirmed_at"])
+        confirmed_at = User.objects.get(pk=self.unconfirmed.pk).adult_confirmed_at
+        self.assertIsNotNone(confirmed_at)
+        self.assertEqual(self.client.get("/api/occasions/explore/").status_code, 200)
+        # Confirming again keeps the first record
+        self.client.post("/api/auth/age/", {"is_adult": True}, format="json")
+        self.assertEqual(User.objects.get(pk=self.unconfirmed.pk).adult_confirmed_at, confirmed_at)
+
+    def test_declaring_under_18_deletes_the_account_and_logs_out(self):
+        from apps.occasions.models import Occasion
+
+        response = self.client.post("/api/auth/age/", {"is_adult": False}, format="json")
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(User.objects.filter(pk=self.unconfirmed.pk).exists())
+        self.assertFalse(Occasion.objects.filter(pk=self.occasion.pk).exists())
+        self.assertIsNone(self.client.get("/api/auth/me/").json()["user"])
+
+    def test_the_declaration_is_required(self):
+        response = self.client.post("/api/auth/age/", {}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["is_adult"], ["Confirm that you're 18 or older."])
+
+    def test_confirming_needs_login(self):
+        self.client.logout()
+        self.assertEqual(self.client.post("/api/auth/age/", {"is_adult": True}, format="json").status_code, 403)
+
+
 class UserAdminTests(APITestCase):
     def setUp(self):
-        self.admin = User.objects.create_superuser("admin@example.com", PASSWORD, name="Admin")
+        self.admin = User.objects.create_superuser("admin@example.com", PASSWORD, name="Admin", adult_confirmed_at=timezone.now())
         self.client.force_login(self.admin)
 
     def test_admin_pages_render(self):
@@ -115,7 +191,7 @@ class UserAdminTests(APITestCase):
 class ProfileApiTests(APITestCase):
     def setUp(self):
         cache.clear()
-        self.user = User.objects.create_user("ana@example.com", PASSWORD, name="Ana")
+        self.user = User.objects.create_user("ana@example.com", PASSWORD, name="Ana", adult_confirmed_at=timezone.now())
         self.client = APIClient(enforce_csrf_checks=True)
         self.client.force_login(self.user)
 
@@ -131,6 +207,19 @@ class ProfileApiTests(APITestCase):
         response = self.csrf("patch", "/api/auth/me/", {"name": "  Ana Petrova "})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["user"]["name"], "Ana Petrova")
+
+    def test_gender_defaults_to_undisclosed_and_can_be_changed(self):
+        self.assertEqual(self.client.get("/api/auth/me/").json()["user"]["gender"], "undisclosed")
+        response = self.csrf("patch", "/api/auth/me/", {"gender": "woman"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["user"]["gender"], "woman")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.gender, "woman")
+
+    def test_unknown_gender_is_rejected(self):
+        response = self.csrf("patch", "/api/auth/me/", {"gender": "robot"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("gender", response.json())
 
     def test_blank_name_is_rejected(self):
         response = self.csrf("patch", "/api/auth/me/", {"name": "   "})
@@ -165,20 +254,20 @@ class ProfileApiTests(APITestCase):
 
 class UserUuidTests(APITestCase):
     def test_users_get_distinct_time_ordered_uuid7s(self):
-        first = User.objects.create_user("a@example.com", PASSWORD, name="A")
-        second = User.objects.create_user("b@example.com", PASSWORD, name="B")
+        first = User.objects.create_user("a@example.com", PASSWORD, name="A", adult_confirmed_at=timezone.now())
+        second = User.objects.create_user("b@example.com", PASSWORD, name="B", adult_confirmed_at=timezone.now())
         self.assertEqual((first.uuid.version, second.uuid.version), (7, 7))
         self.assertLess(first.uuid, second.uuid)
 
     def test_me_exposes_uuid(self):
-        user = User.objects.create_user("a@example.com", PASSWORD, name="A")
+        user = User.objects.create_user("a@example.com", PASSWORD, name="A", adult_confirmed_at=timezone.now())
         self.client.force_login(user)
         self.assertEqual(self.client.get("/api/auth/me/").json()["user"]["uuid"], str(user.uuid))
 
 
 class FilterPreferenceTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(email="ana@example.com", password=PASSWORD, name="Ana")
+        self.user = User.objects.create_user(email="ana@example.com", password=PASSWORD, name="Ana", adult_confirmed_at=timezone.now())
         self.filter_preference = FilterPreference.objects.create(user=self.user)
 
     def test_one_filter_preference_per_user(self):
@@ -225,8 +314,8 @@ class FilterPreferenceTests(TestCase):
 
 class FilterPreferenceApiTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(email="ana@example.com", password=PASSWORD, name="Ana")
-        self.other_user = User.objects.create_user(email="ben@example.com", password=PASSWORD, name="Ben")
+        self.user = User.objects.create_user(email="ana@example.com", password=PASSWORD, name="Ana", adult_confirmed_at=timezone.now())
+        self.other_user = User.objects.create_user(email="ben@example.com", password=PASSWORD, name="Ben", adult_confirmed_at=timezone.now())
         self.jazz_tag = Tag.objects.create(name="Jazz")
         self.art_tag = Tag.objects.create(name="Art")
         self.client.force_login(self.user)

@@ -23,16 +23,17 @@ class UserAdmin(BaseUserAdmin):
     form = UserChangeForm
     add_form = UserCreationForm
     ordering = ("email",)
-    list_display = ("email", "name", "is_staff", "date_joined")
+    list_display = ("email", "name", "is_staff", "date_joined", "adult_confirmed_at")
+    readonly_fields = ("adult_confirmed_at",)
     search_fields = ("email", "name")
     fieldsets = (
         (None, {"fields": ("email", "password")}),
-        ("Personal info", {"fields": ("name",)}),
+        ("Personal info", {"fields": ("name", "gender")}),
         (
             "Permissions",
             {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")},
         ),
-        ("Important dates", {"fields": ("last_login", "date_joined")}),
+        ("Important dates", {"fields": ("last_login", "date_joined", "adult_confirmed_at")}),
     )
     add_fieldsets = (
         (

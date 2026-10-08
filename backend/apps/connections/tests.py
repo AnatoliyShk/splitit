@@ -22,7 +22,7 @@ DUMMY_TASKS = {"default": {"BACKEND": "django.tasks.backends.dummy.DummyBackend"
 
 
 def make_users(*names):
-    return [User.objects.create_user(f"{name.lower()}@example.com", PASSWORD, name=name) for name in names]
+    return [User.objects.create_user(f"{name.lower()}@example.com", PASSWORD, name=name, adult_confirmed_at=timezone.now()) for name in names]
 
 
 def past_occasion(*users, name="Gig"):

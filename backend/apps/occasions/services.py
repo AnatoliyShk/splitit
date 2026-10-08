@@ -1,7 +1,16 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
 
-from .models import Occasion, OccasionUser
+import logging
+from datetime import timedelta
+from pathlib import Path
+
+from django.core.files.base import ContentFile
+
+from .models import Occasion, OccasionImage, OccasionUser
+
+
+logger = logging.getLogger(__name__)
 
 
 class AlreadyGoing(Exception):
@@ -38,6 +47,36 @@ def create_occasion(user, tags, **fields):
         occasion = Occasion.objects.create(created_by=user, **fields)
         occasion.tags.set(tags)
         join(occasion, user)
+    return occasion
+
+
+def create_occasion_from_template(user, template, start):
+    """A regular user's occasion made from `template` starting at `start` (see create_occasion): the template's
+    name, description, tags and length, and a copy of each of its images, so deleting the occasion or the template
+    never touches the other's files. Raises AlreadyGoing (and saves nothing) while they're going to another one."""
+    end = None if template.duration_minutes is None else start + timedelta(minutes=template.duration_minutes)
+    with transaction.atomic():
+        occasion = create_occasion(
+            user,
+            template.tags.all(),
+            name=template.name,
+            description=template.description,
+            start_datetime=start,
+            end_datetime=end,
+        )
+        for template_image in template.images.all():
+            try:
+                with template_image.image.open("rb") as image_file:
+                    image_bytes = image_file.read()
+            except FileNotFoundError:
+                # The file went missing from disk; the occasion is still worth making without it
+                logger.warning("Template image %s has no file; skipped", template_image.pk)
+                continue
+            OccasionImage.objects.create(
+                occasion=occasion,
+                order=template_image.order,
+                image=ContentFile(image_bytes, name=Path(template_image.image.name).name),
+            )
     return occasion
 
 

@@ -12,6 +12,10 @@
   /* Action colors: reserved for buttons, never decoration */
   --danger: #ff7b72; /* terminal actions: exit, delete */
   --confirm: #7ddc9a; /* apply, confirm */
+  /* Data colors for the gender line on Explore cards: they encode what's counted, so they aren't decoration */
+  --gender-man: #3b82f6;
+  --gender-woman: #ec4899;
+  --gender-undisclosed: #9ca3af;
   /* Text on colored fills stays dark in both themes */
   --on-pastel: #16141a;
 

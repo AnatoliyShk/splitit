@@ -1,12 +1,13 @@
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.users.models import User
 
 
 class ApiDocsTests(TestCase):
     def setUp(self):
-        self.staff_user = User.objects.create_user("sam@example.com", "correct-horse-battery", name="Sam", is_staff=True)
-        self.member_user = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana")
+        self.staff_user = User.objects.create_user("sam@example.com", "correct-horse-battery", name="Sam", is_staff=True, adult_confirmed_at=timezone.now())
+        self.member_user = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana", adult_confirmed_at=timezone.now())
 
     def schema_paths(self, url):
         response = self.client.get(url, {"format": "json"})

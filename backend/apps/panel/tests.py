@@ -5,7 +5,7 @@ from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from apps.occasions.models import EMBEDDING_DIMENSIONS, Occasion, OccasionUser
+from apps.occasions.models import EMBEDDING_DIMENSIONS, Occasion, OccasionTemplate, OccasionUser
 from apps.ai.embedding import embedding_updated
 from apps.tags.models import Tag
 from apps.users.models import User
@@ -18,13 +18,19 @@ PASSWORD = "correct-horse-battery"
 class PanelTestCase(APITestCase):
     def setUp(self):
         cache.clear()
-        self.admin = User.objects.create_user("admin@example.com", PASSWORD, name="Admin", is_staff=True)
-        self.member = User.objects.create_user("member@example.com", PASSWORD, name="Member")
+        self.admin = User.objects.create_user("admin@example.com", PASSWORD, name="Admin", is_staff=True, adult_confirmed_at=timezone.now())
+        self.member = User.objects.create_user("member@example.com", PASSWORD, name="Member", adult_confirmed_at=timezone.now())
         self.client.force_login(self.admin)
 
 
 class PermissionTests(PanelTestCase):
-    urls = ("/api/admin/stats/", "/api/admin/users/", "/api/admin/occasions/", "/api/admin/tags/")
+    urls = (
+        "/api/admin/stats/",
+        "/api/admin/users/",
+        "/api/admin/occasions/",
+        "/api/admin/templates/",
+        "/api/admin/tags/",
+    )
 
     def test_anonymous_is_rejected(self):
         self.client.logout()
@@ -68,6 +74,28 @@ class UserManagementTests(PanelTestCase):
         self.assertEqual(users_page["count"], 1)
         self.assertEqual(users_page["results"][0]["email"], "member@example.com")
 
+    def test_create_test_user(self):
+        response = self.client.post("/api/admin/users/test/")
+        self.assertEqual(response.status_code, 201)
+        user = User.objects.get(pk=response.json()["id"])
+        self.assertTrue(user.email.startswith("test-"))
+        self.assertTrue(user.name.endswith("(test)"))
+        self.assertIn(user.gender, ("man", "woman", "undisclosed"))
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.has_usable_password())
+        self.assertEqual(response.json()["occasions_count"], 0)
+        # Each call makes a new account
+        self.client.post("/api/admin/users/test/")
+        self.assertEqual(User.objects.filter(email__startswith="test-").count(), 2)
+
+    def test_create_test_user_is_staff_only(self):
+        self.client.force_login(self.member)
+        self.assertEqual(self.client.post("/api/admin/users/test/").status_code, 403)
+        self.assertFalse(User.objects.filter(email__startswith="test-").exists())
+
+    def test_users_cannot_be_created_by_posting_to_the_list(self):
+        self.assertEqual(self.client.post("/api/admin/users/", {"email": "x@example.com"}, format="json").status_code, 405)
+
     def test_toggle_access_flags(self):
         response = self.client.patch(
             f"/api/admin/users/{self.member.pk}/", {"is_staff": True, "is_active": False}, format="json"
@@ -87,7 +115,7 @@ class UserManagementTests(PanelTestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_staff_cannot_change_superuser(self):
-        boss = User.objects.create_superuser("boss@example.com", PASSWORD, name="Boss")
+        boss = User.objects.create_superuser("boss@example.com", PASSWORD, name="Boss", adult_confirmed_at=timezone.now())
         response = self.client.patch(f"/api/admin/users/{boss.pk}/", {"is_active": False}, format="json")
         self.assertEqual(response.status_code, 403)
 
@@ -496,3 +524,121 @@ class OccasionImageTests(PanelTestCase):
         self.client.force_login(self.member)
         self.assertEqual(self.upload(0).status_code, 403)
         self.assertEqual(self.client.delete(f"{self.url}0/").status_code, 403)
+
+
+class TemplateTests(PanelTestCase):
+    def test_create_update_delete(self):
+        jazz_tag = Tag.objects.create(name="Jazz")
+        response = self.client.post(
+            "/api/admin/templates/",
+            {"name": "  Jazz night ", "description": "A trio.", "duration_minutes": 180, "tag_ids": [jazz_tag.pk]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        template_data = response.json()
+        self.assertEqual(template_data["name"], "Jazz night")
+        self.assertEqual(template_data["duration_minutes"], 180)
+        self.assertEqual(template_data["tags"], [{"id": jazz_tag.pk, "name": "Jazz"}])
+        template = OccasionTemplate.objects.get(pk=template_data["id"])
+        self.assertEqual(template.created_by, self.admin)
+
+        response = self.client.patch(
+            f"/api/admin/templates/{template.pk}/", {"duration_minutes": None, "tag_ids": []}, format="json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["duration_minutes"])
+        self.assertEqual(response.json()["tags"], [])
+
+        self.assertEqual(self.client.delete(f"/api/admin/templates/{template.pk}/").status_code, 204)
+        self.assertFalse(OccasionTemplate.objects.exists())
+
+    def test_name_is_required_and_duration_is_bounded(self):
+        response = self.client.post("/api/admin/templates/", {"name": "   "}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["name"], ["Enter a name."])
+        for minutes in (0, 20161):
+            with self.subTest(minutes=minutes):
+                response = self.client.post(
+                    "/api/admin/templates/", {"name": "Long", "duration_minutes": minutes}, format="json"
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("duration_minutes", response.json())
+
+    def test_list_is_paged_searchable_and_sorted_by_name(self):
+        OccasionTemplate.objects.create(name="pub quiz")
+        OccasionTemplate.objects.create(name="Board games")
+        OccasionTemplate.objects.create(name="Jazz night")
+        templates_page = self.client.get("/api/admin/templates/").json()
+        self.assertEqual([template["name"] for template in templates_page["results"]], ["Board games", "Jazz night", "pub quiz"])
+        found = self.client.get("/api/admin/templates/", {"search": "quiz"}).json()
+        self.assertEqual([template["name"] for template in found["results"]], ["pub quiz"])
+
+    def test_is_staff_only(self):
+        self.client.force_login(self.member)
+        self.assertEqual(self.client.post("/api/admin/templates/", {"name": "X"}, format="json").status_code, 403)
+        self.assertFalse(OccasionTemplate.objects.exists())
+
+
+class TemplateImageTests(PanelTestCase):
+    def setUp(self):
+        import tempfile
+
+        super().setUp()
+        self.media = self.enterContext(tempfile.TemporaryDirectory())
+        self.enterContext(override_settings(MEDIA_ROOT=self.media))
+        self.template = OccasionTemplate.objects.create(name="Jazz night")
+        self.url = f"/api/admin/templates/{self.template.pk}/images/"
+
+    def upload(self, order, file=None):
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.client.post(self.url, {"order": order, "image": file or image_file()}, format="multipart")
+
+    def stored_files(self):
+        from pathlib import Path
+
+        return sorted(path.name for path in Path(self.media).rglob("*") if path.is_file())
+
+    def test_upload_fills_a_slot_and_returns_the_images(self):
+        response = self.upload(0)
+        self.assertEqual(response.status_code, 201)
+        [image] = response.json()["images"]
+        self.assertEqual(image["order"], 0)
+        self.assertRegex(image["url"], rf"^/media/occasion_templates/{self.template.pk}/[0-9a-f]{{32}}\.png$")
+
+    def test_images_come_back_in_order_with_the_template(self):
+        for order in (2, 0, 1):
+            self.upload(order)
+        template_data = self.client.get(f"/api/admin/templates/{self.template.pk}/").json()
+        self.assertEqual([image["order"] for image in template_data["images"]], [0, 1, 2])
+
+    def test_uploading_to_a_taken_slot_replaces_the_image_and_its_file(self):
+        first = self.upload(1).json()["images"][0]["url"]
+        second = self.upload(1).json()["images"]
+        self.assertNotEqual(second[0]["url"], first)
+        self.assertEqual(self.stored_files(), [second[0]["url"].rsplit("/", 1)[1]])
+
+    def test_delete_empties_the_slot_and_removes_the_file(self):
+        self.upload(0)
+        self.upload(3)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.delete(f"{self.url}3/")
+        self.assertEqual([image["order"] for image in response.json()["images"]], [0])
+        self.assertEqual(len(self.stored_files()), 1)
+        self.assertEqual(self.client.delete(f"{self.url}3/").status_code, 404)
+
+    def test_deleting_the_template_removes_its_files(self):
+        self.upload(0)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.delete(f"/api/admin/templates/{self.template.pk}/")
+        self.assertEqual(self.stored_files(), [])
+
+    def test_order_and_file_are_checked_like_an_occasions(self):
+        for order in (-1, 4):
+            self.assertEqual(self.upload(order).status_code, 400)
+        response = self.upload(0, image_file("photo.gif", "GIF"))
+        self.assertEqual(response.json()["image"], ["Use a JPEG, PNG or WebP image."])
+        self.assertEqual(self.stored_files(), [])
+
+    def test_is_staff_only(self):
+        self.client.force_login(self.member)
+        self.assertEqual(self.upload(0).status_code, 403)

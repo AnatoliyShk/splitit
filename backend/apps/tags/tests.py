@@ -55,7 +55,7 @@ class TagEmbeddingTests(TestCase):
         self.assertEqual(list(closest), ["Jazz", "Live music", "Hiking"])
 
     def test_admin_form_does_not_show_embedding(self):
-        admin = User.objects.create_superuser("admin@example.com", "correct-horse-battery", name="Admin")
+        admin = User.objects.create_superuser("admin@example.com", "correct-horse-battery", name="Admin", adult_confirmed_at=timezone.now())
         self.client.force_login(admin)
         html = self.client.get("/django-admin/tags/tag/add/").content.decode()
         self.assertNotIn('name="embedding"', html)
@@ -63,7 +63,7 @@ class TagEmbeddingTests(TestCase):
 
 class TagAdminTests(TestCase):
     def test_admin_pages_render(self):
-        admin = User.objects.create_superuser("admin@example.com", "correct-horse-battery", name="Admin")
+        admin = User.objects.create_superuser("admin@example.com", "correct-horse-battery", name="Admin", adult_confirmed_at=timezone.now())
         self.client.force_login(admin)
         tag = Tag.objects.create(name="Jazz")
         for url in ("/django-admin/tags/tag/", "/django-admin/tags/tag/add/", f"/django-admin/tags/tag/{tag.pk}/change/"):
@@ -73,7 +73,7 @@ class TagAdminTests(TestCase):
 
 class TagListApiTests(TestCase):
     def test_lists_every_tag_a_to_z(self):
-        user = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana")
+        user = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana", adult_confirmed_at=timezone.now())
         jazz_tag = Tag.objects.create(name="jazz")
         art_tag = Tag.objects.create(name="Art")
         self.client.force_login(user)

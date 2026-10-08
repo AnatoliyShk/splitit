@@ -16,6 +16,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const auth = useMemo<Auth>(() => {
     const setUser = (nextUser: User | null) => queryClient.setQueryData<UserResponse>(queryKeys.me, { user: nextUser })
+    // Drop everything cached for this user, so the next one never sees it
+    const forgetUser = () => {
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.me[0] })
+      setUser(null)
+    }
     return {
       user,
       loading,
@@ -23,15 +28,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const userResponse = await apiPost<UserResponse>('/api/auth/login/', { email, password })
         setUser(userResponse.user)
       },
-      register: async (name, email, password) => {
-        const userResponse = await apiPost<UserResponse>('/api/auth/register/', { name, email, password })
+      register: async (name, email, password, isAdult) => {
+        const userResponse = await apiPost<UserResponse>('/api/auth/register/', {
+          name,
+          email,
+          password,
+          is_adult: isAdult,
+        })
         setUser(userResponse.user)
+      },
+      declareAge: async (isAdult) => {
+        const userResponse = await apiPost<UserResponse | null>('/api/auth/age/', { is_adult: isAdult })
+        // Under 18: the server deleted the account and ended the session (204, no body)
+        if (userResponse?.user) setUser(userResponse.user)
+        else forgetUser()
       },
       logout: async () => {
         await apiPost('/api/auth/logout/')
-        // Drop everything cached for this user, so the next one never sees it
-        queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.me[0] })
-        setUser(null)
+        forgetUser()
       },
       setUser,
     }

@@ -21,6 +21,15 @@ test.describe('Home page content', () => {
     await expect(page.getByText('This weekend')).toHaveCount(0)
   })
 
+  test('explains adding an occasion from a link under the Explore block', async ({ page }) => {
+    const promo = page.getByRole('region', { name: 'Add an occasion from a link' })
+    await expect(promo.getByText(/Paste its page's link on your profile/)).toBeVisible()
+    await expect(promo.getByText(/Only you and your connections will see it/)).toBeVisible()
+    await expect(promo.getByRole('link', { name: 'Add from a link' })).toHaveAttribute('href', '/profile')
+    const promoTitles = page.locator('.promo h2')
+    await expect(promoTitles).toHaveText(['Explore occasions', 'Add an occasion from a link'])
+  })
+
   test('Start exploring sends a logged-out visitor to log in first', async ({ page }) => {
     await page.getByRole('link', { name: 'Start exploring' }).click()
     await expect(page).toHaveURL(/\/login$/)

@@ -92,7 +92,7 @@ test('an unknown occasion shows a not-found message', async ({ page }) => {
 
 test('opened directly, the back link goes to Explore', async ({ page }) => {
   await open(page, detail)
-  await expect(page.getByRole('link', { name: '← Explore' })).toHaveAttribute('href', '/explore')
+  await expect(page.getByRole('main').getByRole('link', { name: 'Explore' })).toHaveAttribute('href', '/explore')
 })
 
 test('clicking an Explore card opens the occasion, and Back returns', async ({ page }) => {
@@ -111,7 +111,7 @@ test('clicking an Explore card opens the occasion, and Back returns', async ({ p
   await expect(page).toHaveURL(/\/occasions\/21$/)
   await expect(page.getByRole('region', { name: 'Gallery' })).toBeVisible()
 
-  await page.getByRole('button', { name: '← Back' }).click()
+  await page.getByRole('button', { name: 'Back' }).click()
   await expect(page).toHaveURL(/\/explore$/)
 })
 

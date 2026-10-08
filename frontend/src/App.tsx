@@ -3,7 +3,8 @@ import { Link, NavLink, Route, Routes, useLocation } from 'react-router'
 import { apiGet } from './api'
 import './App.css'
 import { useAuth } from './auth'
-import CreateOccasion from './pages/CreateOccasion'
+import AdultsOnly from './pages/AdultsOnly'
+import AgeConfirmation from './pages/AgeConfirmation'
 import Explore from './pages/Explore'
 import Home from './pages/Home'
 import Login from './pages/Login'
@@ -16,6 +17,8 @@ import Occasions from './pages/panel/Occasions'
 import Overview from './pages/panel/Overview'
 import PanelLayout from './pages/panel/PanelLayout'
 import Tags from './pages/panel/Tags'
+import TemplateForm from './pages/panel/TemplateForm'
+import Templates from './pages/panel/Templates'
 import Users from './pages/panel/Users'
 import { queryKeys } from './queryClient'
 import { LogoMark } from './components/LogoMark'
@@ -73,6 +76,38 @@ function HeaderActions() {
   )
 }
 
+function AppRoutes() {
+  const { user } = useAuth()
+  const { pathname } = useLocation()
+
+  // Adults only: an account with no 18+ declaration on record answers that first (the API refuses it anything else)
+  if (user && !user.adult_confirmed_at && pathname !== '/adults-only') return <AgeConfirmation />
+
+  return (
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/adults-only" element={<AdultsOnly />} />
+      <Route path="/profile" element={<Profile />} />
+      <Route path="/profile/settings" element={<Settings />} />
+      <Route path="/explore" element={<Explore />} />
+      <Route path="/occasions/:id" element={<OccasionPage />} />
+      <Route path="/admin" element={<PanelLayout />}>
+        <Route index element={<Overview />} />
+        <Route path="users" element={<Users />} />
+        <Route path="occasions" element={<Occasions />} />
+        <Route path="occasions/new" element={<OccasionForm />} />
+        <Route path="occasions/:id" element={<OccasionForm key="edit" />} />
+        <Route path="templates" element={<Templates />} />
+        <Route path="templates/new" element={<TemplateForm />} />
+        <Route path="templates/:id" element={<TemplateForm key="edit" />} />
+        <Route path="tags" element={<Tags />} />
+      </Route>
+    </Routes>
+  )
+}
+
 export default function App() {
   const healthQuery = useQuery({
     queryKey: queryKeys.health,
@@ -93,28 +128,14 @@ export default function App() {
       </header>
 
       <main className="main">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/profile/settings" element={<Settings />} />
-          <Route path="/explore" element={<Explore />} />
-          <Route path="/occasions/new" element={<CreateOccasion />} />
-          <Route path="/occasions/:id" element={<OccasionPage />} />
-          <Route path="/admin" element={<PanelLayout />}>
-            <Route index element={<Overview />} />
-            <Route path="users" element={<Users />} />
-            <Route path="occasions" element={<Occasions />} />
-            <Route path="occasions/new" element={<OccasionForm />} />
-            <Route path="occasions/:id" element={<OccasionForm key="edit" />} />
-            <Route path="tags" element={<Tags />} />
-          </Route>
-        </Routes>
+        <AppRoutes />
       </main>
 
       <footer className="footer">
         <span className="logo-small">Splitit</span>
+        <Link className="footer-link" to="/adults-only">
+          Adults only (18+)
+        </Link>
         <span className={`status status-${healthStatus === 'ok' ? 'ok' : 'bad'}`}>
           <span className="status-dot" aria-hidden="true" />
           API status: {healthStatus}

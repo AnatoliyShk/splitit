@@ -2,6 +2,7 @@ import uuid
 from pathlib import Path
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
@@ -64,7 +65,7 @@ class Occasion(models.Model):
     connections_applied_at = models.DateTimeField(null=True, blank=True, editable=False)
     # Set by the panel's Cancel action; a cancelled occasion can't be joined and isn't counted for connections
     cancelled_at = models.DateTimeField(null=True, blank=True, editable=False)
-    # Staff (in the panel) or a regular user (POST /api/occasions/); null for occasions made before this was
+    # Staff (in the panel) or a regular user (POST /api/occasions/import/); null for occasions made before this was
     # recorded. Who it is decides who sees it (see visible_to). Deleted with its creator, so a private
     # occasion never turns public
     created_by = models.ForeignKey(
@@ -125,6 +126,84 @@ class Occasion(models.Model):
         )
 
 
+# Image slots: order 0 is the main image, 1-3 the gallery (shared by occasions and templates)
+MAIN_IMAGE_ORDER = 0
+GALLERY_SIZE = 3
+MAX_IMAGE_ORDER = MAIN_IMAGE_ORDER + GALLERY_SIZE
+
+
+# Longest a template's occasions run: two weeks
+MAX_TEMPLATE_MINUTES = 14 * 24 * 60
+
+
+class OccasionTemplate(models.Model):
+    """A reusable occasion without a date, made by staff in the panel. A user picks one on their profile and
+    chooses a start; the occasion is then created from its name, description, tags and duration."""
+
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, max_length=2000)
+    # How long occasions made from it run; null means no fixed end
+    duration_minutes = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(MAX_TEMPLATE_MINUTES)],
+    )
+    tags = models.ManyToManyField(
+        "tags.Tag",
+        related_name="occasion_templates",
+        blank=True,
+        db_table="occasion_template_tags",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_occasion_templates",
+        editable=False,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "occasion_templates"
+        ordering = ["name", "id"]
+
+    def __str__(self):
+        return self.name
+
+
+def template_image_path(image, filename):
+    """occasion_templates/<template id>/<random hex>.<ext>, random for the same reason as image_path."""
+    ext = Path(filename).suffix.lower()
+    return f"occasion_templates/{image.template_id}/{uuid.uuid4().hex}{ext}"
+
+
+class OccasionTemplateImage(models.Model):
+    """One picture of a template, in a fixed slot like OccasionImage's: 0 is the main image, 1-3 the gallery.
+    Every occasion made from the template gets its own copy of each."""
+
+    template = models.ForeignKey(OccasionTemplate, on_delete=models.CASCADE, related_name="images")
+    image = models.ImageField(upload_to=template_image_path)
+    order = models.PositiveSmallIntegerField(default=MAIN_IMAGE_ORDER)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "occasion_template_images"
+        ordering = ["order"]
+        constraints = [
+            models.UniqueConstraint(fields=["template", "order"], name="template_image_order_unique"),
+            models.CheckConstraint(
+                condition=Q(order__lte=MAX_IMAGE_ORDER),
+                name="template_image_order_range",
+                violation_error_message=f"The order must be between 0 and {MAX_IMAGE_ORDER}.",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.template} #{self.order}"
+
+
 class OccasionUser(models.Model):
     """One user going to one occasion: the row behind Occasion.users."""
 
@@ -144,11 +223,6 @@ class OccasionUser(models.Model):
 
 
 # Order 0 is the main image (shown on previews); 1..GALLERY_SIZE are the gallery on the occasion's page
-MAIN_IMAGE_ORDER = 0
-GALLERY_SIZE = 3
-MAX_IMAGE_ORDER = MAIN_IMAGE_ORDER + GALLERY_SIZE
-
-
 def image_path(image, filename):
     """occasions/<occasion id>/<random hex>.<ext>: random, so a replaced image never hits a stale cache."""
     ext = Path(filename).suffix.lower()

@@ -1,4 +1,5 @@
 from django.contrib.auth import login, logout, update_session_auth_hash
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from drf_spectacular.utils import extend_schema, inline_serializer
@@ -15,6 +16,7 @@ from apps.tags.serializers import TagSerializer
 from .access import user_from_url
 from .models import FilterPreference
 from .serializers import (
+    AgeDeclarationSerializer,
     FilterPreferenceSerializer,
     LoginSerializer,
     PasswordChangeSerializer,
@@ -67,7 +69,7 @@ class MeView(AuthView):
         user = UserSerializer(request.user).data if request.user.is_authenticated else None
         return Response({"user": user})
 
-    @extend_schema(summary="Change your name", request=ProfileSerializer, responses=UserResponseSerializer)
+    @extend_schema(summary="Change your name or gender", request=ProfileSerializer, responses=UserResponseSerializer)
     def patch(self, request):
         if not request.user.is_authenticated:
             raise NotAuthenticated()
@@ -106,6 +108,35 @@ class RegisterView(AuthView):
         user = serializer.save()
         login(request, user)
         return Response({"user": UserSerializer(user).data}, status=status.HTTP_201_CREATED)
+
+
+class AgeView(AuthView):
+    """POST /api/auth/age/ {"is_adult"}: the declaration for accounts made before sign-up asked for it.
+
+    true records adult_confirmed_at (kept from the first time if it's already set) and lets the account use the
+    API again. false means the user is under 18, who may not use Splitit: the account and everything in it
+    (occasions they made, attendances, connections, filters) are deleted and the session ends.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Declare you're 18 or older, or close the account if you're not",
+        request=AgeDeclarationSerializer,
+        responses={200: UserResponseSerializer, 204: None},
+    )
+    def post(self, request):
+        serializer = AgeDeclarationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        if not serializer.validated_data["is_adult"]:
+            logout(request)
+            user.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        if user.adult_confirmed_at is None:
+            user.adult_confirmed_at = timezone.now()
+            user.save(update_fields=["adult_confirmed_at"])
+        return Response({"user": UserSerializer(user).data})
 
 
 class LoginView(AuthView):

@@ -26,6 +26,7 @@ export const queryKeys = {
   filterPreference: (userUuid: string) => ['users', userUuid, 'filter-preference'] as const,
   tags: ['tags'] as const,
   explore: ['occasions', 'explore'] as const,
+  occasionTemplates: ['occasion-templates'] as const,
   occasion: (occasionId: string) => ['occasions', occasionId] as const,
   panel: {
     all: ['panel'] as const,
@@ -36,6 +37,9 @@ export const queryKeys = {
     occasions: (params?: ListParams) =>
       (params ? ['panel', 'occasions', params] : ['panel', 'occasions']) as readonly unknown[],
     occasion: (occasionId: string) => ['panel', 'occasion', occasionId] as const,
+    templates: (params?: ListParams) =>
+      (params ? ['panel', 'templates', params] : ['panel', 'templates']) as readonly unknown[],
+    template: (templateId: string) => ['panel', 'template', templateId] as const,
   },
 }
 

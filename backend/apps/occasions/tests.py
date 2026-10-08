@@ -8,7 +8,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from pgvector.django import CosineDistance
 
-from .models import EMBEDDING_DIMENSIONS, Occasion, OccasionUser
+from .models import EMBEDDING_DIMENSIONS, Occasion, OccasionTemplate, OccasionUser
 from .services import deactivate_finished
 
 
@@ -56,8 +56,8 @@ class UserOccasionsApiTests(TestCase):
         from apps.tags.models import Tag
         from apps.users.models import User
 
-        self.me = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana")
-        self.other = User.objects.create_user("ben@example.com", "correct-horse-battery", name="Ben")
+        self.me = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana", adult_confirmed_at=timezone.now())
+        self.other = User.objects.create_user("ben@example.com", "correct-horse-battery", name="Ben", adult_confirmed_at=timezone.now())
         now = timezone.now()
         later = Occasion.objects.create(name="Later", start_datetime=now + timedelta(days=5))
         sooner = Occasion.objects.create(name="Sooner", start_datetime=now + timedelta(days=1))
@@ -110,8 +110,8 @@ class ExploreApiTests(TestCase):
     def setUp(self):
         from apps.users.models import User
 
-        self.me = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana")
-        self.other = User.objects.create_user("ben@example.com", "correct-horse-battery", name="Ben")
+        self.me = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana", adult_confirmed_at=timezone.now())
+        self.other = User.objects.create_user("ben@example.com", "correct-horse-battery", name="Ben", adult_confirmed_at=timezone.now())
         now = timezone.now()
         self.later = Occasion.objects.create(name="Later", start_datetime=now + timedelta(days=5))
         self.sooner = Occasion.objects.create(name="Sooner", start_datetime=now + timedelta(days=1))
@@ -190,9 +190,9 @@ class ExploreApiTests(TestCase):
         from apps.users.models import User
 
         # Pairs are stored smaller id first; Eve sits between Cleo and Finn, so she's on both sides
-        cleo = User.objects.create_user("cleo@example.com", "correct-horse-battery", name="Cleo")
-        eve = User.objects.create_user("eve@example.com", "correct-horse-battery", name="Eve")
-        finn = User.objects.create_user("finn@example.com", "correct-horse-battery", name="Finn")
+        cleo = User.objects.create_user("cleo@example.com", "correct-horse-battery", name="Cleo", adult_confirmed_at=timezone.now())
+        eve = User.objects.create_user("eve@example.com", "correct-horse-battery", name="Eve", adult_confirmed_at=timezone.now())
+        finn = User.objects.create_user("finn@example.com", "correct-horse-battery", name="Finn", adult_confirmed_at=timezone.now())
         self.later.users.add(cleo, finn)
         Connection.objects.create(user_low=cleo, user_high=eve, strength=1, shared_occasions=1)
         Connection.objects.create(user_low=eve, user_high=finn, strength=1, shared_occasions=1)
@@ -207,6 +207,20 @@ class ExploreApiTests(TestCase):
             [{"uuid": str(cleo.uuid), "name": "Cleo"}, {"uuid": str(finn.uuid), "name": "Finn"}],
         )
         self.assertEqual(occasions["Sooner"]["known_attendees"], [])
+
+    def test_counts_attendees_by_gender(self):
+        from apps.users.models import Gender, User
+
+        ann = User.objects.create_user("ann@example.com", "correct-horse-battery", name="Ann", gender=Gender.WOMAN, adult_confirmed_at=timezone.now())
+        bob = User.objects.create_user("bob@example.com", "correct-horse-battery", name="Bob", gender=Gender.MAN, adult_confirmed_at=timezone.now())
+        cat = User.objects.create_user("cat@example.com", "correct-horse-battery", name="Cat", gender=Gender.WOMAN, adult_confirmed_at=timezone.now())
+        self.later.users.add(self.other, ann, bob, cat)
+
+        occasions = {occasion["name"]: occasion for occasion in self.explore()["occasions"]}
+        # Ben (self.other) didn't say, so he counts as undisclosed
+        self.assertEqual(occasions["Later"]["gender_counts"], {"man": 1, "woman": 2, "undisclosed": 1})
+        self.assertEqual(occasions["Later"]["attendees_count"], 4)
+        self.assertEqual(occasions["Sooner"]["gender_counts"], {"man": 0, "woman": 0, "undisclosed": 0})
 
     def test_active_occasion_names_the_attendees_i_know(self):
         from apps.connections.models import Connection
@@ -271,8 +285,8 @@ class DeactivateFinishedTests(TestCase):
     def setUp(self):
         from apps.users.models import User
 
-        self.ana = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana")
-        self.ben = User.objects.create_user("ben@example.com", "correct-horse-battery", name="Ben")
+        self.ana = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana", adult_confirmed_at=timezone.now())
+        self.ben = User.objects.create_user("ben@example.com", "correct-horse-battery", name="Ben", adult_confirmed_at=timezone.now())
 
     def attend(self, name, **times):
         occasion = Occasion.objects.create(name=name, **times)
@@ -344,7 +358,7 @@ class OccasionImagesApiTests(TestCase):
         from .models import OccasionImage
 
         self.enterContext(override_settings(MEDIA_ROOT=self.enterContext(tempfile.TemporaryDirectory())))
-        self.me = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana")
+        self.me = User.objects.create_user("ana@example.com", "correct-horse-battery", name="Ana", adult_confirmed_at=timezone.now())
         self.occasion = Occasion.objects.create(name="Gig", start_datetime=timezone.now() + timedelta(days=1))
         self.plain = Occasion.objects.create(name="Plain", start_datetime=timezone.now() + timedelta(days=2))
         for order in (2, 0, 1):
@@ -394,15 +408,15 @@ class OccasionImagesApiTests(TestCase):
 
 
 class UserOccasionTests(TestCase):
-    """Occasions made by regular users: creating them, and who may see them."""
+    """Occasions made by regular users (added from a link): who may see them."""
 
     def setUp(self):
         from apps.users.models import User
 
-        self.ann = User.objects.create_user("ann@example.com", "correct-horse-battery", name="Ann")
-        self.ben = User.objects.create_user("ben@example.com", "correct-horse-battery", name="Ben")
-        self.cara = User.objects.create_user("cara@example.com", "correct-horse-battery", name="Cara")
-        self.staff = User.objects.create_user("sam@example.com", "correct-horse-battery", name="Sam", is_staff=True)
+        self.ann = User.objects.create_user("ann@example.com", "correct-horse-battery", name="Ann", adult_confirmed_at=timezone.now())
+        self.ben = User.objects.create_user("ben@example.com", "correct-horse-battery", name="Ben", adult_confirmed_at=timezone.now())
+        self.cara = User.objects.create_user("cara@example.com", "correct-horse-battery", name="Cara", adult_confirmed_at=timezone.now())
+        self.staff = User.objects.create_user("sam@example.com", "correct-horse-battery", name="Sam", is_staff=True, adult_confirmed_at=timezone.now())
         # Ann knows Ben, Ben knows Cara: Cara is only a friend of a friend to Ann
         self.connect(self.ann, self.ben)
         self.connect(self.ben, self.cara)
@@ -414,61 +428,58 @@ class UserOccasionTests(TestCase):
         user_low, user_high = sorted((first_user, second_user), key=lambda user: user.pk)
         Connection.objects.create(user_low=user_low, user_high=user_high, strength=1, shared_occasions=1)
 
-    def create(self, **fields):
-        request_data = {"name": "Picnic", "start_datetime": self.start.isoformat(), **fields}
-        return self.client.post("/api/occasions/", request_data, content_type="application/json")
+    def make_occasion(self, **fields):
+        occasion = Occasion.objects.create(name="Mine", start_datetime=self.start, created_by=self.ann, **fields)
+        occasion.users.add(self.ann, self.ben)
+        return occasion
+
+    def test_creator_cancels_their_occasion_and_frees_attendees(self):
+        from apps.occasions.models import OccasionUser
+
+        occasion = self.make_occasion()
+        self.client.force_login(self.ann)
+        self.assertTrue(self.client.get(f"/api/occasions/{occasion.id}/").json()["is_mine"])
+        response = self.client.post(f"/api/occasions/{occasion.id}/cancel/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.json()["cancelled_at"])
+        occasion.refresh_from_db()
+        self.assertIsNotNone(occasion.cancelled_at)
+        self.assertFalse(OccasionUser.objects.filter(occasion=occasion, is_active=True).exists())
+        # Cancelling twice is refused
+        self.assertEqual(self.client.post(f"/api/occasions/{occasion.id}/cancel/").status_code, 400)
+
+    def test_only_the_creator_cancels(self):
+        occasion = self.make_occasion()
+        staff_occasion = Occasion.objects.create(name="Staff", start_datetime=self.start, created_by=self.staff)
+        self.client.force_login(self.ben)
+        self.assertFalse(self.client.get(f"/api/occasions/{occasion.id}/").json()["is_mine"])
+        self.assertEqual(self.client.post(f"/api/occasions/{occasion.id}/cancel/").status_code, 404)
+        self.client.force_login(self.ann)
+        self.assertEqual(self.client.post(f"/api/occasions/{staff_occasion.id}/cancel/").status_code, 404)
+        occasion.refresh_from_db()
+        self.assertIsNone(occasion.cancelled_at)
+
+    def test_cannot_cancel_an_occasion_that_is_over(self):
+        occasion = self.make_occasion()
+        Occasion.objects.filter(pk=occasion.pk).update(start_datetime=timezone.now() - timedelta(days=2))
+        self.client.force_login(self.ann)
+        self.assertEqual(self.client.post(f"/api/occasions/{occasion.id}/cancel/").status_code, 400)
+
+    def test_cancelling_needs_login(self):
+        occasion = self.make_occasion()
+        self.assertEqual(self.client.post(f"/api/occasions/{occasion.id}/cancel/").status_code, 403)
 
     def explore_names(self, user):
         self.client.force_login(user)
         return [occasion["name"] for occasion in self.client.get("/api/occasions/explore/").json()["occasions"]]
 
-    def test_creating_makes_the_creator_go(self):
-        from apps.tags.models import Tag
-
-        jazz_tag = Tag.objects.create(name="Jazz")
+    def test_regular_users_cannot_create_one_directly(self):
+        # Adding from a link (POST /api/occasions/import/) is the only way
         self.client.force_login(self.ann)
-        response = self.create(
-            description="  Bring a blanket.  ",
-            end_datetime=(self.start + timedelta(hours=2)).isoformat(),
-            tag_ids=[jazz_tag.id],
-        )
-        self.assertEqual(response.status_code, 201)
-        occasion_data = response.json()
-        self.assertEqual(occasion_data["name"], "Picnic")
-        self.assertEqual(occasion_data["description"], "Bring a blanket.")
-        self.assertEqual(occasion_data["tags"], ["Jazz"])
-        self.assertTrue(occasion_data["is_going"])
-        self.assertEqual(occasion_data["attendees_count"], 1)
-        self.assertEqual(occasion_data["created_by"], {"uuid": str(self.ann.uuid), "name": "Ann"})
-        self.assertEqual(Occasion.objects.get(id=occasion_data["id"]).created_by, self.ann)
-
-    def test_cannot_create_while_going_elsewhere(self):
-        other_occasion = Occasion.objects.create(name="Concert", start_datetime=self.start)
-        other_occasion.users.add(self.ann)
-        self.client.force_login(self.ann)
-        response = self.create()
-        self.assertEqual(response.status_code, 409)
-        self.assertIn("Concert", response.json()["detail"])
-        self.assertFalse(Occasion.objects.filter(name="Picnic").exists())
-
-    def test_rejects_bad_input(self):
-        self.client.force_login(self.ann)
-        cases = {
-            "name": {"name": "  "},
-            "start_datetime": {"start_datetime": (timezone.now() - timedelta(hours=1)).isoformat()},
-            "end_datetime": {"end_datetime": (self.start - timedelta(hours=1)).isoformat()},
-            "tag_ids": {"tag_ids": [999]},
-            "description": {"description": "x" * 2001},
-        }
-        for field_name, fields in cases.items():
-            with self.subTest(field_name=field_name):
-                response = self.create(**fields)
-                self.assertEqual(response.status_code, 400)
-                self.assertIn(field_name, response.json())
+        request_data = {"name": "Picnic", "start_datetime": self.start.isoformat()}
+        response = self.client.post("/api/occasions/", request_data, content_type="application/json")
+        self.assertEqual(response.status_code, 404)
         self.assertFalse(Occasion.objects.exists())
-
-    def test_requires_login(self):
-        self.assertEqual(self.create().status_code, 403)
 
     def test_only_the_creator_and_direct_connections_see_it(self):
         picnic = Occasion.objects.create(name="Picnic", start_datetime=self.start, created_by=self.ann)
@@ -603,7 +614,7 @@ class ImportOccasionTests(TestCase):
         # The picture lands in a throwaway folder, never the dev media directory
         self.media = self.enterContext(tempfile.TemporaryDirectory())
         self.enterContext(override_settings(MEDIA_ROOT=self.media))
-        self.user = User.objects.create_user("ann@example.com", "correct-horse-battery", name="Ann")
+        self.user = User.objects.create_user("ann@example.com", "correct-horse-battery", name="Ann", adult_confirmed_at=timezone.now())
         self.client.force_login(self.user)
         self.start = (timezone.now() + timedelta(days=10)).replace(microsecond=0)
 
@@ -692,18 +703,49 @@ class ImportOccasionTests(TestCase):
         self.assertFalse(Occasion.objects.exists())
         self.assertFalse(Tag.objects.exists())
 
+    def test_uses_the_start_in_the_link_instead_of_the_one_in_the_reply(self):
+        link_start = timezone.now().astimezone(UTC).replace(microsecond=0) + timedelta(days=30)
+        reply = self.reply(start_date=(link_start + timedelta(days=5)).isoformat(), end_date=None)
+        for param in ("start_at", "at"):
+            Occasion.objects.all().delete()
+            response, gemini = self.post_import(reply, url=f"https://example.com/e?{param}={link_start.isoformat()}")
+            self.assertEqual(response.status_code, 201)
+            self.assertEqual(Occasion.objects.get().start_datetime, link_start)
+            self.assertIn(link_start.isoformat(), gemini.call_args.args[0])
+
+    def test_reads_the_start_from_a_parameter_after_the_hash(self):
+        today_midnight = timezone.now().astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        reply = self.reply(start_date=(today_midnight - timedelta(days=9)).isoformat(), end_date=None)
+        url = f"https://example.com/films/x#/buy-tickets?in-cinema=sofia&at={today_midnight.date().isoformat()}&view-mode=list"
+        response, _ = self.post_import(reply, url=url)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Occasion.objects.get().start_datetime, today_midnight)
+
+    def test_ignores_an_unreadable_start_in_the_link(self):
+        reply_start = timezone.now().astimezone(UTC).replace(microsecond=0) + timedelta(days=3)
+        response, gemini = self.post_import(self.reply(start_date=reply_start.isoformat(), end_date=None), url="https://example.com/e?start_at=soon")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Occasion.objects.get().start_datetime, reply_start)
+        self.assertNotIn("already known", gemini.call_args.args[0])
+
+    def test_accepts_an_event_that_starts_earlier_today(self):
+        today_midnight = timezone.now().astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        response, _ = self.post_import(self.reply(start_date=today_midnight.isoformat(), end_date=None))
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Occasion.objects.get().start_datetime, today_midnight)
+
     def test_refuses_a_past_event_and_creates_no_tags(self):
         from apps.tags.models import Tag
 
         past_start = timezone.now() - timedelta(days=2)
         response, _ = self.post_import(self.reply(start_date=past_start.isoformat(), end_date=None))
         self.assertEqual(response.status_code, 400)
-        self.assertIn("The start must be in the future.", response.json()["url"][0])
+        self.assertIn("The start can't be before today.", response.json()["url"][0])
         self.assertFalse(Occasion.objects.exists())
         self.assertFalse(Tag.objects.exists())
 
     def test_reports_a_failed_gemini_call(self):
-        with self.assertLogs("apps.occasions.views", level="ERROR"):
+        with self.assertLogs("apps.occasions.importing", level="ERROR"):
             response, _ = self.post_import(side_effect=TimeoutError("timed out"))
         self.assertEqual(response.status_code, 502)
         self.assertFalse(Occasion.objects.exists())
@@ -713,3 +755,176 @@ class ImportOccasionTests(TestCase):
         response, gemini = self.post_import(self.reply())
         self.assertEqual(response.status_code, 403)
         gemini.assert_not_called()
+
+
+class OccasionTemplateApiTests(TestCase):
+    def setUp(self):
+        from apps.tags.models import Tag
+        from apps.users.models import User
+
+        self.user = User.objects.create_user(
+            "ann@example.com", "correct-horse-battery", name="Ann", adult_confirmed_at=timezone.now()
+        )
+        self.jazz_tag = Tag.objects.create(name="Jazz")
+        self.template = OccasionTemplate.objects.create(
+            name="Jazz night", description="A trio.", duration_minutes=180
+        )
+        self.template.tags.add(self.jazz_tag)
+        self.client.force_login(self.user)
+        self.start = (timezone.now() + timedelta(days=3)).replace(microsecond=0)
+
+    def create_occasion(self, start=None, template=None):
+        return self.client.post(
+            f"/api/occasion-templates/{(template or self.template).pk}/occasions/",
+            {"start_datetime": (start or self.start).isoformat()},
+            format="json",
+        )
+
+    def test_lists_templates_by_name(self):
+        OccasionTemplate.objects.create(name="Board games")
+        template_names = [template["name"] for template in self.client.get("/api/occasion-templates/").json()]
+        self.assertEqual(template_names, ["Board games", "Jazz night"])
+        jazz = self.client.get("/api/occasion-templates/").json()[1]
+        self.assertEqual(
+            jazz,
+            {
+                "id": self.template.pk,
+                "name": "Jazz night",
+                "description": "A trio.",
+                "duration_minutes": 180,
+                "tags": ["Jazz"],
+                "main_image": None,
+            },
+        )
+
+    def test_listing_needs_login(self):
+        self.client.logout()
+        self.assertEqual(self.client.get("/api/occasion-templates/").status_code, 403)
+
+    def test_creates_an_occasion_the_user_goes_to(self):
+        response = self.create_occasion()
+        self.assertEqual(response.status_code, 201)
+        occasion = Occasion.objects.get(pk=response.json()["id"])
+        self.assertEqual(occasion.name, "Jazz night")
+        self.assertEqual(occasion.description, "A trio.")
+        self.assertEqual(occasion.start_datetime, self.start)
+        self.assertEqual(occasion.end_datetime, self.start + timedelta(minutes=180))
+        self.assertEqual(occasion.created_by, self.user)
+        self.assertEqual(list(occasion.tags.all()), [self.jazz_tag])
+        self.assertEqual(list(occasion.users.all()), [self.user])
+        self.assertTrue(response.json()["is_mine"])
+
+    def test_a_template_without_a_duration_makes_an_open_ended_occasion(self):
+        template = OccasionTemplate.objects.create(name="Hangout")
+        response = self.create_occasion(template=template)
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNone(Occasion.objects.get(pk=response.json()["id"]).end_datetime)
+
+    def test_the_start_must_be_in_the_future(self):
+        response = self.create_occasion(start=timezone.now() - timedelta(hours=1))
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["start_datetime"], ["The start must be in the future."])
+        self.assertFalse(Occasion.objects.exists())
+
+    def test_a_missing_start_is_rejected(self):
+        response = self.client.post(f"/api/occasion-templates/{self.template.pk}/occasions/", {}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("start_datetime", response.json())
+
+    def test_refused_while_going_to_another_occasion(self):
+        self.assertEqual(self.create_occasion().status_code, 201)
+        response = self.create_occasion(start=self.start + timedelta(days=1))
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(Occasion.objects.count(), 1)
+
+    def test_unknown_template_is_404(self):
+        response = self.client.post(
+            "/api/occasion-templates/9999/occasions/", {"start_datetime": self.start.isoformat()}, format="json"
+        )
+        self.assertEqual(response.status_code, 404)
+
+
+class OccasionTemplateImagesTests(TestCase):
+    def setUp(self):
+        import tempfile
+
+        from django.core.files.base import ContentFile
+
+        from apps.users.models import User
+
+        self.media = self.enterContext(tempfile.TemporaryDirectory())
+        self.enterContext(override_settings(MEDIA_ROOT=self.media))
+        self.user = User.objects.create_user(
+            "ann@example.com", "correct-horse-battery", name="Ann", adult_confirmed_at=timezone.now()
+        )
+        self.template = OccasionTemplate.objects.create(name="Jazz night", duration_minutes=60)
+        self.template.images.create(order=0, image=ContentFile(b"main", "main.png"))
+        self.template.images.create(order=2, image=ContentFile(b"gallery", "gallery.png"))
+        self.client.force_login(self.user)
+        self.start = (timezone.now() + timedelta(days=3)).replace(microsecond=0)
+
+    def stored_files(self):
+        from pathlib import Path
+
+        return sorted(str(path.relative_to(self.media)) for path in Path(self.media).rglob("*") if path.is_file())
+
+    def create_occasion(self):
+        return self.client.post(
+            f"/api/occasion-templates/{self.template.pk}/occasions/",
+            {"start_datetime": self.start.isoformat()},
+            format="json",
+        )
+
+    def test_the_list_carries_each_templates_main_image(self):
+        [template_data] = self.client.get("/api/occasion-templates/").json()
+        self.assertRegex(template_data["main_image"], rf"^/media/occasion_templates/{self.template.pk}/\w+\.png$")
+
+    def test_a_template_without_images_has_no_main_image(self):
+        self.template.images.all().delete()
+        [template_data] = self.client.get("/api/occasion-templates/").json()
+        self.assertIsNone(template_data["main_image"])
+
+    def test_the_occasion_gets_a_copy_of_every_image_in_its_slot(self):
+        response = self.create_occasion()
+        self.assertEqual(response.status_code, 201)
+        occasion = Occasion.objects.get(pk=response.json()["id"])
+        self.assertEqual(list(occasion.images.values_list("order", flat=True)), [0, 2])
+        with occasion.images.get(order=0).image.open("rb") as main_file:
+            self.assertEqual(main_file.read(), b"main")
+        # The detail shows the copied main image and gallery
+        self.assertRegex(response.json()["main_image"], rf"^/media/occasions/{occasion.pk}/\w+\.png$")
+        self.assertEqual(len(response.json()["gallery"]), 1)
+        # Four files: the template's two and the occasion's two
+        self.assertEqual(len(self.stored_files()), 4)
+
+    def test_deleting_the_occasion_keeps_the_templates_files(self):
+        occasion = Occasion.objects.get(pk=self.create_occasion().json()["id"])
+        with self.captureOnCommitCallbacks(execute=True):
+            occasion.delete()
+        self.assertEqual(len(self.stored_files()), 2)
+        self.assertTrue(all(name.startswith("occasion_templates/") for name in self.stored_files()))
+
+    def test_deleting_the_template_keeps_the_occasions_files(self):
+        occasion = Occasion.objects.get(pk=self.create_occasion().json()["id"])
+        with self.captureOnCommitCallbacks(execute=True):
+            self.template.delete()
+        self.assertEqual(len(self.stored_files()), 2)
+        with occasion.images.get(order=0).image.open("rb") as main_file:
+            self.assertEqual(main_file.read(), b"main")
+
+    def test_a_missing_file_is_skipped_instead_of_failing(self):
+        from pathlib import Path
+
+        Path(self.media, self.template.images.get(order=2).image.name).unlink()
+        response = self.create_occasion()
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            list(Occasion.objects.get(pk=response.json()["id"]).images.values_list("order", flat=True)), [0]
+        )
+
+    def test_a_refused_occasion_copies_nothing(self):
+        self.assertEqual(self.create_occasion().status_code, 201)
+        files_before = self.stored_files()
+        self.start += timedelta(days=1)
+        self.assertEqual(self.create_occasion().status_code, 409)
+        self.assertEqual(self.stored_files(), files_before)

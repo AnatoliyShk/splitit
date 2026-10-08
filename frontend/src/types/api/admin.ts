@@ -38,6 +38,20 @@ export type PanelTag = Tag & {
   updated_at: string
 }
 
+/** An occasion template in the panel (PanelTemplateSerializer). */
+export type PanelTemplate = {
+  id: number
+  name: string
+  description: string
+  // How long occasions made from it run; null means no fixed end
+  duration_minutes: number | null
+  tags: Tag[]
+  // Order 0 is the main image; 1-3 are the gallery. Every occasion made from the template gets a copy of each
+  images: OccasionImage[]
+  created_at: string
+  updated_at: string
+}
+
 export type Stats = {
   users: { total: number; active: number; staff: number; new_this_week: number }
   occasions: { total: number; upcoming: number }
