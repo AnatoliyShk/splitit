@@ -10,7 +10,8 @@ def tag_text(tag):
 
 
 def occasion_text(occasion):
-    return occasion.name
+    # The description gives the vector much more to go on than a short name
+    return "\n\n".join(part for part in (occasion.name, occasion.description) if part)
 
 
 # Models with an `embedding` field, and how to turn a row into the text to embed

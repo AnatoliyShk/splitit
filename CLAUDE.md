@@ -19,9 +19,11 @@ backend/            Django project
   config/           settings, root urls, wsgi/asgi
   apps/api/         REST API app (urls mounted at /api/)
   apps/users/       custom User (email login, public UUIDv7 `uuid`) + session auth API at /api/auth/; user_from_url() guards /api/users/<uuid>/ routes
-                    FilterPreference (one per user, table `filter_preferences`): saved Explore filters, normalized to 5NF; one table per filter kind: tags (`filter_preference_tags`) and ISO weekdays 1-7 (`filter_preference_weekdays`). No JSON columns for filters. GET/PUT /api/users/<uuid>/filter-preference/ reads and replaces them; Explore lists only occasions with any saved tag that start on a saved weekday (UTC)
-  apps/occasions/   Occasion model (many-to-many with users through OccasionUser, table `occasion_users`, app label `occasions`); GET /api/users/<uuid>/occasions/, GET /api/occasions/explore/, GET /api/occasions/<id>/, POST /api/occasions/<id>/join/
+                    FilterPreference (one per user, table `filter_preferences`): saved Explore filters, normalized to 5NF; one table per filter kind: tags (`filter_preference_tags`) and ISO weekdays 1-7 (`filter_preference_weekdays`). No JSON columns for filters. `is_enabled` turns the preset off without deleting it. GET/PUT/PATCH /api/users/<uuid>/filter-preference/ reads, replaces or partly changes them; while enabled, Explore lists only occasions with any saved tag that start on a saved weekday (UTC)
+  apps/occasions/   Occasion model (many-to-many with users through OccasionUser, table `occasion_users`, app label `occasions`); GET /api/users/<uuid>/occasions/, POST /api/occasions/ (a user creates one and goes to it), POST /api/occasions/import/ (same, from an event's web page: `importing.py` sends the link inside a prompt to Gemini (`GEMINI_MODEL`, URL context and Google Search tools; search is dropped and the call retried when the plan has no quota for it), parses the JSON reply, upserts its 1-2 tags ignoring case, then creates the occasion with a link-preview card as main image: `preview.py` builds a 1200x630 SVG from the title, description and link domain, themed by the reply's `icon` (sakura, star or wave), with every text escaped; throttled to 10/hour), GET /api/occasions/explore/, GET /api/occasions/<id>/, POST /api/occasions/<id>/join/
                     OccasionImage (table `occasion_images`): `order` 0 is the main image (cards, lists), 1-3 the gallery on the occasion page; uploaded in the panel via POST/DELETE /api/admin/occasions/<id>/images/[<order>/]; files live in MEDIA_ROOT (backend/media, git-ignored) and are removed with their row
+                    `description`: plain text up to 2000 characters, optional; Explore cards show the first 100 characters and the rest under Show details; it's part of the occasion's embedding text. Panel test occasions get placeholder text
+                    Visibility (OccasionQuerySet.visible_to, used by explore, detail and join): `created_by` null or staff = public; made by a regular user = only the creator, people directly connected to them (a Connection row, not friends of friends) and attendees. Cards show `created_by` (name) only for regular users' occasions
                     One occasion at a time: OccasionUser.is_active stays on until the occasion ends or is cancelled (panel Cancel sets `cancelled_at`); join returns 409 while another is active, and explore returns `active_occasion` instead of the deck. A worker task flips is_active off when an occasion ends; `manage.py deactivate_finished` sweeps manually
   apps/tags/        Tag model (many-to-many with occasions: tag.occasions / occasion.tags); GET /api/tags/ lists every tag (for Explore filters)
   apps/panel/       staff-only admin API at /api/admin/ (stats, users, occasions)
@@ -29,9 +31,9 @@ backend/            Django project
   apps/connections/ Connection between users who shared occasions (strength += 1/(attendees-1) per occasion, counted after it ends by a worker task); GET /api/users/<uuid>/connections/ and .../connections/graph/ (network for the profile graph); `manage.py apply_connections [--rebuild]`
 frontend/           Vite React app
   src/App.tsx       layout (header, footer) and routes
-  src/pages/        Home (landing), Login, Register, Profile, Settings (name/password, linked from Profile), Explore (accept/decline upcoming occasions; the ExploreFilters panel saves tag and weekday filters), OccasionPage (/occasions/:id, main image + gallery; Explore cards and Profile rows link to it)
+  src/pages/        Home (landing), Login, Register, Profile, Settings (name/password, linked from Profile), Explore (accept/decline upcoming occasions; the Filters button opens a modal (ExploreFilters) that saves tag and weekday filters), OccasionPage (/occasions/:id, main image + gallery; Explore cards and Profile rows link to it), CreateOccasion (/occasions/new, linked from Profile and Explore's empty deck)
   src/pages/panel/  admin control panel at /admin (staff only)
-  src/components/   shared UI (form fields, auth card, OccasionCard for Explore, TagList of tag names, RollOut: a toggle that rolls content open, used by the Explore card and filters; use it for any new collapsible section)
+  src/components/   shared UI (form fields, auth card, OccasionCard for Explore, TagList of tag names, RollOut: a toggle that rolls content open, used by the Explore card; Modal: a dialog on native <dialog>, used by the Explore filters; InfoTip: an info icon with a tooltip, used by the Explore title for the one-occasion rule; Switch: an on/off toggle (role="switch") with an elastic thumb, used to turn the Explore filters on and off; RowMenu: a gear button that springs a table row's action buttons out, used by every admin panel table; use these for any new collapsible section, modal, tooltip, toggle or row actions)
   src/api.ts        fetch helpers with CSRF handling; useFieldErrors() turns query/mutation errors into form errors
   src/queryClient.ts  TanStack QueryClient (retry policy) and `queryKeys`, every query key in one place
   src/types/api/    backend response shapes, one file per API area (users, occasions, tags, connections, admin, pagination); each mirrors a serializer
@@ -78,7 +80,7 @@ Add backend dependencies with `uv add <pkg>` in `backend/`, then rebuild the bac
 
 ## Configuration
 
-Django settings read from environment variables (`DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `POSTGRES_*`, `REDIS_URL`, `GEMINI_API_KEY`, `EMBEDDING_MODEL`) with local-dev defaults. Without `GEMINI_API_KEY`, nothing is embedded; run `embed_missing` after adding one. Never commit `.env`.
+Django settings read from environment variables (`DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `POSTGRES_*`, `REDIS_URL`, `GEMINI_API_KEY`, `EMBEDDING_MODEL`, `GEMINI_MODEL`) with local-dev defaults. Without `GEMINI_API_KEY`, nothing is embedded and adding occasions from links is off; run `embed_missing` after adding one. Never commit `.env`.
 
 ## Database queries
 
@@ -108,6 +110,7 @@ Thick ink borders, hard offset shadows, flat pastel fills, rounded corners, bold
 Color rules are strict:
 
 - `--primary` (yellow) and `--secondary` (lilac) are the **only** colors for decorating elements.
+- Any indication of a chosen element (checked filter, current page, open toggle, selected option) uses `--secondary` (lilac), never `--primary`.
 - `--danger` (red) is **only** for terminal actions: exit, log out, delete, and Decline on Explore (`.btn-danger`).
 - `--confirm` (green) is **only** for apply and confirm actions (`.btn-confirm`).
 - Never use danger or confirm colors for decoration or status. Status indicators stay neutral.

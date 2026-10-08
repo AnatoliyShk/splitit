@@ -32,6 +32,7 @@ FilterPreferenceResponseSerializer = inline_serializer(
     {
         "tags": TagSerializer(many=True),
         "weekdays": serializers.ListField(child=serializers.IntegerField(min_value=1, max_value=7)),
+        "is_enabled": serializers.BooleanField(),
     },
 )
 
@@ -128,9 +129,10 @@ class LogoutView(AuthView):
 
 
 class FilterPreferenceView(APIView):
-    """GET/PUT /api/users/<uuid>/filter-preference/: the Explore filters that user saved.
+    """GET/PUT/PATCH /api/users/<uuid>/filter-preference/: the Explore filters that user saved.
 
-    With nothing saved yet, GET returns empty lists (no filters). PUT replaces both lists.
+    With nothing saved yet, GET returns empty lists (no filters). PUT replaces both lists;
+    PATCH changes only the fields sent, e.g. {"is_enabled": false} to turn the filters off.
     """
 
     permission_classes = [IsAuthenticated]
@@ -140,7 +142,7 @@ class FilterPreferenceView(APIView):
         user = user_from_url(request, user_uuid)
         filter_preference = FilterPreference.objects.filter(user=user).first()
         if filter_preference is None:
-            return Response({"tags": [], "weekdays": []})
+            return Response({"tags": [], "weekdays": [], "is_enabled": True})
         return Response(FilterPreferenceSerializer(filter_preference).data)
 
     @extend_schema(
@@ -149,8 +151,19 @@ class FilterPreferenceView(APIView):
         responses=FilterPreferenceResponseSerializer,
     )
     def put(self, request, user_uuid):
+        return self.save(request, user_uuid, partial=False)
+
+    @extend_schema(
+        summary="Change some of a user's saved Explore filters, e.g. turn them on or off",
+        request=FilterPreferenceSerializer(partial=True),
+        responses=FilterPreferenceResponseSerializer,
+    )
+    def patch(self, request, user_uuid):
+        return self.save(request, user_uuid, partial=True)
+
+    def save(self, request, user_uuid, partial):
         user = user_from_url(request, user_uuid)
-        serializer = FilterPreferenceSerializer(data=request.data)
+        serializer = FilterPreferenceSerializer(data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         filter_preference = serializer.save(user=user)
         return Response(FilterPreferenceSerializer(filter_preference).data)

@@ -4,6 +4,7 @@ import { apiGet, apiPatch, useFieldErrors } from '../../api'
 import { useAuth } from '../../auth'
 import { Field, FormAlert } from '../../components/Field'
 import { Pager } from '../../components/Pager'
+import { RowMenu } from '../../components/RowMenu'
 import { listQueryString, queryKeys } from '../../queryClient'
 import type { PanelUser } from '../../types/api/admin'
 import type { Page } from '../../types/api/pagination'
@@ -115,7 +116,7 @@ export default function Users() {
                   </td>
                   <td className="row-actions">
                     {!locked && (
-                      <>
+                      <RowMenu label={panelUser.name || panelUser.email}>
                         <button
                           className="btn btn-sm"
                           disabled={busy}
@@ -134,7 +135,7 @@ export default function Users() {
                         >
                           {panelUser.is_active ? 'Deactivate' : 'Reactivate'}
                         </button>
-                      </>
+                      </RowMenu>
                     )}
                   </td>
                 </tr>

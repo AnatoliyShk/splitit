@@ -14,10 +14,10 @@ export default function Overview() {
   const errors = useFieldErrors(statsQuery.error)
 
   const statTiles = stats && [
-    { label: 'Users', value: stats.users.total, note: `${stats.users.active} active`, tone: 'primary' },
-    { label: 'Admins', value: stats.users.staff, note: 'with panel access', tone: 'secondary' },
-    { label: 'New this week', value: stats.users.new_this_week, note: 'sign-ups, last 7 days', tone: 'primary' },
-    { label: 'Occasions', value: stats.occasions.total, note: `${stats.occasions.upcoming} upcoming`, tone: 'secondary' },
+    { label: 'Users', value: stats.users.total, note: `${stats.users.active} active` },
+    { label: 'Admins', value: stats.users.staff, note: 'with panel access' },
+    { label: 'New this week', value: stats.users.new_this_week, note: 'sign-ups, last 7 days' },
+    { label: 'Occasions', value: stats.occasions.total, note: `${stats.occasions.upcoming} upcoming` },
   ]
 
   return (
@@ -32,7 +32,7 @@ export default function Overview() {
       {statTiles && (
         <ul className="stats" aria-label="Totals">
           {statTiles.map((tile) => (
-            <li className={`stat stat-${tile.tone}`} key={tile.label}>
+            <li className="stat" key={tile.label}>
               <span className="stat-label">{tile.label}</span>
               <strong className="stat-value">{tile.value}</strong>
               <span className="stat-note">{tile.note}</span>

@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, type SubmitEvent } from 'react'
-import { apiGet, apiPut, useFieldErrors } from '../api'
-import { hasFilters, useFilterPreference } from '../filterPreference'
+import { useId, useState, type SubmitEvent } from 'react'
+import { apiGet, apiPatch, apiPut, useFieldErrors } from '../api'
+import { filtersApplied, hasFilters, useFilterPreference } from '../filterPreference'
 import { queryKeys } from '../queryClient'
 import type { Tag } from '../types/api/tags'
 import type { FilterPreference, User, Weekday } from '../types/api/users'
 import { FormAlert } from './Field'
-import { RollOut } from './RollOut'
+import { Modal } from './Modal'
+import { Switch } from './Switch'
 
 const WEEKDAYS: Weekday[] = [1, 2, 3, 4, 5, 6, 7]
 // 2024-01-01 was a Monday, so day n of that week is ISO weekday n
@@ -14,16 +15,20 @@ const weekdayDate = (weekday: Weekday) => new Date(2024, 0, weekday)
 const shortWeekdayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'short' })
 const longWeekdayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'long' })
 
-function filtersSummary(filterPreference: FilterPreference) {
+// The saved days as short names in week order, e.g. ["Sat", "Sun"]
+function weekdayNames(weekdays: Weekday[]) {
+  return [...weekdays]
+    .sort((first, second) => first - second)
+    .map((weekday) => shortWeekdayFormat.format(weekdayDate(weekday)))
+}
+
+// What's saved as one sentence, for screen readers (the card's list label would otherwise stand in for the names)
+function chosenFiltersText(filterPreference: FilterPreference) {
   if (!hasFilters(filterPreference)) return 'All occasions'
-  const parts = []
-  if (filterPreference.tags.length > 0) {
-    parts.push(filterPreference.tags.length === 1 ? filterPreference.tags[0].name : `${filterPreference.tags.length} tags`)
-  }
-  if (filterPreference.weekdays.length > 0) {
-    parts.push(filterPreference.weekdays.map((weekday) => shortWeekdayFormat.format(weekdayDate(weekday))).join(', '))
-  }
-  return parts.join(' · ')
+  const parts = filterPreference.is_enabled ? [] : ['Off.']
+  if (filterPreference.tags.length > 0) parts.push(`Tags: ${filterPreference.tags.map((tag) => tag.name).join(', ')}.`)
+  if (filterPreference.weekdays.length > 0) parts.push(`Days: ${weekdayNames(filterPreference.weekdays).join(', ')}.`)
+  return parts.join(' ')
 }
 
 // Toggles a value in a set, returning a new set
@@ -40,17 +45,18 @@ function sameSet<T>(first: ReadonlySet<T>, second: ReadonlySet<T>) {
 
 function FiltersEditor({ user, savedFilters }: { user: User; savedFilters: FilterPreference }) {
   const queryClient = useQueryClient()
-  const [open, setOpen] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
+  const chosenFiltersId = useId()
   const savedTagIds = new Set(savedFilters.tags.map((tag) => tag.id))
   const savedWeekdays = new Set(savedFilters.weekdays)
   const [selectedTagIds, setSelectedTagIds] = useState<ReadonlySet<number>>(savedTagIds)
   const [selectedWeekdays, setSelectedWeekdays] = useState<ReadonlySet<Weekday>>(savedWeekdays)
 
-  // Only needed once the panel is open
+  // Only needed once the modal is open
   const tagsQuery = useQuery({
     queryKey: queryKeys.tags,
     queryFn: () => apiGet<Tag[]>('/api/tags/'),
-    enabled: open,
+    enabled: modalOpen,
   })
 
   const saveMutation = useMutation({
@@ -58,14 +64,35 @@ function FiltersEditor({ user, savedFilters }: { user: User; savedFilters: Filte
       apiPut<FilterPreference>(`/api/users/${user.uuid}/filter-preference/`, {
         tag_ids: [...selectedTagIds],
         weekdays: [...selectedWeekdays],
+        // Saving new filters means wanting them applied
+        is_enabled: true,
       }),
     onSuccess: (filterPreference) => {
       queryClient.setQueryData(queryKeys.filterPreference(user.uuid), filterPreference)
+      setModalOpen(false)
       // The deck comes back filtered by the server
       return queryClient.invalidateQueries({ queryKey: queryKeys.explore })
     },
   })
   const errors = useFieldErrors(saveMutation.error, tagsQuery.error)
+
+  // The switch: flips at once, and the server's answer (or a refetch, if it fails) settles it
+  const filterPreferenceKey = queryKeys.filterPreference(user.uuid)
+  const enabledMutation = useMutation({
+    mutationFn: (isEnabled: boolean) =>
+      apiPatch<FilterPreference>(`/api/users/${user.uuid}/filter-preference/`, { is_enabled: isEnabled }),
+    onMutate: (isEnabled) => {
+      queryClient.setQueryData<FilterPreference>(
+        filterPreferenceKey,
+        (cachedFilters) => cachedFilters && { ...cachedFilters, is_enabled: isEnabled },
+      )
+    },
+    onSuccess: (filterPreference) => queryClient.setQueryData(filterPreferenceKey, filterPreference),
+    onError: () => queryClient.invalidateQueries({ queryKey: filterPreferenceKey }),
+    // On or off, the deck comes back from the server with or without the filters
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.explore }),
+  })
+  const switchErrors = useFieldErrors(enabledMutation.error)
 
   const changed = !sameSet(selectedTagIds, savedTagIds) || !sameSet(selectedWeekdays, savedWeekdays)
   const tags = tagsQuery.data
@@ -75,26 +102,61 @@ function FiltersEditor({ user, savedFilters }: { user: User; savedFilters: Filte
     saveMutation.mutate()
   }
 
-  // Changing a choice hides the last "Saved" or error
+  // Every opening starts from what's saved, so closing without saving discards the changes
+  function openModal() {
+    setSelectedTagIds(savedTagIds)
+    setSelectedWeekdays(savedWeekdays)
+    saveMutation.reset()
+    setModalOpen(true)
+  }
+
+  // Changing a choice hides the last error
   function edit(update: () => void) {
     update()
     if (!saveMutation.isPending) saveMutation.reset()
   }
 
   return (
-    <div className="explore-filters">
-      <RollOut
-        toggle={
-          <>
-            <span className="explore-filters-title">Filters</span>
-            <span className="explore-filters-summary">{filtersSummary(savedFilters)}</span>
-          </>
-        }
-        toggleClassName="explore-filters-toggle"
-        onOpenChange={setOpen}
+    <>
+      {/* Applied filters turn it lilac; the hidden text says what is saved */}
+      <button
+        className="btn btn-sm explore-filters-open"
+        type="button"
+        aria-haspopup="dialog"
+        aria-describedby={chosenFiltersId}
+        data-applied={filtersApplied(savedFilters) || undefined}
+        onClick={openModal}
       >
-        <form className="form explore-filters-form" onSubmit={onSubmit}>
+        <svg className="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 6h16M7 12h10M10 18h4" />
+        </svg>
+        <span className="btn-label">Filters</span>
+      </button>
+      <span className="visually-hidden" id={chosenFiltersId}>
+        {chosenFiltersText(savedFilters)}
+      </span>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Filters">
+        <form className="form" onSubmit={onSubmit}>
           <FormAlert messages={errors.non_field_errors} />
+
+          {/* Always shown; until something is saved there's nothing to turn on or off, so it's disabled */}
+          <div className="filter-switch">
+            <span className="filter-switch-text">
+              <strong>Use saved filters</strong>
+              <span className="field-hint">
+                {hasFilters(savedFilters)
+                  ? 'Off shows every occasion without losing them.'
+                  : 'Save some tags or days first, then turn them on or off here.'}
+              </span>
+            </span>
+            <Switch
+              checked={hasFilters(savedFilters) && savedFilters.is_enabled}
+              onChange={(isEnabled) => enabledMutation.mutate(isEnabled)}
+              label="Use these filters"
+              disabled={!hasFilters(savedFilters)}
+            />
+          </div>
+          <FormAlert messages={switchErrors.non_field_errors} />
 
           <fieldset className="filter-group">
             <legend>Tags</legend>
@@ -136,11 +198,6 @@ function FiltersEditor({ user, savedFilters }: { user: User; savedFilters: Filte
           </fieldset>
 
           <div className="form-actions">
-            {saveMutation.isSuccess && (
-              <p className="form-status" role="status">
-                Saved
-              </p>
-            )}
             <button
               className="btn btn-sm"
               type="button"
@@ -159,12 +216,12 @@ function FiltersEditor({ user, savedFilters }: { user: User; savedFilters: Filte
             </button>
           </div>
         </form>
-      </RollOut>
-    </div>
+      </Modal>
+    </>
   )
 }
 
-/** Explore's filter panel: the user's saved tags and days. Hidden if they can't be loaded. */
+/** Explore's Filters button and the modal that edits them (and turns the saved ones on or off). Hidden until they load, and if they can't. */
 export function ExploreFilters({ user }: { user: User }) {
   const filterPreferenceQuery = useFilterPreference(user)
   if (!filterPreferenceQuery.data) return null

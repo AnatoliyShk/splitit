@@ -43,12 +43,14 @@ export function makeOccasion(
   return {
     id,
     name,
+    description: '',
     start_datetime: new Date(start).toISOString(),
     end_datetime: new Date(start + 2 * HOUR).toISOString(),
     cancelled_at: null,
     attendees_count: 1,
     tags: [],
     main_image: null,
+    created_by: null,
     known_attendees: [],
     ...overrides,
   }
@@ -74,8 +76,11 @@ export type MockOptions = {
   explore?: TestOccasion[] | number
   /** The occasion the user is going to; explore then sends it as `active_occasion` with no other occasions. */
   active?: TestOccasion
-  /** Saved filters for GET /api/users/<uuid>/filter-preference/; defaults to none. A number makes it fail. */
-  filters?: FilterPreference | number
+  /**
+   * Saved filters for GET /api/users/<uuid>/filter-preference/; defaults to none, and `is_enabled` to true.
+   * PUT and PATCH update them, so later GETs see the change. A number makes the GET fail.
+   */
+  filters?: (Omit<FilterPreference, 'is_enabled'> & { is_enabled?: boolean }) | number
   /** Every tag, for GET /api/tags/; defaults to none. A number makes it fail. */
   tags?: Tag[] | number
   /** Extra handlers, keyed by "METHOD /api/path/". Take precedence over the defaults. */
@@ -105,6 +110,8 @@ export function exploreBody({ explore, active }: Pick<MockOptions, 'explore' | '
  */
 export async function mockApi(page: Page, options: MockOptions): Promise<Mock> {
   const mock: Mock = { requests: [], bodies: {} }
+  let savedFilters: FilterPreference | undefined =
+    typeof options.filters === 'number' ? undefined : { tags: [], weekdays: [], is_enabled: true, ...options.filters }
   // The CSRF helper only fetches this when the cookie is missing; give it a cookie so it stays quiet
   await page.context().addCookies([{ name: 'csrftoken', value: 'test-token', url: 'http://localhost:5173' }])
 
@@ -128,15 +135,21 @@ export async function mockApi(page: Page, options: MockOptions): Promise<Mock> {
       if (uuid && pathname === `/api/users/${uuid}/connections/`) return respond(route, options.connections)
       if (uuid && pathname === `/api/users/${uuid}/connections/graph/`) return respond(route, options.graph)
       if (uuid && pathname === `/api/users/${uuid}/filter-preference/`) {
-        return respond(route, options.filters ?? { tags: [], weekdays: [] })
+        return respond(route, typeof options.filters === 'number' ? options.filters : savedFilters)
       }
       if (pathname === '/api/tags/') return respond(route, options.tags ?? [])
     }
-    // Saving filters echoes them back, with the chosen tags looked up by id
-    if (method === 'PUT' && uuid && pathname === `/api/users/${uuid}/filter-preference/`) {
-      const { tag_ids, weekdays } = mock.bodies[key] as { tag_ids: number[]; weekdays: FilterPreference['weekdays'] }
+    // Saving filters (PUT: both lists, PATCH: any fields) answers with them, the chosen tags looked up by id
+    if ((method === 'PUT' || method === 'PATCH') && uuid && pathname === `/api/users/${uuid}/filter-preference/`) {
+      const changes = mock.bodies[key] as { tag_ids?: number[]; weekdays?: FilterPreference['weekdays']; is_enabled?: boolean }
       const allTags = Array.isArray(options.tags) ? options.tags : []
-      return json(route, 200, { tags: allTags.filter((tag) => tag_ids.includes(tag.id)), weekdays })
+      const currentFilters = savedFilters ?? { tags: [], weekdays: [], is_enabled: true }
+      savedFilters = {
+        tags: changes.tag_ids ? allTags.filter((tag) => changes.tag_ids!.includes(tag.id)) : currentFilters.tags,
+        weekdays: changes.weekdays ?? currentFilters.weekdays,
+        is_enabled: changes.is_enabled ?? currentFilters.is_enabled,
+      }
+      return json(route, 200, savedFilters)
     }
     return json(route, 404, { detail: 'Not mocked.' })
   })

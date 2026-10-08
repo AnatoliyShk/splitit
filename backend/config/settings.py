@@ -129,6 +129,8 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_THROTTLE_RATES': {
         'auth': '10/min',
+        # Each import is a Gemini call that reads a web page
+        'occasion_import': '10/hour',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
@@ -161,11 +163,13 @@ TASKS = {
 }
 
 
-# Embeddings (Google Gemini)
+# Google Gemini (google-genai SDK, client in apps/ai/client.py)
 # Without a key, nothing is embedded; `manage.py embed_missing` fills the gaps later
 
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 EMBEDDING_MODEL = os.environ.get('EMBEDDING_MODEL', 'gemini-embedding-001')
+# Model for text generation: reading events (and drawing their SVG picture) from links (apps/occasions/importing.py)
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
 
 
 # Password validation

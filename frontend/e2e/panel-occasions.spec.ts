@@ -4,6 +4,7 @@ import {
   deferred,
   mockApi,
   mockStaffSession,
+  openActions,
   paginate,
   panelOccasion,
   type PanelOccasion,
@@ -183,6 +184,7 @@ test.describe('panel occasions list', () => {
     await openOccasions(page)
 
     await expect(page.getByRole('link', { name: 'New occasion' })).toHaveAttribute('href', '/admin/occasions/new')
+    await openActions(row(page, 'Jazz night'))
     await expect(row(page, 'Jazz night').getByRole('link', { name: 'Edit' })).toHaveAttribute(
       'href',
       '/admin/occasions/10',
@@ -200,6 +202,7 @@ test.describe('panel occasions list', () => {
     test('asks for confirmation before deleting and does nothing until confirmed', async ({ page }) => {
       const { deletes } = await openOccasions(page)
 
+      await openActions(row(page, 'Jazz night'))
       await row(page, 'Jazz night').getByRole('button', { name: 'Delete' }).click()
 
       const confirm = page.getByRole('group', { name: 'Delete Jazz night?' })
@@ -213,10 +216,12 @@ test.describe('panel occasions list', () => {
       const { deletes } = await openOccasions(page)
       const jazz = row(page, 'Jazz night')
 
+      await openActions(jazz)
       await jazz.getByRole('button', { name: 'Delete' }).click()
       await page.getByRole('button', { name: 'Keep' }).click()
 
       await expect(page.getByRole('group', { name: 'Delete Jazz night?' })).toHaveCount(0)
+      await openActions(jazz)
       await expect(jazz.getByRole('button', { name: 'Delete' })).toBeVisible()
       expect(deletes).toHaveLength(0)
     })
@@ -225,6 +230,7 @@ test.describe('panel occasions list', () => {
       const { deletes, calls } = await openOccasions(page)
       const before = calls.length
 
+      await openActions(row(page, 'Jazz night'))
       await row(page, 'Jazz night').getByRole('button', { name: 'Delete' }).click()
       await page.getByRole('group', { name: 'Delete Jazz night?' }).getByRole('button', { name: 'Delete' }).click()
 
@@ -241,6 +247,7 @@ test.describe('panel occasions list', () => {
         DELETE: () => ({ status: 500, body: { detail: 'Could not delete.' } }),
       })
 
+      await openActions(row(page, 'Jazz night'))
       await row(page, 'Jazz night').getByRole('button', { name: 'Delete' }).click()
       await page.getByRole('group', { name: 'Delete Jazz night?' }).getByRole('button', { name: 'Delete' }).click()
 
@@ -255,6 +262,7 @@ test.describe('panel occasions list', () => {
 
       await pager.getByRole('button', { name: 'Next' }).click()
       await expect(row(page, 'Occasion 21')).toBeVisible()
+      await openActions(row(page, 'Occasion 21'))
       await row(page, 'Occasion 21').getByRole('button', { name: 'Delete' }).click()
       await page.getByRole('group', { name: 'Delete Occasion 21?' }).getByRole('button', { name: 'Delete' }).click()
 
@@ -269,8 +277,11 @@ test.describe('panel occasions list', () => {
     test('only upcoming occasions have a Finish button', async ({ page }) => {
       await openOccasions(page)
 
+      await openActions(row(page, 'Jazz night'))
       await expect(row(page, 'Jazz night').getByRole('button', { name: 'Finish' })).toBeVisible()
+      await openActions(row(page, 'Open mic'))
       await expect(row(page, 'Open mic').getByRole('button', { name: 'Finish' })).toBeVisible()
+      await openActions(row(page, 'Old picnic'))
       await expect(row(page, 'Old picnic').getByRole('button', { name: 'Finish' })).toHaveCount(0)
     })
 
@@ -284,14 +295,17 @@ test.describe('panel occasions list', () => {
         },
       })
 
+      await openActions(row(page, 'Jazz night'))
       await row(page, 'Jazz night').getByRole('button', { name: 'Finish' }).click()
       const confirm = page.getByRole('group', { name: 'Finish Jazz night?' })
       await expect(confirm.getByText('Finish now?')).toBeVisible()
       expect(finishes).toHaveLength(0)
+      await openActions(confirm)
       await confirm.getByRole('button', { name: 'Finish' }).click()
 
       // After reload the occasion is over, so its Finish button is gone
       await expect(page.getByRole('group', { name: 'Finish Jazz night?' })).toHaveCount(0)
+      await openActions(row(page, 'Jazz night'))
       await expect(row(page, 'Jazz night').getByRole('button', { name: 'Finish' })).toHaveCount(0)
       expect(finishes).toHaveLength(1)
     })
@@ -301,8 +315,11 @@ test.describe('panel occasions list', () => {
     test('only upcoming occasions have a Cancel button', async ({ page }) => {
       await openOccasions(page)
 
+      await openActions(row(page, 'Jazz night'))
       await expect(row(page, 'Jazz night').getByRole('button', { name: 'Cancel', exact: true })).toBeVisible()
+      await openActions(row(page, 'Open mic'))
       await expect(row(page, 'Open mic').getByRole('button', { name: 'Cancel', exact: true })).toBeVisible()
+      await openActions(row(page, 'Old picnic'))
       await expect(row(page, 'Old picnic').getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0)
     })
 
@@ -315,6 +332,7 @@ test.describe('panel occasions list', () => {
         },
       })
 
+      await openActions(row(page, 'Jazz night'))
       await row(page, 'Jazz night').getByRole('button', { name: 'Cancel', exact: true }).click()
       const confirm = page.getByRole('group', { name: 'Cancel Jazz night?' })
       await expect(confirm.getByText('Cancel it?')).toBeVisible()
@@ -324,7 +342,9 @@ test.describe('panel occasions list', () => {
       // After reload it's tagged and can't be finished or cancelled again
       await expect(page.getByRole('group', { name: 'Cancel Jazz night?' })).toHaveCount(0)
       await expect(row(page, 'Jazz night').getByText('Cancelled', { exact: true })).toBeVisible()
+      await openActions(row(page, 'Jazz night'))
       await expect(row(page, 'Jazz night').getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0)
+      await openActions(row(page, 'Jazz night'))
       await expect(row(page, 'Jazz night').getByRole('button', { name: 'Finish' })).toHaveCount(0)
       expect(cancels).toHaveLength(1)
     })
@@ -333,9 +353,11 @@ test.describe('panel occasions list', () => {
       await openOccasions(page)
       const cancels = await mockApi(page, '/api/admin/occasions/10/cancel/', { POST: () => ({ body: {} }) })
 
+      await openActions(row(page, 'Jazz night'))
       await row(page, 'Jazz night').getByRole('button', { name: 'Cancel', exact: true }).click()
       await page.getByRole('group', { name: 'Cancel Jazz night?' }).getByRole('button', { name: 'Keep' }).click()
 
+      await openActions(row(page, 'Jazz night'))
       await expect(row(page, 'Jazz night').getByRole('button', { name: 'Cancel', exact: true })).toBeVisible()
       expect(cancels).toHaveLength(0)
     })

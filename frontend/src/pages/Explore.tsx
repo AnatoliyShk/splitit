@@ -5,8 +5,10 @@ import { ApiError, apiGet, apiPost, useFieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { ExploreFilters } from '../components/ExploreFilters'
 import { FormAlert } from '../components/Field'
+import { InfoTip } from '../components/InfoTip'
 import { OccasionCard } from '../components/OccasionCard'
-import { hasFilters, useFilterPreference } from '../filterPreference'
+import { Spinner } from '../components/Spinner'
+import { filtersApplied, useFilterPreference } from '../filterPreference'
 import { queryKeys } from '../queryClient'
 import type { ExploreData, ExploreOccasion } from '../types/api/occasions'
 import { formatDateTime } from './panel/shared'
@@ -16,8 +18,7 @@ function ActiveOccasion({ occasion }: { occasion: ExploreOccasion }) {
   const endsAt = formatDateTime(occasion.end_datetime ?? occasion.start_datetime)
   return (
     <div className="explore-active">
-      <p className="explore-eyebrow">You're going to</p>
-      <OccasionCard occasion={occasion} mine />
+      {/* Why the deck is paused, above the card, so it's read first */}
       <p className="muted">
         You can join your next occasion once this one ends ({endsAt}) or if it's cancelled. Until then, Explore is
         paused.
@@ -25,6 +26,8 @@ function ActiveOccasion({ occasion }: { occasion: ExploreOccasion }) {
       <Link className="btn btn-primary" to="/profile">
         Your occasions
       </Link>
+      <p className="explore-eyebrow">You're going to</p>
+      <OccasionCard occasion={occasion} mine />
     </div>
   )
 }
@@ -71,16 +74,10 @@ export default function Explore() {
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />
 
   const exploreData = exploreQuery.data
-  // Declined first, so the counter keeps its place when a refresh drops or adds occasions
-  const declinedOccasions = exploreData?.occasions.filter((occasion) => declinedIds.has(occasion.id)) ?? []
-  const occasions = exploreData && [
-    ...declinedOccasions,
-    ...exploreData.occasions.filter((occasion) => !declinedIds.has(occasion.id)),
-  ]
-  const occasionIndex = declinedOccasions.length
+  const occasions = exploreData?.occasions.filter((occasion) => !declinedIds.has(occasion.id))
   const activeOccasion = exploreData?.active_occasion
-  const filtered = hasFilters(filterPreferenceQuery.data)
-  const occasion = activeOccasion ? undefined : occasions?.[occasionIndex]
+  const filtered = filtersApplied(filterPreferenceQuery.data)
+  const occasion = activeOccasion ? undefined : occasions?.[0]
 
   function decline() {
     if (!occasion) return
@@ -98,22 +95,53 @@ export default function Explore() {
       <title>Explore · Splitit</title>
       <div className="explore-head">
         <h1>Explore</h1>
-        {occasions && occasion && (
-          <p className="muted">
-            {occasionIndex + 1} of {occasions.length}
-          </p>
-        )}
+        <InfoTip label="About one occasion at a time">
+          <strong>One occasion at a time.</strong> Accepting an occasion saves your spot and pauses Explore. Once it
+          ends or is cancelled, you can pick your next one.
+        </InfoTip>
+        {/* Filters only apply to the deck, which is paused while an occasion is active */}
+        {exploreData && !activeOccasion && <ExploreFilters user={user} />}
       </div>
 
-      <aside className="explore-rule" aria-labelledby="explore-rule-title">
-        <h2 id="explore-rule-title">One occasion at a time</h2>
-        <p>
-          Accepting an occasion saves your spot and pauses Explore. Once it ends or is cancelled, you can pick your
-          next one.
-        </p>
-      </aside>
+      <FormAlert messages={errors.non_field_errors} />
+      <p className="visually-hidden" role="status">
+        {statusMessage}
+      </p>
 
-      {/* Above the filters and the card, so they stay in the same place whatever the card shows */}
+      {/* Holds the deck's place until the occasions arrive, so the page doesn't jump when they do */}
+      {!exploreData && !errors.non_field_errors && (
+        <div className="explore-loading">
+          <Spinner label="Loading occasions" />
+        </div>
+      )}
+
+      {activeOccasion && <ActiveOccasion occasion={activeOccasion} />}
+
+      {exploreData && !activeOccasion && !occasion && (
+        <div className="explore-card explore-done">
+          {exploreData.occasions.length === 0 && filtered ? (
+            <>
+              <h2>No occasions match your filters</h2>
+              <p className="muted">Change or clear your filters above to see more.</p>
+            </>
+          ) : (
+            <>
+              <h2>{exploreData.occasions.length === 0 ? 'No new occasions right now' : "You're all caught up"}</h2>
+              <p className="muted">Check back later for more occasions, or see the ones you're going to.</p>
+            </>
+          )}
+          <div className="explore-done-actions">
+            <Link className="btn btn-primary" to="/profile">
+              Your occasions
+            </Link>
+            <Link className="btn" to="/occasions/new">
+              Create occasion
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Above the card they answer, so they stay put whether its details are open or not */}
       {occasion && (
         <div className="explore-actions" role="group" aria-label={`Respond to ${occasion.name}`}>
           <button className="btn btn-danger" type="button" onClick={decline} disabled={joinMutation.isPending}>
@@ -122,37 +150,6 @@ export default function Explore() {
           <button className="btn btn-confirm" type="button" onClick={accept} disabled={joinMutation.isPending}>
             {joinMutation.isPending ? 'Joining…' : 'Accept'}
           </button>
-        </div>
-      )}
-
-      {/* Filters only apply to the deck, which is paused while an occasion is active */}
-      {exploreData && !activeOccasion && <ExploreFilters user={user} />}
-
-      <FormAlert messages={errors.non_field_errors} />
-      <p className="visually-hidden" role="status">
-        {statusMessage}
-      </p>
-
-      {!exploreData && !errors.non_field_errors && <p className="muted">Loading…</p>}
-
-      {activeOccasion && <ActiveOccasion occasion={activeOccasion} />}
-
-      {occasions && !activeOccasion && !occasion && (
-        <div className="explore-card explore-done">
-          {occasions.length === 0 && filtered ? (
-            <>
-              <h2>No occasions match your filters</h2>
-              <p className="muted">Change or clear your filters above to see more.</p>
-            </>
-          ) : (
-            <>
-              <h2>{occasions.length === 0 ? 'No new occasions right now' : "You're all caught up"}</h2>
-              <p className="muted">Check back later for more occasions, or see the ones you're going to.</p>
-            </>
-          )}
-          <Link className="btn btn-primary" to="/profile">
-            Your occasions
-          </Link>
         </div>
       )}
 

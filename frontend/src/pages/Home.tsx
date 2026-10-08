@@ -1,28 +1,6 @@
 import { Link } from 'react-router'
 
-const features = [
-  {
-    step: '01',
-    title: 'Find occasions',
-    text: 'Browse concerts, meetups, hikes and game nights happening near you.',
-    tone: 'primary',
-  },
-  {
-    step: '02',
-    title: 'Go together',
-    text: 'Join a group heading to the same occasion, so you never have to go alone.',
-    tone: 'secondary',
-  },
-  {
-    step: '03',
-    title: 'Make friends',
-    text: 'Meet people who share your interests and keep in touch after the occasion.',
-    tone: 'primary',
-  },
-]
-
 export default function Home() {
-
   return (
     <>
       <section className="hero">
@@ -53,16 +31,6 @@ export default function Home() {
             Start exploring
           </Link>
         </section>
-      </section>
-
-      <section className="cards" aria-label="How it works">
-        {features.map((feature) => (
-          <article className={`card card-${feature.tone}`} key={feature.title}>
-            <span className="card-step">{feature.step}</span>
-            <h2>{feature.title}</h2>
-            <p>{feature.text}</p>
-          </article>
-        ))}
       </section>
     </>
   )

@@ -3,6 +3,7 @@ import { Link, NavLink, Route, Routes, useLocation } from 'react-router'
 import { apiGet } from './api'
 import './App.css'
 import { useAuth } from './auth'
+import CreateOccasion from './pages/CreateOccasion'
 import Explore from './pages/Explore'
 import Home from './pages/Home'
 import Login from './pages/Login'
@@ -17,9 +18,10 @@ import PanelLayout from './pages/panel/PanelLayout'
 import Tags from './pages/panel/Tags'
 import Users from './pages/panel/Users'
 import { queryKeys } from './queryClient'
+import { LogoMark } from './components/LogoMark'
 
 function HeaderActions() {
-  const { user, loading, logout } = useAuth()
+  const { user, loading } = useAuth()
   const { pathname } = useLocation()
 
   if (loading) return null
@@ -39,8 +41,13 @@ function HeaderActions() {
       <div className="header-actions">
         {exploreLink}
         {user.is_staff && (
-          <NavLink className="btn btn-ghost" to="/admin">
-            Admin
+          <NavLink className="btn btn-ghost btn-admin" to="/admin">
+            {/* A shield: on phones the button is just this, with the label kept for screen readers */}
+            <svg className="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z" />
+              <path d="m9 12 2 2 4-4" />
+            </svg>
+            <span className="btn-label">Admin</span>
           </NavLink>
         )}
         <NavLink className="btn btn-ghost btn-profile" to="/profile" title={`Logged in as ${user.name}`}>
@@ -49,9 +56,6 @@ function HeaderActions() {
           </span>
           <span className="btn-label">Profile</span>
         </NavLink>
-        <button className="btn btn-ghost btn-danger" onClick={() => logout().catch(() => {})}>
-          Log out
-        </button>
       </div>
     )
   }
@@ -81,7 +85,7 @@ export default function App() {
       <header className="header">
         <Link className="logo" to="/">
           <span className="logo-mark" aria-hidden="true">
-            ÷
+            <LogoMark />
           </span>
           <span className="logo-text">Splitit</span>
         </Link>
@@ -96,6 +100,7 @@ export default function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/profile/settings" element={<Settings />} />
           <Route path="/explore" element={<Explore />} />
+          <Route path="/occasions/new" element={<CreateOccasion />} />
           <Route path="/occasions/:id" element={<OccasionPage />} />
           <Route path="/admin" element={<PanelLayout />}>
             <Route index element={<Overview />} />

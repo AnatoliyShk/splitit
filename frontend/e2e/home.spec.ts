@@ -26,9 +26,9 @@ test.describe('Home page content', () => {
     await expect(page).toHaveURL(/\/login$/)
   })
 
-  test('shows the three how-it-works cards', async ({ page }) => {
-    const cards = page.getByRole('region', { name: 'How it works' })
-    await expect(cards.getByRole('heading', { level: 2 })).toHaveText(['Find occasions', 'Go together', 'Make friends'])
+  test('has no how-it-works steps', async ({ page }) => {
+    await expect(page.getByRole('region', { name: 'How it works' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Find occasions' })).toHaveCount(0)
   })
 })
 
@@ -55,7 +55,7 @@ test.describe('Home page call to action', () => {
 })
 
 test.describe('App shell header', () => {
-  test('logged-out shows Explore and Log in links but no Profile or Log out', async ({ page }) => {
+  test('logged-out shows Explore and Log in links but no Profile', async ({ page }) => {
     await mockHealth(page)
     await mockMe(page, null)
     await page.goto('/')
@@ -64,7 +64,6 @@ test.describe('App shell header', () => {
     await expect(header.getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login')
     await expect(header.getByRole('link', { name: 'Explore' })).toHaveAttribute('href', '/explore')
     await expect(header.getByRole('link', { name: 'Profile' })).toHaveCount(0)
-    await expect(header.getByRole('button', { name: 'Log out' })).toHaveCount(0)
     await expect(header.getByRole('link', { name: 'Admin' })).toHaveCount(0)
   })
 
@@ -87,7 +86,7 @@ test.describe('App shell header', () => {
     await expect(page.getByRole('banner').getByRole('link', { name: 'Log in' })).toHaveCount(0)
   })
 
-  test('logged-in user sees Profile link and Log out, but no Log in or Admin', async ({ page }) => {
+  test('logged-in user sees Profile link, but no Log in, Log out or Admin', async ({ page }) => {
     await mockHealth(page)
     await mockMe(page, fakeUser)
     await page.goto('/')
@@ -95,7 +94,7 @@ test.describe('App shell header', () => {
     const header = page.getByRole('banner')
     await expect(header.getByRole('link', { name: 'Profile' })).toHaveAttribute('href', '/profile')
     await expect(header.getByRole('link', { name: 'Profile' })).toHaveAttribute('title', 'Logged in as Ana Smith')
-    await expect(header.getByRole('button', { name: 'Log out' })).toBeVisible()
+    await expect(header.getByRole('button', { name: 'Log out' })).toHaveCount(0)
     await expect(header.getByRole('link', { name: 'Log in' })).toHaveCount(0)
     await expect(header.getByRole('link', { name: 'Admin' })).toHaveCount(0)
   })
@@ -106,37 +105,6 @@ test.describe('App shell header', () => {
     await page.goto('/')
 
     await expect(page.getByRole('banner').getByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/admin')
-  })
-
-  test('Log out posts to the API and returns the header to the logged-out state', async ({ page }) => {
-    await mockHealth(page)
-    await mockMe(page, fakeUser)
-    await page.context().addCookies([{ name: 'csrftoken', value: 'tok', url: 'http://localhost:5173' }])
-    let csrfHeader: string | undefined
-    await page.route('**/api/auth/logout/', (route) => {
-      csrfHeader = route.request().headers()['x-csrftoken']
-      return route.fulfill({ status: 204 })
-    })
-    await page.goto('/')
-
-    await page.getByRole('button', { name: 'Log out' }).click()
-
-    await expect(page.getByRole('banner').getByRole('link', { name: 'Log in' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Log out' })).toHaveCount(0)
-    expect(csrfHeader).toBe('tok')
-  })
-
-  test('failed logout keeps the user logged in', async ({ page }) => {
-    await mockHealth(page)
-    await mockMe(page, fakeUser)
-    await page.context().addCookies([{ name: 'csrftoken', value: 'tok', url: 'http://localhost:5173' }])
-    await page.route('**/api/auth/logout/', (route) => json(route, 500, { detail: 'boom' }))
-    await page.goto('/')
-
-    await page.getByRole('button', { name: 'Log out' }).click()
-
-    await expect(page.getByRole('link', { name: 'Profile' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible()
   })
 
   test('falls back to the logged-out header when /api/auth/me/ fails', async ({ page }) => {

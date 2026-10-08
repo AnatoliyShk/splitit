@@ -21,16 +21,49 @@
 
 .logo-mark {
   display: grid;
+  flex: none;
   place-items: center;
   width: 40px;
   height: 40px;
   border: var(--border);
   border-radius: var(--radius-sm);
-  background: var(--primary);
-  color: var(--on-pastel);
+  background: var(--surface);
   box-shadow: var(--shadow-sm);
-  font-size: 24px;
-  line-height: 1;
+}
+
+/* LogoMark: a split clock (one half per person) with a heart across the split */
+.logo-svg {
+  width: 32px;
+  height: 32px;
+}
+
+.logo-half {
+  stroke: var(--ink);
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+}
+
+.logo-half-first {
+  fill: var(--primary);
+}
+
+.logo-half-second {
+  fill: var(--secondary);
+}
+
+.logo-tick {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.logo-heart {
+  /* Dark in both themes: it sits on the pastel halves */
+  fill: var(--on-pastel);
+  stroke: var(--surface);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
 }
 
 /* Buttons: pressing moves the button into its shadow */
@@ -125,7 +158,8 @@ a.btn {
   border-radius: 50%;
 }
 
-.btn-explore {
+.btn-explore,
+.btn-admin {
   gap: 8px;
 }
 
@@ -152,19 +186,22 @@ a.btn {
   flex: 1;
 }
 
+/* The description, then the Explore block under it, both centred */
 .hero {
   display: grid;
-  grid-template-columns: 1.15fr 1fr;
-  align-items: center;
-  gap: 56px;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: 48px;
   padding: 56px 0 72px;
+  text-align: center;
 }
 
 .hero-copy {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 24px;
+  max-width: 760px;
 }
 
 .sticker {
@@ -193,7 +230,7 @@ h1 mark {
 }
 
 .tagline {
-  max-width: 460px;
+  max-width: 560px;
   font-size: 20px;
   color: var(--text-muted);
 }
@@ -209,8 +246,10 @@ h1 mark {
 .explore-promo {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
+  width: 100%;
+  max-width: 520px;
   padding: 28px;
   background: var(--surface);
   border: var(--border);
@@ -300,49 +339,6 @@ h1 mark {
   font-weight: 700;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-}
-
-/* Feature cards */
-
-.cards {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  padding-bottom: 72px;
-}
-
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 28px;
-  color: var(--on-pastel);
-  border: var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-}
-
-.card h2 {
-  color: var(--on-pastel);
-}
-
-.card-primary {
-  background: var(--primary);
-}
-
-.card-secondary {
-  background: var(--secondary);
-}
-
-.card-step {
-  align-self: flex-start;
-  margin-bottom: 8px;
-  padding: 2px 10px;
-  font-family: var(--heading);
-  font-weight: 800;
-  background: #fff;
-  border: 2px solid var(--on-pastel);
-  border-radius: 999px;
 }
 
 /* Folder tabs on a card's top edge: the active one merges into the card, the others tuck behind it */
@@ -463,6 +459,13 @@ h1 mark {
 
 .input:focus {
   box-shadow: var(--shadow-sm);
+}
+
+/* Multi-line input (TextAreaField): same look, grows only when the user drags it */
+.input-textarea {
+  min-height: 120px;
+  padding: 12px 16px;
+  resize: vertical;
 }
 
 /* Errors are status, so they stay neutral: a dashed border plus a "!" marker, never red */
@@ -611,18 +614,11 @@ h1 mark {
   flex-direction: column;
   gap: 4px;
   padding: 18px 20px;
-  color: var(--on-pastel);
+  color: var(--text);
+  background: var(--surface);
   border: var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-}
-
-.stat-primary {
-  background: var(--primary);
-}
-
-.stat-secondary {
-  background: var(--secondary);
 }
 
 .stat-label {
@@ -740,8 +736,113 @@ h1 mark {
   white-space: nowrap;
 }
 
-.row-actions .btn + .btn {
-  margin-left: 8px;
+/* Row menu (components/RowMenu.tsx): a gear whose action buttons spring out to its left, one after another.
+   Closed, they're visibility:hidden, so they leave the tab order and the accessibility tree */
+.row-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.row-menu-toggle {
+  padding: 0;
+  min-width: 44px;
+}
+
+.row-menu-gear {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 700ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Open means chosen, so the gear turns lilac and turns a third of the way round */
+.row-menu-toggle[aria-expanded='true'] {
+  background: var(--secondary);
+  color: var(--on-pastel);
+}
+
+.row-menu-toggle[aria-expanded='true'] .row-menu-gear {
+  transform: rotate(120deg);
+}
+
+.row-menu-panel {
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  z-index: 2;
+  padding: 6px 10px 10px 6px;
+  /* A backing, so the cells under the pop-out don't show through the gaps between the buttons */
+  background: var(--surface);
+  border-radius: var(--radius);
+  transform: translateY(-50%);
+  visibility: hidden;
+  pointer-events: none;
+  /* Stays visible while the buttons spring back in */
+  transition: visibility 0s linear 350ms;
+}
+
+.row-menu[data-open='true'] .row-menu-panel {
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.row-menu-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* Each button starts tucked behind the gear and overshoots into place; the nearest to the gear goes first */
+.row-menu-list > * {
+  opacity: 0;
+  transform: translateX(32px) scale(0.3);
+  transition:
+    transform 200ms ease-in,
+    opacity 150ms ease-in;
+}
+
+.row-menu[data-open='true'] .row-menu-list > * {
+  opacity: 1;
+  transform: none;
+  transition-property: transform, opacity;
+  transition-duration: 650ms, 150ms;
+  transition-timing-function:
+    linear(0, 0.399, 0.775, 1.028, 1.145, 1.161, 1.121, 1.066, 1.019, 0.99, 0.979, 0.979, 0.986, 0.993, 0.999, 1.002, 1.003, 1.003, 1.002, 1.001, 1),
+    ease-out;
+}
+
+.row-menu[data-open='true'] .row-menu-list > :nth-last-child(1) {
+  transition-delay: 0ms;
+}
+
+.row-menu[data-open='true'] .row-menu-list > :nth-last-child(2) {
+  transition-delay: 50ms;
+}
+
+.row-menu[data-open='true'] .row-menu-list > :nth-last-child(3) {
+  transition-delay: 100ms;
+}
+
+.row-menu[data-open='true'] .row-menu-list > :nth-last-child(4) {
+  transition-delay: 150ms;
+}
+
+.row-menu[data-open='true'] .row-menu-list > :nth-last-child(n + 5) {
+  transition-delay: 200ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row-menu-gear,
+  .row-menu-panel,
+  .row-menu-list > * {
+    transition: none !important;
+  }
 }
 
 /* Status tags stay neutral (ink outline); dashed means "off" */
@@ -1107,13 +1208,7 @@ h1 mark {
   }
 
   .hero {
-    grid-template-columns: 1fr;
-    gap: 48px;
     padding: 32px 0 56px;
-  }
-
-  .cards {
-    grid-template-columns: 1fr;
   }
 }
 
@@ -1189,8 +1284,35 @@ h1 mark {
     white-space: normal;
   }
 
-  .row-actions .btn + .btn {
-    margin-left: 0;
+  /* Cards have no room beside the gear, so the actions open in the flow below it, growing the card */
+  .row-menu {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .row-menu-panel {
+    position: static;
+    max-height: 0;
+    padding: 0 6px;
+    overflow: hidden;
+    background: none;
+    transform: none;
+    transition:
+      max-height 350ms ease,
+      padding 350ms ease,
+      visibility 0s linear 350ms;
+  }
+
+  .row-menu[data-open='true'] .row-menu-panel {
+    max-height: 320px;
+    padding: 12px 6px 10px;
+  }
+
+  .row-menu-list {
+    flex-wrap: wrap;
+    white-space: normal;
   }
 
   /* Inline forms stack on phones, so the buttons no longer need to line up with the input */
@@ -1259,18 +1381,56 @@ h1 mark {
     white-space: nowrap;
   }
 
-  /* On phones the Profile button is just the avatar; the label stays for screen readers */
-  .btn-profile {
-    padding: 0 6px;
+  /* On phones the avatar is the Profile button itself, not a pill around it; the label stays for screen readers */
+  .header .btn-profile {
+    flex: none;
+    width: 44px;
+    min-height: 44px;
+    padding: 0;
+    background: none;
+    border: 0;
+    border-radius: 50%;
+    box-shadow: none;
   }
 
-  /* Explore shrinks to its compass icon too */
-  .header .btn-explore {
+  .header .btn-profile .avatar-mini {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    font-size: 17px;
+    border: var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* The ghost hover shadow would draw around the empty button; the avatar carries it instead */
+  .header .btn-profile:hover {
+    box-shadow: none;
+  }
+
+  .header .btn-profile:hover .avatar-mini {
+    background: var(--secondary);
+  }
+
+  /* On your profile the avatar itself shows where you are */
+  .header-actions .btn-profile[aria-current='page'] {
+    background: none;
+    box-shadow: none;
+  }
+
+  .header-actions .btn-profile[aria-current='page'] .avatar-mini {
+    background: var(--secondary);
+  }
+
+  /* Explore and Admin shrink to their icons too */
+  .header .btn-explore,
+  .header .btn-admin {
     padding: 0 10px;
   }
 
   .btn-profile .btn-label,
-  .btn-explore .btn-label {
+  .btn-explore .btn-label,
+  .btn-admin .btn-label,
+  .explore-filters-open .btn-label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -1301,6 +1461,12 @@ h1 mark {
   border: var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
+}
+
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .profile-avatar {
@@ -1467,8 +1633,9 @@ h1 mark {
     padding: 0 10px;
   }
 
-  .header .btn-profile {
-    padding: 0 5px;
+  .header .btn-explore,
+  .header .btn-admin {
+    padding: 0 8px;
   }
 }
 
@@ -1515,20 +1682,16 @@ h1 mark {
 }
 
 .explore-head {
+  /* The info tooltip is placed against this, so it spans the page's width */
+  position: relative;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
+  align-items: center;
+  gap: 8px;
   width: 100%;
 }
 
 .explore-head h1 {
   font-size: clamp(34px, 5vw, 48px);
-}
-
-.explore-head p {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
 }
 
 .explore .form-alert {
@@ -1606,24 +1769,206 @@ h1 mark {
   font-weight: 700;
 }
 
-/* The one-occasion-at-a-time rule, always shown above the cards */
-.explore-rule {
-  width: 100%;
-  padding: 16px 20px;
+/* InfoTip (components/InfoTip.tsx): an info icon and the tooltip it opens. Open takes the secondary fill */
+.info-tip-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  color: var(--text);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 50%;
+}
+
+.info-tip-button:hover,
+.info-tip-button[aria-expanded='true'] {
   color: var(--on-pastel);
   background: var(--secondary);
+}
+
+.info-tip-icon {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Invisible and unclickable while closed; the button's aria-describedby still reads it out */
+.info-tip-bubble {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  width: min(340px, 100%);
+  margin-top: 4px;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text);
+  pointer-events: none;
+  visibility: hidden;
+  background: var(--surface);
   border: var(--border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
+  opacity: 0;
 }
 
-.explore-rule h2 {
-  margin-bottom: 4px;
-  font-size: 18px;
+.info-tip-bubble[data-open='true'] {
+  pointer-events: auto;
+  visibility: visible;
+  opacity: 1;
 }
 
-.explore-rule p {
-  font-size: 15px;
+@media (prefers-reduced-motion: no-preference) {
+  .info-tip-bubble {
+    transition:
+      opacity 150ms ease,
+      visibility 0s 150ms;
+  }
+
+  .info-tip-bubble[data-open='true'] {
+    transition: opacity 150ms ease;
+  }
+}
+
+/* Modal (components/Modal.tsx) on a native <dialog>; the browser centres it over a backdrop */
+.modal {
+  width: min(480px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  /* No padding: a click on the <dialog> itself then means the backdrop (see Modal.tsx) */
+  padding: 0;
+  color: var(--text);
+  background: var(--surface);
+  border: var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+
+.modal::backdrop {
+  background: rgb(22 20 26 / 60%);
+}
+
+.modal-content {
+  display: grid;
+  gap: 16px;
+  padding: 20px 24px 24px;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-head h2 {
+  font-size: 26px;
+}
+
+.modal-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  font: 700 26px/1 var(--sans);
+  color: var(--text);
+  cursor: pointer;
+  background: none;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+}
+
+.modal-close:hover {
+  color: var(--on-pastel);
+  background: var(--primary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .modal[open] {
+    animation: modal-in 160ms ease-out;
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* Switch (components/Switch.tsx): a pill track whose thumb springs across with an elastic overshoot.
+   On takes the primary fill; the thumb travels the track's inner width less its own size and the gaps */
+.switch {
+  position: relative;
+  flex: none;
+  width: 56px;
+  height: 32px;
+  padding: 0;
+  cursor: pointer;
+  background: var(--surface);
+  border: var(--border);
+  border-radius: 999px;
+  transition: background-color 200ms ease;
+}
+
+/* A 44px tap target around the smaller track */
+.switch::before {
+  content: '';
+  position: absolute;
+  inset: -9px -3px;
+}
+
+.switch[aria-checked='true'] {
+  background: var(--primary);
+}
+
+.switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  background: var(--ink);
+  border-radius: 999px;
+  transition:
+    transform 550ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    width 150ms ease,
+    background-color 200ms ease;
+  /* A damped spring: overshoots, swings back a little, then settles. Browsers without linear() keep the curve above */
+  transition-timing-function:
+    linear(0, 0.399, 0.775, 1.028, 1.145, 1.161, 1.121, 1.066, 1.019, 0.99, 0.979, 0.979, 0.986, 0.993, 0.999, 1.002, 1.003, 1.003, 1.002, 1.001, 1),
+    ease,
+    ease;
+}
+
+.switch[aria-checked='true'] .switch-thumb {
+  /* On the yellow fill the thumb stays dark in both themes */
+  background: var(--on-pastel);
+  transform: translateX(24px);
+}
+
+/* Pressed, the thumb stretches like it's gathering itself; on, it stretches back from the right edge */
+.switch:active:not(:disabled) .switch-thumb {
+  width: 26px;
+}
+
+.switch[aria-checked='true']:active:not(:disabled) .switch-thumb {
+  transform: translateX(18px);
 }
 
 /* RollOut (components/RollOut.tsx): a toggle button and the content it rolls open.
@@ -1680,39 +2025,105 @@ h1 mark {
   overflow: hidden;
 }
 
-/* Saved Explore filters: a RollOut panel above the deck */
-.explore-filters {
+/* An occasion's description: line breaks kept, long words wrapped */
+.explore-description,
+.occasion-description {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.explore-description {
+  font-size: 15px;
+}
+
+/* A long description on a card (LongDescription): the preview and the full text stacked in one place. The box's
+   height slides between theirs while they cross-fade, timed like the RollOut so the card grows in one motion */
+.explore-description-box {
+  position: relative;
   width: 100%;
-  background: var(--surface);
-  border: var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-sm);
-}
-
-/* The panel's header, a RollOut toggle: title, then what's saved and the chevron on the right */
-.explore-filters-toggle {
-  gap: 12px;
-  padding: 0 20px;
-  border-radius: calc(var(--radius-sm) - 3px);
-}
-
-.explore-filters-title {
-  font: 800 18px/1 var(--heading);
-}
-
-.explore-filters-summary {
-  min-width: 0;
-  margin-left: auto;
   overflow: hidden;
+  transition: height 200ms ease;
+}
+
+.explore-description-box > .explore-description {
+  position: absolute;
+  inset: 0 0 auto;
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity 200ms ease,
+    visibility 0s 200ms;
+}
+
+.explore-description-box > .explore-description[data-shown='true'] {
+  visibility: visible;
+  opacity: 1;
+  transition: opacity 200ms ease;
+}
+
+/* "Created by" on a regular user's occasion card */
+.explore-creator {
   font-size: 14px;
   font-weight: 700;
-  color: var(--text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.explore-filters-form {
-  padding: 4px 20px 20px;
+.explore-done-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* "Reading the page…" beside the button while an import runs; the spinner shrinks to the text's size */
+.import-reading {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: auto;
+  font-weight: 700;
+}
+
+.import-reading .spinner {
+  width: 24px;
+  height: 24px;
+  border-width: 3px;
+}
+
+/* A profile card's heading with an action beside it */
+.profile-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Explore's Filters button, at the right of the title row. Lilac while saved filters are narrowing the deck */
+.explore-filters-open {
+  flex: none;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.explore-filters-open[data-applied] {
+  color: var(--on-pastel);
+  background: var(--secondary);
+}
+
+/* The modal's on/off row for the saved filters */
+.filter-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.filter-switch-text {
+  display: grid;
+  gap: 2px;
+}
+
+.filter-switch-text strong {
+  font-weight: 700;
 }
 
 .filter-group {
@@ -1736,7 +2147,7 @@ h1 mark {
   gap: 8px;
 }
 
-/* A checkbox drawn as a pill; checked takes the primary fill */
+/* A checkbox drawn as a pill; checked takes the secondary (lilac) fill */
 .filter-option {
   position: relative;
   display: inline-flex;
@@ -1763,7 +2174,7 @@ h1 mark {
 
 .filter-option:has(input:checked) {
   color: var(--on-pastel);
-  background: var(--primary);
+  background: var(--secondary);
 }
 
 .filter-option:has(input:focus-visible) {
@@ -2083,3 +2494,34 @@ button.back-link {
   outline-offset: 3px;
 }
 
+
+/* Spinner (components/Spinner.tsx): a ring with one lilac arc */
+.spinner {
+  display: inline-block;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--ink);
+  border-top-color: var(--secondary);
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .spinner {
+    animation: spin 700ms linear infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Explore's stand-in for the deck while it loads */
+.explore-loading {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 240px;
+}

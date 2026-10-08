@@ -31,6 +31,16 @@ def join(occasion, user):
         occasion.users.add(user)
 
 
+def create_occasion(user, tags, **fields):
+    """A regular user's occasion: created by `user`, who goes to it. Raises AlreadyGoing (and saves
+    nothing) while they're going to another occasion."""
+    with transaction.atomic():
+        occasion = Occasion.objects.create(created_by=user, **fields)
+        occasion.tags.set(tags)
+        join(occasion, user)
+    return occasion
+
+
 def deactivate_finished():
     """Turn is_active off for everyone going to an occasion that has ended or was cancelled.
 

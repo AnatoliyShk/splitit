@@ -1,6 +1,20 @@
-import type { FieldProps } from '../types/ui/field'
+import type { ReactNode } from 'react'
+import type { FieldProps, TextAreaFieldProps } from '../types/ui/field'
 
-export function Field({ id, label, hint, errors, ...input }: FieldProps) {
+// Label, hint and errors around a control, wired up with aria-describedby
+function FieldFrame({
+  id,
+  label,
+  hint,
+  errors,
+  control,
+}: {
+  id: string
+  label: string
+  hint?: string
+  errors?: string[]
+  control: (describedBy: string | undefined, hasErrors: boolean) => ReactNode
+}) {
   const hintId = `${id}-hint`
   const errorId = `${id}-error`
   const hasErrors = Boolean(errors?.length)
@@ -9,14 +23,7 @@ export function Field({ id, label, hint, errors, ...input }: FieldProps) {
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
-      <input
-        id={id}
-        name={id}
-        className="input"
-        aria-invalid={hasErrors || undefined}
-        aria-describedby={describedBy || undefined}
-        {...input}
-      />
+      {control(describedBy || undefined, hasErrors)}
       {hint && (
         <p className="field-hint" id={hintId}>
           {hint}
@@ -30,6 +37,49 @@ export function Field({ id, label, hint, errors, ...input }: FieldProps) {
         </ul>
       )}
     </div>
+  )
+}
+
+export function Field({ id, label, hint, errors, ...input }: FieldProps) {
+  return (
+    <FieldFrame
+      id={id}
+      label={label}
+      hint={hint}
+      errors={errors}
+      control={(describedBy, hasErrors) => (
+        <input
+          id={id}
+          name={id}
+          className="input"
+          aria-invalid={hasErrors || undefined}
+          aria-describedby={describedBy}
+          {...input}
+        />
+      )}
+    />
+  )
+}
+
+/** Field's multi-line twin, for longer text like an occasion's description. */
+export function TextAreaField({ id, label, hint, errors, ...textarea }: TextAreaFieldProps) {
+  return (
+    <FieldFrame
+      id={id}
+      label={label}
+      hint={hint}
+      errors={errors}
+      control={(describedBy, hasErrors) => (
+        <textarea
+          id={id}
+          name={id}
+          className="input input-textarea"
+          aria-invalid={hasErrors || undefined}
+          aria-describedby={describedBy}
+          {...textarea}
+        />
+      )}
+    />
   )
 }
 

@@ -61,7 +61,6 @@ test.describe('Login success', () => {
 
     await expect(page).toHaveURL(/\/$/)
     await expect(page.getByRole('link', { name: 'Profile' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible()
     expect(body).toEqual({ email: 'ana@example.com', password: 'correct horse' })
     expect(csrfHeader).toBe('abc123')
   })

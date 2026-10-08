@@ -62,7 +62,6 @@ test.describe('Register success', () => {
 
     await expect(page).toHaveURL(/\/$/)
     await expect(page.getByRole('link', { name: 'Profile' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible()
     expect(body).toEqual({ name: 'Ana Smith', email: 'ana@example.com', password: 'a-strong-pass-9' })
     expect(csrfHeader).toBe('reg-token')
   })

@@ -3,7 +3,11 @@ import { mockMedia } from './fixtures/panel'
 import { makeOccasion, mockApi, USER } from './fixtures/user'
 
 const detail = {
-  ...makeOccasion(21, 'Pottery Class', 4, { attendees_count: 3, tags: ['crafts'] }),
+  ...makeOccasion(21, 'Pottery Class', 4, {
+    attendees_count: 3,
+    tags: ['crafts'],
+    description: 'Throw your first bowl.\nAprons provided.',
+  }),
   main_image: '/media/occasions/21/main.png',
   gallery: ['/media/occasions/21/one.png', '/media/occasions/21/two.png'],
   is_going: false,
@@ -38,6 +42,8 @@ test('shows the occasion with its main image and details', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Pottery Class' })).toBeVisible()
   await expect(article.locator('img.occasion-hero')).toHaveAttribute('src', '/media/occasions/21/main.png')
   await expect(article.getByText('crafts', { exact: true })).toBeVisible()
+  // The whole description, line breaks kept
+  await expect(article.getByText(/Throw your first bowl\.\s+Aprons provided\./)).toBeVisible()
   await expect(article).toContainText('3 people are going')
   await expect(article.getByText("You're going", { exact: true })).toHaveCount(0)
   await expect(page).toHaveTitle('Pottery Class · Splitit')
@@ -122,7 +128,7 @@ test('a profile row links to the occasion and shows its main image', async ({ pa
   })
   await page.goto('/profile')
 
-  const rows = page.getByRole('region', { name: 'Your occasions' }).getByRole('link')
+  const rows = page.getByRole('region', { name: 'Your occasions' }).getByRole('listitem').getByRole('link')
   await expect(rows.nth(0).locator('img.occasion-thumb')).toHaveAttribute('src', '/media/occasions/21/main.png')
   // Without an image the row keeps its date badge
   await expect(rows.nth(1).locator('img')).toHaveCount(0)

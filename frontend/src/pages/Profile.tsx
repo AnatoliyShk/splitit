@@ -1,9 +1,10 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, Navigate, useLocation } from 'react-router'
 import { apiGet, useFieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { FormAlert } from '../components/Field'
+import { ImportOccasionForm } from '../components/ImportOccasionForm'
 import { TagList } from '../components/TagList'
 import { queryKeys } from '../queryClient'
 import type { Connection } from '../types/api/connections'
@@ -75,7 +76,12 @@ function MyOccasions({ user }: { user: User }) {
 
   return (
     <section className="profile-card" aria-labelledby="occasions-title">
-      <h2 id="occasions-title">Your occasions</h2>
+      <div className="profile-card-head">
+        <h2 id="occasions-title">Your occasions</h2>
+        <Link className="btn btn-sm" to="/occasions/new">
+          Create occasion
+        </Link>
+      </div>
       <FormAlert messages={errors.non_field_errors} />
       {!occasions && !errors.non_field_errors && <p className="muted">Loading…</p>}
       {occasions && occasions.length === 0 && (
@@ -153,11 +159,25 @@ function MyConnections({ user }: { user: User }) {
 }
 
 export default function Profile() {
-  const { user, loading } = useAuth()
+  const { user, loading, logout } = useAuth()
   const location = useLocation()
+  // Set while logging out from this page, so the user goes to the landing page rather than the login page
+  const [loggingOut, setLoggingOut] = useState(false)
 
   if (loading) return null
-  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  if (!user) {
+    return loggingOut ? (
+      <Navigate to="/" replace />
+    ) : (
+      <Navigate to="/login" replace state={{ from: location.pathname }} />
+    )
+  }
+
+  function logOut() {
+    setLoggingOut(true)
+    // A failed logout keeps the user here, still logged in
+    logout().catch(() => setLoggingOut(false))
+  }
 
   return (
     <section className="profile">
@@ -174,12 +194,19 @@ export default function Profile() {
           <span className="tag">Member since {formatDate(user.date_joined)}</span>
           {user.is_staff && <span className="tag">Admin</span>}
         </span>
-        <Link className="btn btn-sm" to="/profile/settings">
-          Settings
-        </Link>
+        <div className="profile-actions">
+          <Link className="btn btn-sm" to="/profile/settings">
+            Settings
+          </Link>
+          <button className="btn btn-sm btn-danger" type="button" onClick={logOut}>
+            Log out
+          </button>
+        </div>
       </div>
 
       <MyConnections user={user} />
+
+      <ImportOccasionForm user={user} />
 
       <MyOccasions user={user} />
     </section>

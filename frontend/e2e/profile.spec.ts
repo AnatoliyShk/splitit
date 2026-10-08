@@ -50,6 +50,38 @@ test.describe('hero', () => {
     await page.getByRole('link', { name: 'Settings' }).click()
     await expect(page).toHaveURL(/\/profile\/settings$/)
   })
+
+  test('has no Log out button in the header', async ({ page }) => {
+    await page.goto('/profile')
+    await expect(page.getByRole('link', { name: 'Settings' })).toBeVisible()
+    await expect(page.getByRole('banner').getByRole('button', { name: 'Log out' })).toHaveCount(0)
+  })
+
+  test('Log out posts to the API and returns to the landing page logged out', async ({ page }) => {
+    let csrfHeader: string | undefined
+    await page.route('**/api/auth/logout/', (route) => {
+      csrfHeader = route.request().headers()['x-csrftoken']
+      return route.fulfill({ status: 204 })
+    })
+    await page.goto('/profile')
+
+    await page.getByRole('main').getByRole('button', { name: 'Log out' }).click()
+
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('banner').getByRole('link', { name: 'Log in' })).toBeVisible()
+    expect(csrfHeader).toBe('test-token')
+  })
+
+  test('failed logout keeps the user on their profile', async ({ page }) => {
+    await page.route('**/api/auth/logout/', (route) => route.fulfill({ status: 500, json: { detail: 'boom' } }))
+    await page.goto('/profile')
+
+    await page.getByRole('main').getByRole('button', { name: 'Log out' }).click()
+
+    await expect(page).toHaveURL(/\/profile$/)
+    await expect(page.getByRole('heading', { level: 1, name: 'Ada Lovelace' })).toBeVisible()
+    await expect(page.getByRole('main').getByRole('button', { name: 'Log out' })).toBeVisible()
+  })
 })
 
 test('shows the Admin tag for staff users', async ({ page }) => {
@@ -94,8 +126,8 @@ test.describe('your occasions', () => {
       occasions: [makeOccasion(3, 'Board Game Night', 2, { attendees_count: 4, tags: ['games', 'social'] })],
     })
     await page.goto('/profile')
-    // Each occasion row is one link (its tags are a nested list)
-    const row = page.getByRole('region', { name: 'Your occasions' }).getByRole('link')
+    // Each occasion row is the link in a list item (the section's Create occasion link isn't in one)
+    const row = page.getByRole('region', { name: 'Your occasions' }).getByRole('listitem').getByRole('link')
     await expect(row).toContainText('Board Game Night')
     await expect(row).toContainText('4 going')
     await expect(row.getByText('games', { exact: true })).toBeVisible()
@@ -112,7 +144,7 @@ test.describe('your occasions', () => {
       ],
     })
     await page.goto('/profile')
-    const rows = page.getByRole('region', { name: 'Your occasions' }).getByRole('link')
+    const rows = page.getByRole('region', { name: 'Your occasions' }).getByRole('listitem').getByRole('link')
     await expect(rows.nth(0).getByText('Cancelled', { exact: true })).toHaveCount(0)
     await expect(rows.nth(1).getByText('Cancelled', { exact: true })).toBeVisible()
     await expect(rows.nth(1).getByText('outdoors', { exact: true })).toBeVisible()

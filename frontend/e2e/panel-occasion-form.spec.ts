@@ -76,6 +76,7 @@ test.describe('new occasion', () => {
     await page.goto('/admin/occasions/new')
 
     await nameInput(page).fill('Board game night')
+    await page.getByLabel('Description (optional)').fill('Bring your favourite game.\nSnacks provided.')
     await startsInput(page).fill('2099-10-10T18:00')
     await endsInput(page).fill('2099-10-10T21:30')
     await page.getByRole('button', { name: 'Create occasion' }).click()
@@ -85,6 +86,7 @@ test.describe('new occasion', () => {
     const postCall = posts.find((call) => call.method === 'POST')!
     expect(postCall.body).toEqual({
       name: 'Board game night',
+      description: 'Bring your favourite game.\nSnacks provided.',
       start_datetime: '2099-10-10T18:00:00.000Z',
       end_datetime: '2099-10-10T21:30:00.000Z',
       users: [],
@@ -454,6 +456,7 @@ test.describe('edit occasion', () => {
   const existing = panelOccasion({
     id: 10,
     name: 'Jazz night',
+    description: 'Live trio, two sets.',
     start_datetime: '2099-10-10T18:00:00Z',
     end_datetime: '2099-10-10T21:00:00Z',
     attendees: [attendee(1, 'Ann Lee', 'ann@example.com'), attendee(2, 'Bob Ray', 'bob@example.com')],
@@ -468,6 +471,7 @@ test.describe('edit occasion', () => {
 
     await expect(page.getByRole('heading', { name: 'Edit occasion' })).toBeVisible()
     await expect(nameInput(page)).toHaveValue('Jazz night')
+    await expect(page.getByLabel('Description (optional)')).toHaveValue('Live trio, two sets.')
     await expect(startsInput(page)).toHaveValue('2099-10-10T18:00')
     await expect(endsInput(page)).toHaveValue('2099-10-10T21:00')
     const chips = page.getByRole('list', { name: 'Selected people' })
@@ -498,6 +502,7 @@ test.describe('edit occasion', () => {
     await expect(nameInput(page)).toHaveValue('Jazz night')
 
     await nameInput(page).fill('Jazz brunch')
+    await page.getByLabel('Description (optional)').fill('')
     await startsInput(page).fill('2099-10-10T11:00')
     await endsInput(page).fill('')
     await page.getByRole('button', { name: 'Remove Bob Ray' }).click()
@@ -511,6 +516,8 @@ test.describe('edit occasion', () => {
     const patchCall = patches.find((call) => call.method === 'PATCH')!
     expect(patchCall.body).toEqual({
       name: 'Jazz brunch',
+      // Cleared, so it's sent empty
+      description: '',
       start_datetime: '2099-10-10T11:00:00.000Z',
       end_datetime: null,
       users: [1, 3],

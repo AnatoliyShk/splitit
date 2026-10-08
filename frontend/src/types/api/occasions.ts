@@ -13,13 +13,17 @@ export type OccasionCore = {
 
 /** An occasion in public lists: profile, explore (UserOccasionSerializer). */
 export type UserOccasion = OccasionCore & {
+  // Plain text, up to 2000 characters; may be empty
+  description: string
   cancelled_at: string | null
   attendees_count: number
   tags: TagName[]
   main_image: string | null
+  // The regular user who made it; null when staff made it
+  created_by: PublicUser | null
 }
 
-/** An attendee the user has a connection with (KnownAttendeeSerializer). */
+/** An attendee the user has a connection with (PublicUserSerializer). */
 export type KnownAttendee = PublicUser
 
 /** An explore card (ExploreOccasionSerializer). */

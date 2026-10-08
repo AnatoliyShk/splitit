@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type SubmitEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload, errorsFrom, useFieldErrors, type FieldErrors } from '../../api'
 import { AttendeePicker } from '../../components/AttendeePicker'
-import { Field, FormAlert } from '../../components/Field'
+import { Field, FormAlert, TextAreaField } from '../../components/Field'
 import { TagPicker } from '../../components/TagPicker'
 import { queryKeys } from '../../queryClient'
 import type { Attendee, OccasionImage, PanelOccasion } from '../../types/api/admin'
@@ -60,6 +60,7 @@ function OccasionEditor({ occasionId, occasion, loadErrors }: OccasionEditorProp
   const queryClient = useQueryClient()
   const formRef = useRef<HTMLFormElement>(null)
   const [name, setName] = useState(occasion?.name ?? '')
+  const [description, setDescription] = useState(occasion?.description ?? '')
   // Local wall-clock values for the datetime-local inputs
   const [start, setStart] = useState(occasion ? toLocalInput(occasion.start_datetime) : '')
   const [end, setEnd] = useState(occasion?.end_datetime ? toLocalInput(occasion.end_datetime) : '')
@@ -118,6 +119,7 @@ function OccasionEditor({ occasionId, occasion, loadErrors }: OccasionEditorProp
       setImageErrors({})
       const body = {
         name,
+        description,
         start_datetime: fromLocalInput(start),
         end_datetime: fromLocalInput(end),
         users: attendees.map((attendee) => attendee.id),
@@ -178,6 +180,16 @@ function OccasionEditor({ occasionId, occasion, loadErrors }: OccasionEditorProp
           value={name}
           onChange={(event) => setName(event.target.value)}
           errors={errors.name}
+        />
+        <TextAreaField
+          id="description"
+          label="Description (optional)"
+          hint="Cards show the first 100 characters; the rest appears under Show details and on the occasion's page."
+          maxLength={2000}
+          rows={5}
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          errors={errors.description}
         />
         <div className="field-row">
           <Field

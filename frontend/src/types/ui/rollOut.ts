@@ -12,5 +12,7 @@ export type RollOutProps = {
   /** Classes for the toggle button and for the rolling content, on top of the shared `roll-out-*` styles. */
   toggleClassName?: string
   className?: string
+  /** Pass to control it from outside (with onOpenChange); left out, it keeps its own state, starting closed. */
+  open?: boolean
   onOpenChange?: (open: boolean) => void
 }

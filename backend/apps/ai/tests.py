@@ -58,6 +58,52 @@ class EmbedTextsTests(FakeGeminiMixin, TestCase):
         self.assertEqual(self.embed_content.call_args.kwargs["config"].task_type, "RETRIEVAL_QUERY")
 
 
+class EmbeddingTextTests(TestCase):
+    def test_occasion_text_is_its_name_and_description(self):
+        from .embedding import embedding_text
+
+        occasion = Occasion(name="Sunset jazz", description="A trio on the rooftop.")
+        self.assertEqual(embedding_text(occasion), "Sunset jazz\n\nA trio on the rooftop.")
+        self.assertEqual(embedding_text(Occasion(name="Sunset jazz")), "Sunset jazz")
+
+
+class GenerateTextTests(TestCase):
+    def setUp(self):
+        client.get_client.cache_clear()
+        self.addCleanup(client.get_client.cache_clear)
+        patcher = mock.patch.object(client, "get_client")
+        self.generate_content = patcher.start().return_value.models.generate_content
+        self.addCleanup(patcher.stop)
+
+    def tool_kinds(self, call):
+        tools = call.kwargs["config"].tools or []
+        return ["url" if tool.url_context else "search" for tool in tools]
+
+    def test_offers_the_requested_tools(self):
+        self.generate_content.return_value = SimpleNamespace(text="ok")
+        self.assertEqual(client.generate_text("Hi", read_urls=True, search_web=True), "ok")
+        self.assertEqual(self.tool_kinds(self.generate_content.call_args), ["url", "search"])
+
+    def test_asks_again_without_search_when_search_is_over_quota(self):
+        from google.genai import errors
+
+        quota_refusal = errors.ClientError(429, {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED"}})
+        self.generate_content.side_effect = [quota_refusal, SimpleNamespace(text="ok")]
+        with self.assertLogs("apps.ai.client", level="WARNING"):
+            self.assertEqual(client.generate_text("Hi", read_urls=True, search_web=True), "ok")
+        first_call, second_call = self.generate_content.call_args_list
+        self.assertEqual(self.tool_kinds(first_call), ["url", "search"])
+        self.assertEqual(self.tool_kinds(second_call), ["url"])
+
+    def test_other_errors_are_not_retried(self):
+        from google.genai import errors
+
+        self.generate_content.side_effect = errors.ServerError(503, {"error": {"code": 503, "status": "UNAVAILABLE"}})
+        with self.assertRaises(errors.ServerError):
+            client.generate_text("Hi", read_urls=True, search_web=True)
+        self.assertEqual(self.generate_content.call_count, 1)
+
+
 class MissingKeyTests(TestCase):
     def setUp(self):
         client.get_client.cache_clear()

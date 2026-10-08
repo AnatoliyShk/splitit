@@ -1,8 +1,10 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+from unittest import mock
 
 from django.db import DataError, transaction
 from django.tasks import default_task_backend
-from django.test import TestCase, override_settings
+from django.core.cache import cache
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from pgvector.django import CosineDistance
 
@@ -138,10 +140,10 @@ class ExploreApiTests(TestCase):
         self.assertEqual([occasion["name"] for occasion in explore_data["occasions"]], ["Running", "Sooner", "Later"])
         self.assertEqual(explore_data["occasions"][2]["attendees_count"], 1)
 
-    def save_filters(self, tags=(), weekdays=()):
+    def save_filters(self, tags=(), weekdays=(), is_enabled=True):
         from apps.users.models import FilterPreference, FilterPreferenceWeekday
 
-        filter_preference = FilterPreference.objects.create(user=self.me)
+        filter_preference = FilterPreference.objects.create(user=self.me, is_enabled=is_enabled)
         filter_preference.tags.set(tags)
         FilterPreferenceWeekday.objects.bulk_create(
             FilterPreferenceWeekday(filter_preference=filter_preference, weekday=weekday) for weekday in weekdays
@@ -177,6 +179,10 @@ class ExploreApiTests(TestCase):
 
     def test_empty_saved_filters_show_everything(self):
         self.save_filters()
+        self.assertEqual(self.explore_names(), ["Running", "Sooner", "Later"])
+
+    def test_filters_turned_off_show_everything(self):
+        self.save_filters(weekdays=[self.sooner.start_datetime.isoweekday()], is_enabled=False)
         self.assertEqual(self.explore_names(), ["Running", "Sooner", "Later"])
 
     def test_names_the_attendees_i_have_a_connection_with(self):
@@ -385,3 +391,325 @@ class OccasionImagesApiTests(TestCase):
         for order in (0, 4):
             with self.assertRaises(IntegrityError), transaction.atomic():
                 OccasionImage.objects.create(occasion=self.occasion, order=order, image=ContentFile(b"x", "a.png"))
+
+
+class UserOccasionTests(TestCase):
+    """Occasions made by regular users: creating them, and who may see them."""
+
+    def setUp(self):
+        from apps.users.models import User
+
+        self.ann = User.objects.create_user("ann@example.com", "correct-horse-battery", name="Ann")
+        self.ben = User.objects.create_user("ben@example.com", "correct-horse-battery", name="Ben")
+        self.cara = User.objects.create_user("cara@example.com", "correct-horse-battery", name="Cara")
+        self.staff = User.objects.create_user("sam@example.com", "correct-horse-battery", name="Sam", is_staff=True)
+        # Ann knows Ben, Ben knows Cara: Cara is only a friend of a friend to Ann
+        self.connect(self.ann, self.ben)
+        self.connect(self.ben, self.cara)
+        self.start = timezone.now() + timedelta(days=3)
+
+    def connect(self, first_user, second_user):
+        from apps.connections.models import Connection
+
+        user_low, user_high = sorted((first_user, second_user), key=lambda user: user.pk)
+        Connection.objects.create(user_low=user_low, user_high=user_high, strength=1, shared_occasions=1)
+
+    def create(self, **fields):
+        request_data = {"name": "Picnic", "start_datetime": self.start.isoformat(), **fields}
+        return self.client.post("/api/occasions/", request_data, content_type="application/json")
+
+    def explore_names(self, user):
+        self.client.force_login(user)
+        return [occasion["name"] for occasion in self.client.get("/api/occasions/explore/").json()["occasions"]]
+
+    def test_creating_makes_the_creator_go(self):
+        from apps.tags.models import Tag
+
+        jazz_tag = Tag.objects.create(name="Jazz")
+        self.client.force_login(self.ann)
+        response = self.create(
+            description="  Bring a blanket.  ",
+            end_datetime=(self.start + timedelta(hours=2)).isoformat(),
+            tag_ids=[jazz_tag.id],
+        )
+        self.assertEqual(response.status_code, 201)
+        occasion_data = response.json()
+        self.assertEqual(occasion_data["name"], "Picnic")
+        self.assertEqual(occasion_data["description"], "Bring a blanket.")
+        self.assertEqual(occasion_data["tags"], ["Jazz"])
+        self.assertTrue(occasion_data["is_going"])
+        self.assertEqual(occasion_data["attendees_count"], 1)
+        self.assertEqual(occasion_data["created_by"], {"uuid": str(self.ann.uuid), "name": "Ann"})
+        self.assertEqual(Occasion.objects.get(id=occasion_data["id"]).created_by, self.ann)
+
+    def test_cannot_create_while_going_elsewhere(self):
+        other_occasion = Occasion.objects.create(name="Concert", start_datetime=self.start)
+        other_occasion.users.add(self.ann)
+        self.client.force_login(self.ann)
+        response = self.create()
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Concert", response.json()["detail"])
+        self.assertFalse(Occasion.objects.filter(name="Picnic").exists())
+
+    def test_rejects_bad_input(self):
+        self.client.force_login(self.ann)
+        cases = {
+            "name": {"name": "  "},
+            "start_datetime": {"start_datetime": (timezone.now() - timedelta(hours=1)).isoformat()},
+            "end_datetime": {"end_datetime": (self.start - timedelta(hours=1)).isoformat()},
+            "tag_ids": {"tag_ids": [999]},
+            "description": {"description": "x" * 2001},
+        }
+        for field_name, fields in cases.items():
+            with self.subTest(field_name=field_name):
+                response = self.create(**fields)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(field_name, response.json())
+        self.assertFalse(Occasion.objects.exists())
+
+    def test_requires_login(self):
+        self.assertEqual(self.create().status_code, 403)
+
+    def test_only_the_creator_and_direct_connections_see_it(self):
+        picnic = Occasion.objects.create(name="Picnic", start_datetime=self.start, created_by=self.ann)
+        # Ben is connected to Ann; Cara (a friend of a friend) and strangers aren't
+        self.assertEqual(self.explore_names(self.ben), ["Picnic"])
+        self.assertEqual(self.client.get(f"/api/occasions/{picnic.id}/").status_code, 200)
+        self.assertEqual(self.explore_names(self.cara), [])
+        self.assertEqual(self.client.get(f"/api/occasions/{picnic.id}/").status_code, 404)
+        self.assertEqual(self.client.post(f"/api/occasions/{picnic.id}/join/").status_code, 404)
+        self.assertEqual(self.explore_names(self.staff), [])
+
+    def test_attendees_keep_seeing_it(self):
+        picnic = Occasion.objects.create(name="Picnic", start_datetime=self.start, created_by=self.ann)
+        picnic.users.add(self.cara)
+        self.client.force_login(self.cara)
+        self.assertEqual(self.client.get(f"/api/occasions/{picnic.id}/").status_code, 200)
+
+    def test_staff_and_older_occasions_are_public_with_no_creator_shown(self):
+        Occasion.objects.create(name="Gala", start_datetime=self.start, created_by=self.staff)
+        Occasion.objects.create(name="Fair", start_datetime=self.start + timedelta(hours=1))
+        Occasion.objects.create(name="Picnic", start_datetime=self.start + timedelta(hours=2), created_by=self.ann)
+        self.client.force_login(self.ben)
+        explore_occasions = self.client.get("/api/occasions/explore/").json()["occasions"]
+        creator_by_name = {occasion["name"]: occasion["created_by"] for occasion in explore_occasions}
+        self.assertEqual(
+            creator_by_name, {"Gala": None, "Fair": None, "Picnic": {"uuid": str(self.ann.uuid), "name": "Ann"}}
+        )
+        self.assertEqual(self.explore_names(self.cara), ["Gala", "Fair"])
+
+
+class PreviewCardTests(SimpleTestCase):
+    def test_shows_the_title_subtitle_and_domain_escaped(self):
+        from .preview import build_preview_svg
+
+        card = build_preview_svg('Rock & "Roll" <Night>', "Bring <friends>", "example.com/events", "wave")
+        self.assertTrue(card.startswith('<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630"'))
+        # The title wraps onto two lines here; each part is escaped
+        self.assertIn(">Rock &amp; &quot;Roll&quot;</text>", card)
+        self.assertIn(">&lt;Night&gt;</text>", card)
+        self.assertIn("Bring &lt;friends&gt;", card)
+        self.assertIn(">example.com/events</text>", card)
+        self.assertNotIn("<Night>", card)
+        # The wave theme's colours
+        self.assertIn("#F0F9FF", card)
+
+    def test_unknown_theme_falls_back_to_star(self):
+        from .preview import THEMES, build_preview_svg
+
+        self.assertIn(THEMES["star"]["bg"], build_preview_svg("Gig", icon="volcano"))
+
+    def test_wraps_long_text_with_an_ellipsis(self):
+        from .preview import wrap
+
+        self.assertEqual(wrap("one two three", 7, 3), ["one two", "three"])
+        lines = wrap("alpha beta gamma delta epsilon zeta", 11, 2)
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[-1].endswith("…"))
+
+    def test_link_domain_drops_www_and_the_trailing_slash(self):
+        from .preview import link_domain
+
+        self.assertEqual(link_domain("https://www.example.com/events/jazz/"), "example.com/events/jazz")
+        self.assertEqual(link_domain("https://example.com/"), "example.com")
+        self.assertEqual(len(link_domain("https://example.com/" + "a" * 80)), 48)
+
+
+class ParseEventSummaryTests(SimpleTestCase):
+    def parse(self, **summary):
+        import json
+
+        from .importing import parse_event_summary
+
+        fields = {"title": "Jazz night", "start_date": "2030-05-01T19:00:00+03:00", **summary}
+        return parse_event_summary(f"Here you go:\n```json\n{json.dumps(fields)}\n```")
+
+    def test_takes_the_preview_theme_from_icon(self):
+        self.assertEqual(self.parse(icon="Sakura")["theme"], "sakura")
+        self.assertEqual(self.parse(icon="volcano")["theme"], "star")
+        self.assertEqual(self.parse()["theme"], "star")
+
+    def test_reads_the_fields_from_a_fenced_reply(self):
+        event = self.parse(
+            end_date="2030-05-01T22:30:00+03:00", description="  Two sets.  ", tags=["Jazz", "Live music"]
+        )
+        self.assertEqual(event["name"], "Jazz night")
+        self.assertEqual(event["description"], "Two sets.")
+        self.assertEqual(event["start_datetime"], datetime(2030, 5, 1, 16, 0, tzinfo=UTC))
+        self.assertEqual(event["end_datetime"], datetime(2030, 5, 1, 19, 30, tzinfo=UTC))
+        self.assertEqual(event["tag_names"], ["Jazz", "Live music"])
+
+    def test_a_date_alone_is_midnight_and_no_offset_is_utc(self):
+        self.assertEqual(self.parse(start_date="2030-05-01")["start_datetime"], datetime(2030, 5, 1, tzinfo=UTC))
+        self.assertEqual(
+            self.parse(start_date="2030-05-01T19:00:00")["start_datetime"], datetime(2030, 5, 1, 19, tzinfo=UTC)
+        )
+
+    def test_drops_an_end_that_is_not_after_the_start(self):
+        self.assertIsNone(self.parse(end_date="2030-05-01T10:00:00+03:00")["end_datetime"])
+        self.assertIsNone(self.parse(end_date="soon")["end_datetime"])
+
+    def test_keeps_at_most_two_distinct_tags_within_the_name_limit(self):
+        self.assertEqual(self.parse(tags=["Jazz", "jazz", "Food", "Art"])["tag_names"], ["Jazz", "Food"])
+        self.assertEqual(self.parse(tags="Jazz")["tag_names"], ["Jazz"])
+        self.assertEqual(len(self.parse(tags=["x" * 80])["tag_names"][0]), 50)
+
+    def test_cuts_long_text_to_the_model_limits(self):
+        event = self.parse(title="t" * 300, description="d" * 2500)
+        self.assertEqual(len(event["name"]), 255)
+        self.assertEqual(len(event["description"]), 2000)
+
+    def test_rejects_replies_without_a_usable_event(self):
+        from .importing import EventNotRead, parse_event_summary
+
+        for reply in ("Sorry, I can't open that page.", "{not json}", '{"title": "Jazz"}', '{"start_date": "2030-05-01"}'):
+            with self.subTest(reply=reply), self.assertRaises(EventNotRead):
+                parse_event_summary(reply)
+
+
+# The import throttle counts in the cache; keep it out of the dev Redis and reset per test
+@override_settings(
+    GEMINI_API_KEY="test-key", CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+)
+class ImportOccasionTests(TestCase):
+    url = "https://example.com/events/jazz-night"
+
+    def setUp(self):
+        from apps.users.models import User
+
+        import tempfile
+
+        cache.clear()
+        # The picture lands in a throwaway folder, never the dev media directory
+        self.media = self.enterContext(tempfile.TemporaryDirectory())
+        self.enterContext(override_settings(MEDIA_ROOT=self.media))
+        self.user = User.objects.create_user("ann@example.com", "correct-horse-battery", name="Ann")
+        self.client.force_login(self.user)
+        self.start = (timezone.now() + timedelta(days=10)).replace(microsecond=0)
+
+    def reply(self, **summary):
+        import json
+
+        fields = {
+            "title": "Jazz night",
+            "start_date": self.start.isoformat(),
+            "end_date": (self.start + timedelta(hours=3)).isoformat(),
+            "description": "A trio on the rooftop.",
+            "tags": ["jazz", "Live music"],
+            "icon": "wave",
+            **summary,
+        }
+        return f"```json\n{json.dumps(fields)}\n```"
+
+    def post_import(self, reply=None, url=None, side_effect=None):
+        with mock.patch("apps.occasions.importing.generate_text", return_value=reply, side_effect=side_effect) as gemini:
+            response = self.client.post(
+                "/api/occasions/import/", {"url": url or self.url}, content_type="application/json"
+            )
+        return response, gemini
+
+    def test_creates_the_occasion_reusing_and_creating_tags(self):
+        from apps.tags.models import Tag
+
+        jazz_tag = Tag.objects.create(name="Jazz")
+        response, gemini = self.post_import(self.reply())
+        self.assertEqual(response.status_code, 201)
+
+        # The link goes to Gemini inside the prompt, with leave to open it and to search the web for missing dates
+        prompt = gemini.call_args.args[0]
+        self.assertTrue(prompt.startswith(self.url))
+        self.assertIn("Can you get summary of this event in format:", prompt)
+        self.assertIn(f"today is {timezone.localdate().isoformat()}", prompt)
+        self.assertEqual(gemini.call_args.kwargs, {"read_urls": True, "search_web": True})
+
+        occasion_data = response.json()
+        self.assertEqual(occasion_data["name"], "Jazz night")
+        self.assertEqual(occasion_data["description"], "A trio on the rooftop.")
+        self.assertEqual(sorted(occasion_data["tags"]), ["Jazz", "Live music"])
+        self.assertTrue(occasion_data["is_going"])
+        self.assertEqual(occasion_data["created_by"]["name"], "Ann")
+        # "jazz" matched the existing tag; "Live music" was new
+        self.assertEqual(Tag.objects.count(), 2)
+        self.assertIn(jazz_tag, Occasion.objects.get(id=occasion_data["id"]).tags.all())
+
+        # Its main image is a link-preview card: title, description, the link's domain, Gemini's theme
+        self.assertTrue(occasion_data["main_image"].endswith(".svg"))
+        main_image = Occasion.objects.get(id=occasion_data["id"]).images.get(order=0)
+        with main_image.image.open("rb") as card_file:
+            card = card_file.read().decode()
+        for shown in (">Jazz night</text>", ">A trio on the rooftop.</text>", ">example.com/events/jazz-night</text>"):
+            self.assertIn(shown, card)
+        self.assertIn("#F0F9FF", card)
+
+    def test_rejects_links_that_are_not_web_pages(self):
+        for url in ("not a link", "ftp://example.com/event"):
+            with self.subTest(url=url):
+                response, gemini = self.post_import(self.reply(), url=url)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("url", response.json())
+                gemini.assert_not_called()
+
+    def test_refuses_without_asking_gemini_while_going_elsewhere(self):
+        concert = Occasion.objects.create(name="Concert", start_datetime=self.start)
+        concert.users.add(self.user)
+        response, gemini = self.post_import(self.reply())
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Concert", response.json()["detail"])
+        gemini.assert_not_called()
+
+    @override_settings(GEMINI_API_KEY="")
+    def test_needs_a_gemini_key(self):
+        response, gemini = self.post_import(self.reply())
+        self.assertEqual(response.status_code, 503)
+        gemini.assert_not_called()
+
+    def test_says_when_no_event_was_found(self):
+        from apps.tags.models import Tag
+
+        response, _ = self.post_import("I couldn't open that page.")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Couldn't find an event", response.json()["url"][0])
+        self.assertFalse(Occasion.objects.exists())
+        self.assertFalse(Tag.objects.exists())
+
+    def test_refuses_a_past_event_and_creates_no_tags(self):
+        from apps.tags.models import Tag
+
+        past_start = timezone.now() - timedelta(days=2)
+        response, _ = self.post_import(self.reply(start_date=past_start.isoformat(), end_date=None))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("The start must be in the future.", response.json()["url"][0])
+        self.assertFalse(Occasion.objects.exists())
+        self.assertFalse(Tag.objects.exists())
+
+    def test_reports_a_failed_gemini_call(self):
+        with self.assertLogs("apps.occasions.views", level="ERROR"):
+            response, _ = self.post_import(side_effect=TimeoutError("timed out"))
+        self.assertEqual(response.status_code, 502)
+        self.assertFalse(Occasion.objects.exists())
+
+    def test_requires_login(self):
+        self.client.logout()
+        response, gemini = self.post_import(self.reply())
+        self.assertEqual(response.status_code, 403)
+        gemini.assert_not_called()

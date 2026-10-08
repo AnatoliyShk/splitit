@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { deferred, mockApi, mockStaffSession, paginate, panelTag, type PanelTag } from './fixtures/panel'
+import { deferred, mockApi, mockStaffSession, openActions, paginate, panelTag, type PanelTag } from './fixtures/panel'
 
 test.use({ timezoneId: 'UTC', locale: 'en-US' })
 
@@ -220,6 +220,7 @@ test.describe('panel tags', () => {
     test('opens an inline field prefilled with the current name', async ({ page }) => {
       await openTags(page)
 
+      await openActions(row(page, 'Jazz'))
       await row(page, 'Jazz').getByRole('button', { name: 'Rename' }).click()
 
       await expect(page.getByLabel('Rename “Jazz”')).toHaveValue('Jazz')
@@ -229,6 +230,7 @@ test.describe('panel tags', () => {
     test('saves the new name and keeps the other columns', async ({ page }) => {
       const { detail } = await openTags(page)
 
+      await openActions(row(page, 'Jazz'))
       await row(page, 'Jazz').getByRole('button', { name: 'Rename' }).click()
       await page.getByLabel('Rename “Jazz”').fill('Smooth jazz')
       await page.getByRole('button', { name: 'Save' }).click()
@@ -246,6 +248,7 @@ test.describe('panel tags', () => {
     test('submitting with Enter saves', async ({ page }) => {
       await openTags(page)
 
+      await openActions(row(page, 'Hiking'))
       await row(page, 'Hiking').getByRole('button', { name: 'Rename' }).click()
       await page.getByLabel('Rename “Hiking”').fill('Trekking')
       await page.getByLabel('Rename “Hiking”').press('Enter')
@@ -256,6 +259,7 @@ test.describe('panel tags', () => {
     test('renaming to an existing name shows the duplicate error and keeps editing', async ({ page }) => {
       await openTags(page)
 
+      await openActions(row(page, 'Hiking'))
       await row(page, 'Hiking').getByRole('button', { name: 'Rename' }).click()
       await page.getByLabel('Rename “Hiking”').fill('JAZZ')
       await page.getByRole('button', { name: 'Save' }).click()
@@ -268,6 +272,7 @@ test.describe('panel tags', () => {
     test('Save is disabled for an empty name', async ({ page }) => {
       await openTags(page)
 
+      await openActions(row(page, 'Hiking'))
       await row(page, 'Hiking').getByRole('button', { name: 'Rename' }).click()
       await page.getByLabel('Rename “Hiking”').fill('  ')
 
@@ -277,12 +282,14 @@ test.describe('panel tags', () => {
     test('Cancel and Escape leave the name unchanged', async ({ page }) => {
       const { detail } = await openTags(page)
 
+      await openActions(row(page, 'Jazz'))
       await row(page, 'Jazz').getByRole('button', { name: 'Rename' }).click()
       await page.getByLabel('Rename “Jazz”').fill('Changed')
       await page.getByRole('button', { name: 'Cancel' }).click()
       await expect(row(page, 'Jazz')).toBeVisible()
       await expect(page.getByLabel('Rename “Jazz”')).toHaveCount(0)
 
+      await openActions(row(page, 'Jazz'))
       await row(page, 'Jazz').getByRole('button', { name: 'Rename' }).click()
       await page.getByLabel('Rename “Jazz”').fill('Changed')
       await page.getByLabel('Rename “Jazz”').press('Escape')
@@ -296,6 +303,7 @@ test.describe('panel tags', () => {
     test('asks for confirmation first and does nothing until confirmed', async ({ page }) => {
       const { detail } = await openTags(page)
 
+      await openActions(row(page, 'Hiking'))
       await row(page, 'Hiking').getByRole('button', { name: 'Delete' }).click()
 
       const confirm = page.getByRole('group', { name: 'Delete Hiking?' })
@@ -307,10 +315,12 @@ test.describe('panel tags', () => {
     test('the confirmation warns when the tag is used by occasions', async ({ page }) => {
       await openTags(page)
 
+      await openActions(row(page, 'Jazz'))
       await row(page, 'Jazz').getByRole('button', { name: 'Delete' }).click()
       await expect(page.getByRole('group', { name: 'Delete Jazz?' }).getByText('Remove from 3 occasions?')).toBeVisible()
       await page.getByRole('button', { name: 'Keep' }).click()
 
+      await openActions(row(page, 'Board games'))
       await row(page, 'Board games').getByRole('button', { name: 'Delete' }).click()
       await expect(
         page.getByRole('group', { name: 'Delete Board games?' }).getByText('Remove from 1 occasion?'),
@@ -320,10 +330,12 @@ test.describe('panel tags', () => {
     test('"Keep" cancels', async ({ page }) => {
       const { detail } = await openTags(page)
 
+      await openActions(row(page, 'Hiking'))
       await row(page, 'Hiking').getByRole('button', { name: 'Delete' }).click()
       await page.getByRole('button', { name: 'Keep' }).click()
 
       await expect(page.getByRole('group', { name: 'Delete Hiking?' })).toHaveCount(0)
+      await openActions(row(page, 'Hiking'))
       await expect(row(page, 'Hiking').getByRole('button', { name: 'Delete' })).toBeVisible()
       expect(detail).toHaveLength(0)
     })
@@ -331,6 +343,7 @@ test.describe('panel tags', () => {
     test('confirming deletes the tag and reloads the list', async ({ page }) => {
       const { detail } = await openTags(page)
 
+      await openActions(row(page, 'Hiking'))
       await row(page, 'Hiking').getByRole('button', { name: 'Delete' }).click()
       await page.getByRole('group', { name: 'Delete Hiking?' }).getByRole('button', { name: 'Delete' }).click()
 
@@ -346,6 +359,7 @@ test.describe('panel tags', () => {
         DELETE: () => ({ status: 500, body: { detail: 'Could not delete.' } }),
       })
 
+      await openActions(row(page, 'Hiking'))
       await row(page, 'Hiking').getByRole('button', { name: 'Delete' }).click()
       await page.getByRole('group', { name: 'Delete Hiking?' }).getByRole('button', { name: 'Delete' }).click()
 
@@ -356,8 +370,10 @@ test.describe('panel tags', () => {
     test('starting a rename closes an open delete confirmation', async ({ page }) => {
       await openTags(page)
 
+      await openActions(row(page, 'Hiking'))
       await row(page, 'Hiking').getByRole('button', { name: 'Delete' }).click()
       await expect(page.getByRole('group', { name: 'Delete Hiking?' })).toBeVisible()
+      await openActions(row(page, 'Jazz'))
       await row(page, 'Jazz').getByRole('button', { name: 'Rename' }).click()
 
       await expect(page.getByRole('group', { name: 'Delete Hiking?' })).toHaveCount(0)
@@ -374,6 +390,7 @@ test.describe('panel tags', () => {
         },
       })
 
+      await openActions(row(page, 'Hiking'))
       await row(page, 'Hiking').getByRole('button', { name: 'Delete' }).click()
       const confirmDelete = page.getByRole('group', { name: 'Delete Hiking?' }).getByRole('button', { name: 'Delete' })
       await confirmDelete.click()

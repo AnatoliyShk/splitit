@@ -21,6 +21,7 @@ export type Attendee = { id: number; name: string; email: string }
 export type OccasionImage = { order: number; url: string }
 
 export type PanelOccasion = OccasionCore & {
+  description: UserOccasion['description']
   cancelled_at: UserOccasion['cancelled_at']
   duration_minutes: number | null
   attendees: Attendee[]

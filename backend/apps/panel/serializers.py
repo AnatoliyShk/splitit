@@ -89,6 +89,7 @@ class PanelOccasionSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "name",
+            "description",
             "start_datetime",
             "end_datetime",
             "duration_minutes",

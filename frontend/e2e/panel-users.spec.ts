@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { mockApi, mockStaffSession, paginate, panelUser, sessionUser, staffUser, type PanelUser } from './fixtures/panel'
+import { mockApi, mockStaffSession, openActions, paginate, panelUser, sessionUser, staffUser, type PanelUser } from './fixtures/panel'
 
 test.use({ timezoneId: 'UTC', locale: 'en-US' })
 
@@ -90,10 +90,45 @@ test.describe('panel users', () => {
     await expect(row(page, 'root@example.com').getByRole('button')).toHaveCount(0)
   })
 
+  test('row actions stay hidden behind a gear until it is opened', async ({ page }) => {
+    await openUsers(page)
+
+    const ann = row(page, 'ann@example.com')
+    const gear = ann.getByRole('button', { name: 'Actions for Ann Lee' })
+    await expect(gear).toHaveAttribute('aria-expanded', 'false')
+    await expect(ann.getByRole('button', { name: 'Make admin' })).toHaveCount(0)
+
+    await gear.click()
+    await expect(gear).toHaveAttribute('aria-expanded', 'true')
+    await expect(ann.getByRole('button', { name: 'Make admin' })).toBeVisible()
+    await expect(ann.getByRole('button', { name: 'Deactivate' })).toBeVisible()
+
+    await gear.click()
+    await expect(ann.getByRole('button', { name: 'Make admin' })).toHaveCount(0)
+  })
+
+  test('Escape and a click elsewhere close the actions', async ({ page }) => {
+    await openUsers(page)
+
+    const ann = row(page, 'ann@example.com')
+    const gear = ann.getByRole('button', { name: 'Actions for Ann Lee' })
+    await gear.click()
+    await expect(ann.getByRole('button', { name: 'Make admin' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(gear).toHaveAttribute('aria-expanded', 'false')
+    await expect(gear).toBeFocused()
+
+    await gear.click()
+    await page.getByRole('heading', { name: 'Users' }).click()
+    await expect(gear).toHaveAttribute('aria-expanded', 'false')
+  })
+
   test('a superuser admin can manage other superusers', async ({ page }) => {
     await mockStaffSession(page, sessionUser({ is_superuser: true }))
     await openUsers(page)
 
+    await openActions(row(page, 'root@example.com'))
     await expect(row(page, 'root@example.com').getByRole('button', { name: 'Remove admin' })).toBeVisible()
     await expect(row(page, staffUser.email).getByRole('button')).toHaveCount(0)
   })
@@ -202,10 +237,12 @@ test.describe('panel users', () => {
 
       const ann = row(page, 'ann@example.com')
       await expect(ann).toContainText('Member')
+      await openActions(ann)
       await ann.getByRole('button', { name: 'Make admin' }).click()
 
       await expect(ann).toContainText('Admin')
       await expect(ann).not.toContainText('Member')
+      await openActions(ann)
       await expect(ann.getByRole('button', { name: 'Remove admin' })).toBeVisible()
       expect(patches).toHaveLength(1)
       expect(patches[0].url.pathname).toBe('/api/admin/users/2/')
@@ -217,9 +254,11 @@ test.describe('panel users', () => {
       const patches = await mockPatch(page, users)
 
       const bob = row(page, 'bob@example.com')
+      await openActions(bob)
       await bob.getByRole('button', { name: 'Remove admin' }).click()
 
       await expect(bob).toContainText('Member')
+      await openActions(bob)
       await expect(bob.getByRole('button', { name: 'Make admin' })).toBeVisible()
       expect(patches[0].body).toEqual({ is_staff: false })
     })
@@ -229,9 +268,11 @@ test.describe('panel users', () => {
       const patches = await mockPatch(page, users)
 
       const ann = row(page, 'ann@example.com')
+      await openActions(ann)
       await ann.getByRole('button', { name: 'Deactivate' }).click()
 
       await expect(ann).toContainText('Deactivated')
+      await openActions(ann)
       await expect(ann.getByRole('button', { name: 'Reactivate' })).toBeVisible()
       expect(patches[0].body).toEqual({ is_active: false })
     })
@@ -241,9 +282,11 @@ test.describe('panel users', () => {
       const patches = await mockPatch(page, users)
 
       const cat = row(page, 'cat@example.com')
+      await openActions(cat)
       await cat.getByRole('button', { name: 'Reactivate' }).click()
 
       await expect(cat).not.toContainText('Deactivated')
+      await openActions(cat)
       await expect(cat.getByRole('button', { name: 'Deactivate' })).toBeVisible()
       expect(patches[0].body).toEqual({ is_active: true })
     })
@@ -260,11 +303,15 @@ test.describe('panel users', () => {
       })
 
       const ann = row(page, 'ann@example.com')
+      await openActions(ann)
       await ann.getByRole('button', { name: 'Make admin' }).click()
+      await openActions(ann)
       await expect(ann.getByRole('button', { name: 'Make admin' })).toBeDisabled()
+      await openActions(ann)
       await expect(ann.getByRole('button', { name: 'Deactivate' })).toBeDisabled()
 
       release()
+      await openActions(ann)
       await expect(ann.getByRole('button', { name: 'Remove admin' })).toBeEnabled()
     })
 
@@ -275,10 +322,12 @@ test.describe('panel users', () => {
       })
 
       const ann = row(page, 'ann@example.com')
+      await openActions(ann)
       await ann.getByRole('button', { name: 'Make admin' }).click()
 
       await expect(page.getByRole('alert')).toHaveText('You cannot change this user.')
       await expect(ann).toContainText('Member')
+      await openActions(ann)
       await expect(ann.getByRole('button', { name: 'Make admin' })).toBeEnabled()
     })
   })

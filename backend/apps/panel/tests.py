@@ -250,9 +250,31 @@ class OccasionManagementTests(PanelTestCase):
         self.client.force_login(self.member)
         self.assertEqual(self.client.post(f"/api/admin/occasions/{occasion.pk}/cancel/").status_code, 403)
 
+    def test_create_records_the_staff_creator(self):
+        response = self.client.post(
+            "/api/admin/occasions/", {"name": "Gala", "start_datetime": "2026-12-10T18:00:00Z"}, format="json"
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Occasion.objects.get(id=response.json()["id"]).created_by, self.admin)
+
+    def test_description_is_saved_and_changed(self):
+        response = self.client.post(
+            "/api/admin/occasions/",
+            {"name": "Gala", "description": "Dress up.", "start_datetime": "2026-12-10T18:00:00Z"},
+            format="json",
+        )
+        self.assertEqual(response.json()["description"], "Dress up.")
+        response = self.client.patch(
+            f"/api/admin/occasions/{response.json()['id']}/", {"description": ""}, format="json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["description"], "")
+
     def test_create_test_occasion_with_existing_users(self):
         response = self.client.post("/api/admin/occasions/test/")
         self.assertEqual(response.status_code, 201)
+        # Placeholder text, longer than a card shows
+        self.assertGreater(len(response.json()["description"]), 100)
         occasion = Occasion.objects.get(pk=response.json()["id"])
         self.assertGreater(occasion.start_datetime, timezone.now())
         self.assertGreater(occasion.end_datetime, occasion.start_datetime)

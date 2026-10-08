@@ -237,7 +237,7 @@ class FilterPreferenceApiTests(APITestCase):
     def test_nothing_saved_reads_as_no_filters(self):
         response = self.client.get(self.url(self.user))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"tags": [], "weekdays": []})
+        self.assertEqual(response.json(), {"tags": [], "weekdays": [], "is_enabled": True})
         self.assertFalse(FilterPreference.objects.exists())
 
     def test_put_saves_tags_and_weekdays(self):
@@ -250,6 +250,7 @@ class FilterPreferenceApiTests(APITestCase):
         expected_filters = {
             "tags": [{"id": self.art_tag.id, "name": "Art"}, {"id": self.jazz_tag.id, "name": "Jazz"}],
             "weekdays": [6, 7],
+            "is_enabled": True,
         }
         self.assertEqual(response.json(), expected_filters)
         self.assertEqual(self.client.get(self.url(self.user)).json(), expected_filters)
@@ -257,9 +258,29 @@ class FilterPreferenceApiTests(APITestCase):
     def test_put_replaces_the_saved_filters(self):
         self.client.put(self.url(self.user), {"tag_ids": [self.jazz_tag.id], "weekdays": [1, 2]}, format="json")
         response = self.client.put(self.url(self.user), {"tag_ids": [], "weekdays": [5]}, format="json")
-        self.assertEqual(response.json(), {"tags": [], "weekdays": [5]})
+        self.assertEqual(response.json(), {"tags": [], "weekdays": [5], "is_enabled": True})
         self.assertEqual(FilterPreference.objects.count(), 1)
         self.assertEqual(FilterPreferenceWeekday.objects.count(), 1)
+
+    def test_patch_turns_the_filters_off_and_on_keeping_them(self):
+        self.client.put(self.url(self.user), {"tag_ids": [self.jazz_tag.id], "weekdays": [6]}, format="json")
+        response = self.client.patch(self.url(self.user), {"is_enabled": False}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"tags": [{"id": self.jazz_tag.id, "name": "Jazz"}], "weekdays": [6], "is_enabled": False},
+        )
+        # Saving new lists doesn't turn them back on by itself
+        response = self.client.put(self.url(self.user), {"tag_ids": [], "weekdays": [1]}, format="json")
+        self.assertFalse(response.json()["is_enabled"])
+        response = self.client.patch(self.url(self.user), {"is_enabled": True}, format="json")
+        self.assertTrue(response.json()["is_enabled"])
+        self.assertEqual(response.json()["weekdays"], [1])
+
+    def test_put_needs_both_lists(self):
+        response = self.client.put(self.url(self.user), {"is_enabled": False}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(set(response.json()), {"tag_ids", "weekdays"})
 
     def test_rejects_unknown_tags_and_weekdays(self):
         response = self.client.put(self.url(self.user), {"tag_ids": [999], "weekdays": [0, 8]}, format="json")

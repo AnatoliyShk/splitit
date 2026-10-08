@@ -55,6 +55,7 @@ export default function OccasionPage() {
             {occasion.main_image && <img className="occasion-hero" src={occasion.main_image} alt="" />}
             <h1 id="occasion-title">{occasion.name}</h1>
             <p className="explore-when">{formatRange(occasion.start_datetime, occasion.end_datetime)}</p>
+            {occasion.description && <p className="occasion-description">{occasion.description}</p>}
             <TagList
               tagNames={occasion.tags}
               statusTags={[

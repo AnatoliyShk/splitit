@@ -3,6 +3,7 @@ import { useState, type SubmitEvent } from 'react'
 import { apiDelete, apiGet, apiPatch, apiPost, useFieldErrors } from '../../api'
 import { Field, FormAlert } from '../../components/Field'
 import { Pager } from '../../components/Pager'
+import { RowMenu } from '../../components/RowMenu'
 import { listQueryString, queryKeys } from '../../queryClient'
 import type { PanelTag } from '../../types/api/admin'
 import type { Page } from '../../types/api/pagination'
@@ -205,38 +206,40 @@ export default function Tags() {
                   </td>
                   <td data-label="Created">{formatDate(tag.created_at)}</td>
                   <td className="row-actions">
-                    {confirmTagId === tag.id ? (
-                      <span className="confirm" role="group" aria-label={`Delete ${tag.name}?`}>
-                        <span className="confirm-text">
-                          {tag.occasions_count ? `Remove from ${plural(tag.occasions_count, 'occasion')}?` : 'Delete?'}
+                    <RowMenu label={tag.name}>
+                      {confirmTagId === tag.id ? (
+                        <span className="confirm" role="group" aria-label={`Delete ${tag.name}?`}>
+                          <span className="confirm-text">
+                            {tag.occasions_count ? `Remove from ${plural(tag.occasions_count, 'occasion')}?` : 'Delete?'}
+                          </span>
+                          <button className="btn btn-sm" onClick={() => setConfirmTagId(null)} autoFocus>
+                            Keep
+                          </button>
+                          <button
+                            className="btn btn-sm btn-danger"
+                            disabled={busyTagId === tag.id}
+                            onClick={() => deleteMutation.mutate(tag)}
+                          >
+                            Delete
+                          </button>
                         </span>
-                        <button className="btn btn-sm" onClick={() => setConfirmTagId(null)} autoFocus>
-                          Keep
-                        </button>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          disabled={busyTagId === tag.id}
-                          onClick={() => deleteMutation.mutate(tag)}
-                        >
-                          Delete
-                        </button>
-                      </span>
-                    ) : (
-                      <>
-                        <button className="btn btn-sm" onClick={() => startEdit(tag)}>
-                          Rename
-                        </button>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => {
-                            setEditTagId(null)
-                            setConfirmTagId(tag.id)
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
+                      ) : (
+                        <>
+                          <button className="btn btn-sm" onClick={() => startEdit(tag)}>
+                            Rename
+                          </button>
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => {
+                              setEditTagId(null)
+                              setConfirmTagId(tag.id)
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </RowMenu>
                   </td>
                 </tr>
               ),

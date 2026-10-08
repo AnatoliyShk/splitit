@@ -3,7 +3,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 from pgvector.django import HnswIndex, VectorField
 
@@ -19,6 +19,25 @@ class OccasionQuerySet(models.QuerySet):
             Q(end_datetime__gte=now) | Q(end_datetime=None, start_datetime__gte=now), cancelled_at=None
         )
 
+    def visible_to(self, user):
+        """The occasions `user` may see. Ones made by staff, or before creators were recorded, are public;
+        one made by a regular user is visible to its creator, the people directly connected to them
+        (a Connection row, not friends of friends) and anyone already going.
+        """
+        from apps.connections.models import Connection
+
+        connected_to_creator = Connection.objects.filter(
+            Q(user_low=OuterRef("created_by"), user_high=user) | Q(user_low=user, user_high=OuterRef("created_by"))
+        )
+        going = OccasionUser.objects.filter(occasion=OuterRef("pk"), user=user)
+        return self.filter(
+            Q(created_by=None)
+            | Q(created_by__is_staff=True)
+            | Q(created_by=user)
+            | Exists(connected_to_creator)
+            | Exists(going)
+        )
+
     def finished(self):
         """Over or cancelled: the opposite of upcoming()."""
         now = timezone.now()
@@ -29,6 +48,8 @@ class OccasionQuerySet(models.QuerySet):
 
 class Occasion(models.Model):
     name = models.CharField(max_length=255)
+    # What it is and what to expect; cards show the first 100 characters, the details and the page all of it
+    description = models.TextField(blank=True, max_length=2000)
     start_datetime = models.DateTimeField(db_index=True)
     end_datetime = models.DateTimeField(null=True, blank=True)
     users = models.ManyToManyField(
@@ -43,6 +64,17 @@ class Occasion(models.Model):
     connections_applied_at = models.DateTimeField(null=True, blank=True, editable=False)
     # Set by the panel's Cancel action; a cancelled occasion can't be joined and isn't counted for connections
     cancelled_at = models.DateTimeField(null=True, blank=True, editable=False)
+    # Staff (in the panel) or a regular user (POST /api/occasions/); null for occasions made before this was
+    # recorded. Who it is decides who sees it (see visible_to). Deleted with its creator, so a private
+    # occasion never turns public
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="created_occasions",
+        editable=False,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

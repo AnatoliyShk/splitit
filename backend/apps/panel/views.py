@@ -140,6 +140,12 @@ TEST_OCCASION_NAMES = [
     "Food market",
     "Gallery opening",
 ]
+# Placeholder text for test occasions; long enough that cards cut it off after 100 characters
+TEST_OCCASION_DESCRIPTION = (
+    "This is a test occasion made with the panel's Create test occasion button, so the time, the people "
+    "going and this text are all placeholders. Use it to try out Explore, joining and connections, then "
+    "delete it when you're done."
+)
 TEST_USER_NAMES = ["Alex", "Sam", "Jordan", "Taylor", "Morgan", "Riley", "Casey", "Jamie"]
 
 
@@ -165,7 +171,10 @@ def create_test_occasion():
     end = start + timedelta(minutes=30 * random.randint(2, 12))
     with transaction.atomic():
         occasion = Occasion.objects.create(
-            name=f"Test: {random.choice(TEST_OCCASION_NAMES)}", start_datetime=start, end_datetime=end
+            name=f"Test: {random.choice(TEST_OCCASION_NAMES)}",
+            description=TEST_OCCASION_DESCRIPTION,
+            start_datetime=start,
+            end_datetime=end,
         )
         occasion.users.add(*pick_test_attendees(random.randint(1, 3)))
     return occasion
@@ -180,6 +189,10 @@ class OccasionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Occasion.objects.prefetch_related("users", "tags", "images").order_by("-start_datetime", "-id")
+
+    def perform_create(self, serializer):
+        # Made by staff, so it's public (see OccasionQuerySet.visible_to)
+        serializer.save(created_by=self.request.user)
 
     @extend_schema(request=None)
     @action(detail=True, methods=["post"])

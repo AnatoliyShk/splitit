@@ -8,5 +8,7 @@ export type StatusTag = { label: string; off?: boolean }
 export type TagListProps = {
   tagNames: TagName[]
   statusTags?: StatusTag[]
+  /** The list's accessible name; defaults to "Tags" (or "Status and tags" with status tags). */
+  label?: string
   className?: string
 }

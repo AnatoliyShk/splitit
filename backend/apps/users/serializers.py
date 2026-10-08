@@ -95,29 +95,37 @@ class LoginSerializer(serializers.Serializer):
 class FilterPreferenceSerializer(serializers.Serializer):
     """A user's saved Explore filters. Reads tags as {id, name}; writes them as `tag_ids`.
 
-    Saving replaces both lists: an empty list clears that filter.
+    Saving a list replaces it: an empty list clears that filter. `is_enabled` turns the whole preset
+    on or off without touching the lists; when it's left out, it stays as it was.
     """
 
     tag_ids = serializers.PrimaryKeyRelatedField(
         many=True, queryset=Tag.objects.all(), source="tags", write_only=True
     )
     weekdays = serializers.ListField(child=serializers.ChoiceField(choices=Weekday.choices))
+    is_enabled = serializers.BooleanField(required=False)
 
     def to_representation(self, filter_preference):
         return {
             "tags": TagSerializer(filter_preference.tags.order_by("name"), many=True).data,
             "weekdays": list(filter_preference.weekdays.values_list("weekday", flat=True)),
+            "is_enabled": filter_preference.is_enabled,
         }
 
     @transaction.atomic
     def create(self, validated_data):
+        """Saves whichever fields were sent (a PATCH may send only `is_enabled`)."""
         filter_preference, _ = FilterPreference.objects.get_or_create(user=validated_data["user"])
-        filter_preference.tags.set(validated_data["tags"])
-        filter_preference.weekdays.all().delete()
-        FilterPreferenceWeekday.objects.bulk_create(
-            FilterPreferenceWeekday(filter_preference=filter_preference, weekday=weekday)
-            for weekday in sorted(set(validated_data["weekdays"]))
-        )
-        # The rows that changed are in the child tables; this marks the preference as changed too
-        filter_preference.save(update_fields=["updated_at"])
+        if "tags" in validated_data:
+            filter_preference.tags.set(validated_data["tags"])
+        if "weekdays" in validated_data:
+            filter_preference.weekdays.all().delete()
+            FilterPreferenceWeekday.objects.bulk_create(
+                FilterPreferenceWeekday(filter_preference=filter_preference, weekday=weekday)
+                for weekday in sorted(set(validated_data["weekdays"]))
+            )
+        if "is_enabled" in validated_data:
+            filter_preference.is_enabled = validated_data["is_enabled"]
+        # Also marks the preference as changed when only the child tables did
+        filter_preference.save(update_fields=["is_enabled", "updated_at"])
         return filter_preference

@@ -14,6 +14,7 @@ import {
 } from "../../api";
 import { Field, FormAlert } from "../../components/Field";
 import { Pager } from "../../components/Pager";
+import { RowMenu } from "../../components/RowMenu";
 import { listQueryString, queryKeys } from "../../queryClient";
 import type { PanelOccasion } from "../../types/api/admin";
 import type { Page } from "../../types/api/pagination";
@@ -291,83 +292,85 @@ export default function Occasions() {
                 </td>
                 <td data-label="Going">{occasion.attendees.length}</td>
                 <td className="row-actions">
-                  {confirmAction?.occasionId === occasion.id ? (
-                    <span
-                      className="confirm"
-                      role="group"
-                      aria-label={`${CONFIRM[confirmAction.action].group} ${occasion.name}?`}
-                    >
-                      <span className="confirm-text">
-                        {CONFIRM[confirmAction.action].question}
-                      </span>
-                      <button
-                        className="btn btn-sm"
-                        onClick={() => setConfirmAction(null)}
-                        autoFocus
+                  <RowMenu label={occasion.name}>
+                    {confirmAction?.occasionId === occasion.id ? (
+                      <span
+                        className="confirm"
+                        role="group"
+                        aria-label={`${CONFIRM[confirmAction.action].group} ${occasion.name}?`}
                       >
-                        Keep
-                      </button>
-                      <button
-                        className={`btn btn-sm ${CONFIRM[confirmAction.action].className}`}
-                        disabled={busyOccasionId === occasion.id}
-                        onClick={() =>
-                          rowMutation.mutate({
-                            occasion,
-                            action: confirmAction.action,
-                          })
-                        }
-                      >
-                        {CONFIRM[confirmAction.action].button}
-                      </button>
-                    </span>
-                  ) : (
-                    <>
-                      {isUpcoming(occasion) && (
+                        <span className="confirm-text">
+                          {CONFIRM[confirmAction.action].question}
+                        </span>
                         <button
                           className="btn btn-sm"
-                          onClick={() =>
-                            setConfirmAction({ occasionId: occasion.id, action: "finish" })
-                          }
+                          onClick={() => setConfirmAction(null)}
+                          autoFocus
                         >
-                          Finish
+                          Keep
                         </button>
-                      )}
-                      <Link
-                        className="btn btn-sm"
-                        to={`/admin/occasions/${occasion.id}`}
-                      >
-                        Edit
-                      </Link>
-                      {isUpcoming(occasion) && (
                         <button
-                          className="btn btn-sm btn-primary"
+                          className={`btn btn-sm ${CONFIRM[confirmAction.action].className}`}
+                          disabled={busyOccasionId === occasion.id}
                           onClick={() =>
-                            setConfirmAction({ occasionId: occasion.id, action: "cancel" })
+                            rowMutation.mutate({
+                              occasion,
+                              action: confirmAction.action,
+                            })
                           }
                         >
-                          Cancel
+                          {CONFIRM[confirmAction.action].button}
                         </button>
-                      )}
-                      {occasion.cancelled_at && !hasEnded(occasion) && (
+                      </span>
+                    ) : (
+                      <>
+                        {isUpcoming(occasion) && (
+                          <button
+                            className="btn btn-sm"
+                            onClick={() =>
+                              setConfirmAction({ occasionId: occasion.id, action: "finish" })
+                            }
+                          >
+                            Finish
+                          </button>
+                        )}
+                        <Link
+                          className="btn btn-sm"
+                          to={`/admin/occasions/${occasion.id}`}
+                        >
+                          Edit
+                        </Link>
+                        {isUpcoming(occasion) && (
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() =>
+                              setConfirmAction({ occasionId: occasion.id, action: "cancel" })
+                            }
+                          >
+                            Cancel
+                          </button>
+                        )}
+                        {occasion.cancelled_at && !hasEnded(occasion) && (
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() =>
+                              setConfirmAction({ occasionId: occasion.id, action: "revert_cancel" })
+                            }
+                          >
+                            Revert cancel
+                          </button>
+                        )}
                         <button
-                          className="btn btn-sm btn-primary"
+                          className="btn btn-sm btn-danger"
                           onClick={() =>
-                            setConfirmAction({ occasionId: occasion.id, action: "revert_cancel" })
+                            setConfirmAction({ occasionId: occasion.id, action: "delete" })
                           }
                         >
-                          Revert cancel
+                          Delete
                         </button>
-                      )}
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() =>
-                          setConfirmAction({ occasionId: occasion.id, action: "delete" })
-                        }
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
+                      </>
+                    )}
+                  </RowMenu>
                 </td>
               </tr>
             ))}

@@ -76,6 +76,8 @@ class FilterPreference(models.Model):
         blank=True,
         db_table="filter_preference_tags",
     )
+    # Off keeps the saved tags and weekdays but shows every occasion until it's turned back on
+    is_enabled = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

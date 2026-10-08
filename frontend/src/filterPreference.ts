@@ -13,6 +13,12 @@ export function useFilterPreference(user: User | null) {
   })
 }
 
+/** Whether anything is saved, on or off. */
 export function hasFilters(filterPreference: FilterPreference | undefined) {
   return Boolean(filterPreference && (filterPreference.tags.length > 0 || filterPreference.weekdays.length > 0))
+}
+
+/** Whether the saved filters are narrowing Explore right now: something is saved and they're turned on. */
+export function filtersApplied(filterPreference: FilterPreference | undefined) {
+  return Boolean(filterPreference?.is_enabled) && hasFilters(filterPreference)
 }

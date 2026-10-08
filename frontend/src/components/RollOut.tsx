@@ -1,7 +1,6 @@
 import { useId, useState } from 'react'
+import { classNames } from '../classNames'
 import type { RollOutProps } from '../types/ui/rollOut'
-
-const classNames = (...names: (string | undefined)[]) => names.filter(Boolean).join(' ')
 
 /**
  * A button that rolls content open and closed (styles: `.roll-out*` in App.css). Closed content stays
@@ -14,9 +13,11 @@ export function RollOut({
   togglePosition = 'before',
   toggleClassName,
   className,
+  open: controlledOpen,
   onOpenChange,
 }: RollOutProps) {
-  const [open, setOpen] = useState(false)
+  const [ownOpen, setOwnOpen] = useState(false)
+  const open = controlledOpen ?? ownOpen
   const contentId = useId()
 
   const toggleButton = (
@@ -26,7 +27,7 @@ export function RollOut({
       aria-expanded={open}
       aria-controls={contentId}
       onClick={() => {
-        setOpen(!open)
+        setOwnOpen(!open)
         onOpenChange?.(!open)
       }}
     >

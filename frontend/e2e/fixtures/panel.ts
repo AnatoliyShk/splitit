@@ -1,4 +1,4 @@
-import type { Page, Request } from '@playwright/test'
+import type { Locator, Page, Request } from '@playwright/test'
 import type { User } from '../../src/types/api/users'
 import type { Attendee, PanelOccasion, PanelTag, PanelUser } from '../../src/types/api/admin'
 
@@ -53,6 +53,7 @@ export function panelOccasion(overrides: Partial<PanelOccasion> = {}): PanelOcca
   return {
     id: 10,
     name: 'Jazz night',
+    description: '',
     start_datetime: '2099-10-10T18:00:00Z',
     end_datetime: '2099-10-10T21:00:00Z',
     duration_minutes: 180,
@@ -192,4 +193,12 @@ export function deferred() {
   let resolve!: () => void
   const promise = new Promise<void>((resolvePromise) => (resolve = resolvePromise))
   return { promise, resolve }
+}
+
+/** Opens a table row's gear menu (if it has one and it is closed) so its action buttons can be reached. */
+export async function openActions(row: Locator) {
+  await row.first().waitFor()
+  const gear = row.getByRole('button', { name: /^Actions for/ })
+  if ((await gear.count()) === 0 || (await gear.getAttribute('aria-expanded')) === 'true') return
+  await gear.click()
 }
