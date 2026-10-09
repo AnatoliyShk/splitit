@@ -1505,7 +1505,9 @@ h1 mark {
 
 }
 
-@media (max-width: 480px) {
+/* Phones. Besides narrow screens this also matches touch screens up to 760px: a phone whose Chrome zoom is
+   below 100% (or follows a small Android font size) reports a wider viewport than 480px */
+@media (max-width: 480px), (hover: none) and (pointer: coarse) and (max-width: 760px) {
   .header-actions {
     gap: 8px;
   }
