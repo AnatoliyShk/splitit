@@ -13,9 +13,11 @@ RUN yarn build
 
 FROM nginx:alpine
 
-# nginx fills ${PORT} and ${BACKEND_URL} into this template at start
+# nginx fills ${PORT}, ${BACKEND_URL} and ${NGINX_LOCAL_RESOLVERS} into this template at start
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# Sets NGINX_LOCAL_RESOLVERS from /etc/resolv.conf, for the template's resolver line
+ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
 ENV PORT=8080
 EXPOSE 8080

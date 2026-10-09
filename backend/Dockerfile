@@ -11,10 +11,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install dependencies first for better layer caching
+# Install dependencies first for better layer caching. No BuildKit cache mount: Railway only accepts one
+# whose id names a single service, and backend and worker build from this same file
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project
+RUN uv sync --frozen --no-install-project --no-cache
 
 COPY . .
 
