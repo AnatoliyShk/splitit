@@ -48,6 +48,22 @@ export default function Home() {
             description and tags for you, creates the occasion with a preview picture and saves your spot. Only you
             and your connections will see it.
           </PromoCard>
+
+          <PromoCard
+            icon={
+              <>
+                <rect x="4" y="3" width="16" height="18" rx="2" />
+                <path d="M8 8h8M8 12h8M8 16h5" />
+              </>
+            }
+            title="Add an occasion from a template"
+            to="/profile#templates-title"
+            actionLabel="Pick a template"
+            primary
+          >
+            Don't want to paste a link? Pick a ready-made occasion template on your profile, choose when it starts
+            and Splitit creates the occasion with its description, tags and pictures and saves your spot.
+          </PromoCard>
         </div>
       </section>
     </>
