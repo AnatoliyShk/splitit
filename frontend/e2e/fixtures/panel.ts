@@ -40,6 +40,7 @@ export function panelUser(overrides: Partial<PanelUser> = {}): PanelUser {
     is_staff: false,
     is_superuser: false,
     date_joined: '2025-03-15T09:00:00Z',
+    gender: 'undisclosed',
     last_login: null,
     occasions_count: 0,
     ...overrides,

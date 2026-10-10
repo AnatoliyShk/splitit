@@ -1,5 +1,6 @@
 import type { OccasionCore, UserOccasion } from './occasions'
 import type { Tag } from './tags'
+import type { Gender } from './users'
 
 // Shapes of the staff-only admin API (/api/admin/); each mirrors a serializer in apps/panel
 
@@ -7,6 +8,7 @@ export type PanelUser = {
   id: number
   email: string
   name: string
+  gender: Gender
   is_active: boolean
   is_staff: boolean
   is_superuser: boolean

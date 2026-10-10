@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { CheckboxFieldProps, FieldProps, TextAreaFieldProps } from '../types/ui/field'
+import type { CheckboxFieldProps, FieldProps, SelectFieldProps, TextAreaFieldProps } from '../types/ui/field'
 
 // Label, hint and errors around a control, wired up with aria-describedby
 function FieldFrame({
@@ -88,6 +88,34 @@ export function TextAreaField({ id, label, hint, errors, ...textarea }: TextArea
           aria-describedby={describedBy}
           {...textarea}
         />
+      )}
+    />
+  )
+}
+
+/** A drop-down of fixed choices, styled like Field. */
+export function SelectField({ id, label, hint, errors, options, ...select }: SelectFieldProps) {
+  return (
+    <FieldFrame
+      id={id}
+      label={label}
+      hint={hint}
+      errors={errors}
+      control={(describedBy, hasErrors) => (
+        <select
+          id={id}
+          name={id}
+          className="input"
+          aria-invalid={hasErrors || undefined}
+          aria-describedby={describedBy}
+          {...select}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       )}
     />
   )

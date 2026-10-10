@@ -43,6 +43,14 @@ class AuthApiTests(APITestCase):
         self.assertIsNotNone(response.json()["user"]["adult_confirmed_at"])
         self.assertIsNotNone(User.objects.get().adult_confirmed_at)
 
+    def test_register_takes_a_gender_and_defaults_to_undisclosed(self):
+        details = {"email": "ana@example.com", "name": "Ana", "password": PASSWORD, "is_adult": True}
+        response = self.csrf_post("/api/auth/register/", {**details, "gender": "woman"})
+        self.assertEqual(response.json()["user"]["gender"], "woman")
+        User.objects.all().delete()
+        response = self.csrf_post("/api/auth/register/", details)
+        self.assertEqual(response.json()["user"]["gender"], "undisclosed")
+
     def test_register_refuses_without_the_18_plus_declaration(self):
         details = {"email": "ana@example.com", "name": "Ana", "password": PASSWORD}
         refusals = (

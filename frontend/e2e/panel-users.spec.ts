@@ -58,7 +58,7 @@ test.describe('panel users', () => {
     const ann = row(page, 'ann@example.com')
     await expect(ann).toContainText('Ann Lee')
     await expect(ann).toContainText('Mar 15, 2025')
-    await expect(ann.getByRole('cell').nth(2)).toHaveText('3')
+    await expect(ann.getByRole('cell').nth(3)).toHaveText('3')
   })
 
   test('shows access badges for each kind of user', async ({ page }) => {

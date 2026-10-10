@@ -14,6 +14,7 @@ class PanelUserSerializer(serializers.ModelSerializer):
             "id",
             "email",
             "name",
+            "gender",
             "is_active",
             "is_staff",
             "is_superuser",
@@ -21,7 +22,7 @@ class PanelUserSerializer(serializers.ModelSerializer):
             "last_login",
             "occasions_count",
         )
-        # Admins can only switch access flags; profile data stays the user's own
+        # Admins can switch access flags and set the gender; the rest of the profile stays the user's own
         read_only_fields = ("id", "email", "name", "is_superuser", "date_joined", "last_login")
 
 

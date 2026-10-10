@@ -60,7 +60,7 @@ test.describe('details form', () => {
     await page.getByRole('button', { name: 'Save changes' }).click()
 
     await expect(page.getByRole('status')).toHaveText('Saved')
-    expect(mock.bodies[ME]).toEqual({ name: 'Ada King' })
+    expect(mock.bodies[ME]).toEqual({ name: 'Ada King', gender: 'undisclosed' })
     // The saved name is now the baseline, so there is nothing left to save
     await expect(page.getByLabel('Name')).toHaveValue('Ada King')
     await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled()

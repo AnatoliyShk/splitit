@@ -3,8 +3,9 @@ import { useEffect, useRef, useState, type RefObject, type SubmitEvent } from 'r
 import { Link, Navigate, useLocation } from 'react-router'
 import { apiPatch, apiPost, useFieldErrors, type FieldErrors } from '../api'
 import { useAuth } from '../auth'
-import { Field, FormAlert } from '../components/Field'
-import type { User } from '../types/api/users'
+import { Field, FormAlert, SelectField } from '../components/Field'
+import { GENDER_OPTIONS } from '../gender'
+import type { Gender, User } from '../types/api/users'
 
 // After a failed submit, move focus to the first invalid field so it's announced
 function useFocusFirstInvalid(formRef: RefObject<HTMLFormElement | null>, errors: FieldErrors) {
@@ -17,11 +18,13 @@ function DetailsForm({ user }: { user: User }) {
   const { setUser } = useAuth()
   const formRef = useRef<HTMLFormElement>(null)
   const [name, setName] = useState(user.name)
+  const [gender, setGender] = useState<Gender>(user.gender)
   const detailsMutation = useMutation({
-    mutationFn: () => apiPatch<{ user: User }>('/api/auth/me/', { name }),
+    mutationFn: () => apiPatch<{ user: User }>('/api/auth/me/', { name, gender }),
     onSuccess: (userResponse) => {
       setUser(userResponse.user)
       setName(userResponse.user.name)
+      setGender(userResponse.user.gender)
     },
   })
   const errors = useFieldErrors(detailsMutation.error)
@@ -50,6 +53,17 @@ function DetailsForm({ user }: { user: User }) {
           }}
           errors={errors.name}
         />
+        <SelectField
+          id="gender"
+          label="Gender"
+          options={GENDER_OPTIONS}
+          value={gender}
+          onChange={(event) => {
+            setGender(event.target.value as Gender)
+            if (detailsMutation.isSuccess) detailsMutation.reset()
+          }}
+          errors={errors.gender}
+        />
         <Field
           id="email"
           label="Email"
@@ -67,7 +81,7 @@ function DetailsForm({ user }: { user: User }) {
           <button
             className="btn btn-confirm"
             type="submit"
-            disabled={detailsMutation.isPending || name.trim() === user.name}
+            disabled={detailsMutation.isPending || (name.trim() === user.name && gender === user.gender)}
           >
             {detailsMutation.isPending ? 'Saving…' : 'Save changes'}
           </button>

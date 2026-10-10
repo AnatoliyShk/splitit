@@ -105,6 +105,13 @@ class UserManagementTests(PanelTestCase):
         self.assertTrue(self.member.is_staff)
         self.assertFalse(self.member.is_active)
 
+    def test_admin_can_set_gender(self):
+        response = self.client.patch(f"/api/admin/users/{self.member.pk}/", {"gender": "man"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["gender"], "man")
+        self.member.refresh_from_db()
+        self.assertEqual(self.member.gender, "man")
+
     def test_profile_fields_are_read_only(self):
         self.client.patch(f"/api/admin/users/{self.member.pk}/", {"email": "x@example.com"}, format="json")
         self.member.refresh_from_db()

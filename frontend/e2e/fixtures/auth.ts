@@ -5,6 +5,7 @@ export type FakeUser = {
   uuid: string
   email: string
   name: string
+  gender: 'man' | 'woman' | 'undisclosed'
   is_staff: boolean
   is_superuser: boolean
   date_joined: string
@@ -16,6 +17,7 @@ export const fakeUser: FakeUser = {
   uuid: '0191a2b3-c4d5-7e6f-8a9b-0c1d2e3f4a5b',
   email: 'ana@example.com',
   name: 'Ana Smith',
+  gender: 'undisclosed',
   is_staff: false,
   is_superuser: false,
   date_joined: '2026-01-01T10:00:00Z',

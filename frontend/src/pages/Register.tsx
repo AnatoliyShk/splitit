@@ -4,17 +4,20 @@ import { Link } from 'react-router'
 import { useFieldErrors } from '../api'
 import { useAuth } from '../auth'
 import { AuthCard } from '../components/AuthCard'
-import { CheckboxField, Field } from '../components/Field'
+import { CheckboxField, Field, SelectField } from '../components/Field'
+import { GENDER_OPTIONS } from '../gender'
+import type { Gender } from '../types/api/users'
 
 export default function Register() {
   const { register } = useAuth()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [gender, setGender] = useState<Gender>('undisclosed')
   // Starts unticked: the user has to make the statement themselves
   const [isAdult, setIsAdult] = useState(false)
   // On success AuthCard redirects, since the user is now logged in
-  const registerMutation = useMutation({ mutationFn: () => register(name, email, password, isAdult) })
+  const registerMutation = useMutation({ mutationFn: () => register(name, email, password, isAdult, gender) })
   const errors = useFieldErrors(registerMutation.error)
   // Stays on after success until the redirect
   const submitting = registerMutation.isPending || registerMutation.isSuccess
@@ -62,6 +65,14 @@ export default function Register() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           errors={errors.password}
+        />
+        <SelectField
+          id="gender"
+          label="Gender"
+          options={GENDER_OPTIONS}
+          value={gender}
+          onChange={(event) => setGender(event.target.value as Gender)}
+          errors={errors.gender}
         />
         <CheckboxField
           id="is_adult"

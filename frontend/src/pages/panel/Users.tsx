@@ -8,9 +8,11 @@ import { RowMenu } from '../../components/RowMenu'
 import { listQueryString, queryKeys } from '../../queryClient'
 import type { PanelUser } from '../../types/api/admin'
 import type { Page } from '../../types/api/pagination'
+import { GENDER_OPTIONS } from '../../gender'
+import type { Gender } from '../../types/api/users'
 import { formatDate, PAGE_SIZE, useDebounced } from './shared'
 
-type UserChanges = Partial<Pick<PanelUser, 'is_active' | 'is_staff'>>
+type UserChanges = Partial<Pick<PanelUser, 'is_active' | 'is_staff' | 'gender'>>
 
 export default function Users() {
   const { user: currentUser } = useAuth()
@@ -97,6 +99,7 @@ export default function Users() {
           <thead>
             <tr>
               <th scope="col">User</th>
+              <th scope="col">Gender</th>
               <th scope="col">Joined</th>
               <th scope="col">Occasions</th>
               <th scope="col">Access</th>
@@ -116,6 +119,23 @@ export default function Users() {
                   <td className="cell-stack" data-label="User">
                     <strong>{panelUser.name || '—'}</strong>
                     <small>{panelUser.email}</small>
+                  </td>
+                  <td data-label="Gender">
+                    <select
+                      className="input"
+                      aria-label={`Gender of ${panelUser.name || panelUser.email}`}
+                      value={panelUser.gender}
+                      disabled={locked || busy}
+                      onChange={(event) =>
+                        updateMutation.mutate({ panelUser, changes: { gender: event.target.value as Gender } })
+                      }
+                    >
+                      {GENDER_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td data-label="Joined">{formatDate(panelUser.date_joined)}</td>
                   <td data-label="Occasions">{panelUser.occasions_count}</td>
