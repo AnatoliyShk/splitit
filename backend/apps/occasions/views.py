@@ -316,13 +316,7 @@ class JoinOccasionView(APIView):
         try:
             join(occasion, request.user)
         except AlreadyGoing as already_going:
-            return Response(
-                {
-                    "detail": f"You're already going to {already_going.occasion.name}. "
-                    "You can join another occasion once it ends or is cancelled."
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
+            return already_going_response(already_going.occasion, "join")
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
