@@ -341,10 +341,13 @@ class TemplateOccasionView(APIView):
     """POST /api/occasion-templates/<id>/occasions/ {"start_datetime"}: the requester makes an occasion from a template.
 
     Same as any occasion a regular user makes (see create_occasion): created by them, who goes to it, visible only to
-    them and the people directly connected to them. 409 while they're going to another occasion.
+    them and the people directly connected to them. 409 while they're going to another occasion; throttled to
+    20/hour, since each one copies the template's image files.
     """
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "occasion_create"
 
     @extend_schema(
         summary="Create an occasion from a template",
@@ -430,8 +433,9 @@ class ImportOccasionView(APIView):
     The only way a regular user adds an occasion; made by them, it's visible only to them and the people directly
     connected to them.
 
-    The reply's tags are matched to existing ones ignoring case, and the missing ones created; the occasion is
-    created by the requester, who goes to it, with a link-preview card (preview.py) as its main image.
+    The reply's tags are matched to existing ones ignoring case and unknown ones dropped (tags are staff-made);
+    the occasion is created by the requester, who goes to it, with a link-preview card (preview.py) as its main
+    image.
     URL errors (including "no event found there") come back under `url`.
     """
 

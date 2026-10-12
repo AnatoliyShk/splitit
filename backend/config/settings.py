@@ -20,11 +20,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-%0vm5t^$ub2u-+2%dhhtz723n)^bw+v@j0f$)j+gd@)m)a6mdt')
+# Off unless asked for (.env sets DJANGO_DEBUG=1 locally), so a host missing the variable runs safe
+DEBUG = os.environ.get('DJANGO_DEBUG', '0') == '1'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', '1') == '1'
+# Only debug may fall back to the insecure key; anywhere else a missing key stops the app at start
+SECRET_KEY = (
+    os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-%0vm5t^$ub2u-+2%dhhtz723n)^bw+v@j0f$)j+gd@)m)a6mdt')
+    if DEBUG
+    else os.environ['DJANGO_SECRET_KEY']
+)
 
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
@@ -129,10 +133,15 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
     ],
+    # shortcut: assumes the host's edge plus the frontend's nginx sit in front, so the client is the 2nd-last
+    # X-Forwarded-For entry; change it if the backend is ever reached with a different number of proxies
+    'NUM_PROXIES': 2,
     'DEFAULT_THROTTLE_RATES': {
         'auth': '10/min',
         # Each import is a Gemini call that reads a web page
         'occasion_import': '10/hour',
+        # Each occasion made from a template copies its image files and queues jobs
+        'occasion_create': '20/hour',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }

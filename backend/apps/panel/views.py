@@ -157,12 +157,15 @@ TEST_OCCASION_DESCRIPTION = (
     "delete it when you're done."
 )
 TEST_USER_NAMES = ["Alex", "Sam", "Jordan", "Taylor", "Morgan", "Riley", "Casey", "Jamie"]
+# Test accounts are told apart by their email, so test occasions never take real members
+TEST_EMAIL_PREFIX = "test-"
+TEST_EMAIL_DOMAIN = "@example.com"
 
 
 def create_test_user():
     """A made-up member with a random name and gender. It has no password, so it can't log in."""
     return User.objects.create_user(
-        f"test-{uuid.uuid4().hex[:8]}@example.com",
+        f"{TEST_EMAIL_PREFIX}{uuid.uuid4().hex[:8]}{TEST_EMAIL_DOMAIN}",
         name=f"{random.choice(TEST_USER_NAMES)} (test)",
         gender=random.choice(list(Gender)),
         adult_confirmed_at=timezone.now(),
@@ -170,8 +173,11 @@ def create_test_user():
 
 
 def pick_test_attendees(count):
-    """`count` random non-staff users, creating test accounts when there aren't enough."""
-    users = list(User.objects.filter(is_staff=False, is_active=True).order_by("?")[:count])
+    """`count` random test accounts (never real members), creating more when there aren't enough."""
+    test_users = User.objects.filter(
+        email__startswith=TEST_EMAIL_PREFIX, email__endswith=TEST_EMAIL_DOMAIN, is_staff=False, is_active=True
+    )
+    users = list(test_users.order_by("?")[:count])
     users.extend(create_test_user() for _ in range(count - len(users)))
     return users
 

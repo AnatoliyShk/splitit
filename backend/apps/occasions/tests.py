@@ -639,7 +639,7 @@ class ImportOccasionTests(TestCase):
             )
         return response, gemini
 
-    def test_creates_the_occasion_reusing_and_creating_tags(self):
+    def test_creates_the_occasion_with_the_tags_that_exist(self):
         from apps.tags.models import Tag
 
         jazz_tag = Tag.objects.create(name="Jazz")
@@ -651,16 +651,18 @@ class ImportOccasionTests(TestCase):
         self.assertTrue(prompt.startswith(self.url))
         self.assertIn("Can you get summary of this event in format:", prompt)
         self.assertIn(f"today is {timezone.localdate().isoformat()}", prompt)
+        # Gemini is offered the existing tags to pick from
+        self.assertIn('["Jazz"]', prompt)
         self.assertEqual(gemini.call_args.kwargs, {"read_urls": True, "search_web": True})
 
         occasion_data = response.json()
         self.assertEqual(occasion_data["name"], "Jazz night")
         self.assertEqual(occasion_data["description"], "A trio on the rooftop.")
-        self.assertEqual(sorted(occasion_data["tags"]), ["Jazz", "Live music"])
+        self.assertEqual(occasion_data["tags"], ["Jazz"])
         self.assertTrue(occasion_data["is_going"])
         self.assertEqual(occasion_data["created_by"]["name"], "Ann")
-        # "jazz" matched the existing tag; "Live music" was new
-        self.assertEqual(Tag.objects.count(), 2)
+        # "jazz" matched the existing tag; "Live music" doesn't exist, so it was dropped, not created
+        self.assertEqual(Tag.objects.count(), 1)
         self.assertIn(jazz_tag, Occasion.objects.get(id=occasion_data["id"]).tags.all())
 
         # Its main image is a link-preview card: title, description, the link's domain, Gemini's theme
@@ -757,11 +759,14 @@ class ImportOccasionTests(TestCase):
         gemini.assert_not_called()
 
 
+# The create throttle counts in the cache; keep it out of the dev Redis and reset per test
+@override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
 class OccasionTemplateApiTests(TestCase):
     def setUp(self):
         from apps.tags.models import Tag
         from apps.users.models import User
 
+        cache.clear()
         self.user = User.objects.create_user(
             "ann@example.com", "correct-horse-battery", name="Ann", adult_confirmed_at=timezone.now()
         )
@@ -843,10 +848,20 @@ class OccasionTemplateApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
+    def test_is_rate_limited(self):
+        # Refused starts count too, and a loop of create and cancel would otherwise copy images without end
+        for _ in range(20):
+            self.assertEqual(self.client.post(f"/api/occasion-templates/{self.template.pk}/occasions/", {}).status_code, 400)
+        self.assertEqual(self.create_occasion().status_code, 429)
 
+
+# The create throttle counts in the cache; keep it out of the dev Redis and reset per test
+@override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
 class OccasionTemplateImagesTests(TestCase):
     def setUp(self):
         import tempfile
+
+        cache.clear()
 
         from django.core.files.base import ContentFile
 

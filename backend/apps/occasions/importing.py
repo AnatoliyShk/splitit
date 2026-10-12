@@ -9,7 +9,8 @@ from urllib.parse import parse_qs, urlsplit
 
 from django.conf import settings
 from django.core.files.base import ContentFile
-from django.db import IntegrityError, transaction
+from django.db import transaction
+from django.db.models.functions import Lower
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
@@ -32,10 +33,11 @@ Title
 Start date
 End date
 Descriptions
-Tags (characteristics in 1-2 different tags)
+Tags (1-2 from the list below)
 Give response in JSON
 
-Use exactly these keys: "title", "start_date", "end_date", "description", "tags" (a list of 1-2 short tag names)
+Use exactly these keys: "title", "start_date", "end_date", "description", "tags" (a list of 1-2 names copied exactly from
+this list: {tag_names}; [] when none of them fits)
 and "icon": the picture that suits the event best, one of "sakura" (flowers, Japan, spring, calm), "star" (shows,
 games, fandom, nightlife) or "wave" (sea, outdoors, sport, travel).
 Give dates in ISO 8601 with the event's UTC offset, like 2026-10-12T19:00:00+03:00, and "end_date": null when the
@@ -99,13 +101,14 @@ def fetch_event(url):
 
 
 def save_imported_occasion(user, occasion_fields, tag_names, image_svg):
-    """Upsert the tags, create the occasion (made by `user`, who goes to it) and attach its preview card.
+    """Create the occasion (made by `user`, who goes to it) with the existing tags among `tag_names`, and attach
+    its preview card.
 
-    One transaction, so tags made for an occasion that then fails to save are rolled back with it.
+    One transaction, so an occasion that fails to save leaves nothing behind.
     Raises AlreadyGoing (and saves nothing) when `user` went to another occasion meanwhile.
     """
     with transaction.atomic():
-        tags = upsert_tags(tag_names)
+        tags = known_tags(tag_names)
         occasion = create_occasion(user, tags, **occasion_fields)
         attach_preview_image(occasion, image_svg)
     return occasion
@@ -123,7 +126,11 @@ def read_event(url):
     card for the occasion's main image) in place of `theme`. Raises EventNotRead."""
     url_start = start_from_url(url)
     start_hint = START_GIVEN_HINT.format(start=url_start.isoformat()) if url_start else ""
-    prompt = EVENT_PROMPT.format(url=url, today=timezone.localdate().isoformat(), start_hint=start_hint)
+    # Tags are staff-made; Gemini picks from them, so a page can't add its own wording to everyone's filters
+    tag_names = json.dumps(list(Tag.objects.order_by("name").values_list("name", flat=True)))
+    prompt = EVENT_PROMPT.format(
+        url=url, today=timezone.localdate().isoformat(), start_hint=start_hint, tag_names=tag_names
+    )
     event = parse_event_summary(generate_text(prompt, read_urls=True, search_web=True), start=url_start)
     theme = event.pop("theme")
     event["image_svg"] = build_preview_svg(event["name"], event["description"], link_domain(url), theme).encode()
@@ -201,17 +208,8 @@ def parse_moment(value):
     return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 
-def upsert_tags(tag_names):
-    """The tags with these names, matched ignoring case, creating the ones that don't exist yet."""
-    tags = []
-    for tag_name in tag_names:
-        tag = Tag.objects.filter(name__iexact=tag_name).first()
-        if tag is None:
-            try:
-                with transaction.atomic():
-                    tag = Tag.objects.create(name=tag_name)
-            except IntegrityError:
-                # Someone created it in the meantime (names are unique ignoring case)
-                tag = Tag.objects.get(name__iexact=tag_name)
-        tags.append(tag)
-    return tags
+def known_tags(tag_names):
+    """The existing tags with these names, matched ignoring case; names no tag has are dropped."""
+    return list(
+        Tag.objects.annotate(lower_name=Lower("name")).filter(lower_name__in=[name.lower() for name in tag_names])
+    )

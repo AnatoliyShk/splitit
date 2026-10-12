@@ -306,6 +306,9 @@ class OccasionManagementTests(PanelTestCase):
         self.assertEqual(response.json()["description"], "")
 
     def test_create_test_occasion_with_existing_users(self):
+        test_user = User.objects.create_user(
+            "test-0a1b2c3d@example.com", name="Alex (test)", adult_confirmed_at=timezone.now()
+        )
         response = self.client.post("/api/admin/occasions/test/")
         self.assertEqual(response.status_code, 201)
         # Placeholder text, longer than a card shows
@@ -315,17 +318,19 @@ class OccasionManagementTests(PanelTestCase):
         self.assertGreater(occasion.end_datetime, occasion.start_datetime)
         attendees = list(occasion.users.all())
         self.assertTrue(1 <= len(attendees) <= 3)
-        # Staff are never picked; missing attendees are made up as test accounts
+        # Only test accounts are picked, never staff or real members; missing attendees are made up
         self.assertNotIn(self.admin, attendees)
-        self.assertIn(self.member, attendees)
+        self.assertNotIn(self.member, attendees)
+        self.assertIn(test_user, attendees)
 
     def test_create_test_occasion_creates_users_when_there_are_none(self):
-        self.member.delete()
         response = self.client.post("/api/admin/occasions/test/")
         attendees = response.json()["attendees"]
         self.assertTrue(1 <= len(attendees) <= 3)
         created = User.objects.filter(email__startswith="test-")
         self.assertEqual(created.count(), len(attendees))
+        # The real member is left out of it
+        self.assertFalse(self.member.attendances.exists())
         self.assertFalse(any(user.has_usable_password() for user in created))
 
     def test_create_test_occasion_is_staff_only(self):

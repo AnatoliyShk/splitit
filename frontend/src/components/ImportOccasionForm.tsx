@@ -22,10 +22,9 @@ export function ImportOccasionForm({ user }: ImportOccasionFormProps) {
     mutationFn: () => apiPost<OccasionDetail>('/api/occasions/import/', { url: url.trim() }),
     onSuccess: (importedOccasion) => {
       queryClient.setQueryData(queryKeys.occasion(String(importedOccasion.id)), importedOccasion)
-      // The user now goes to it, which pauses Explore and adds it to their profile; new tags may exist too
+      // The user now goes to it, which pauses Explore and adds it to their profile
       queryClient.invalidateQueries({ queryKey: queryKeys.explore })
       queryClient.invalidateQueries({ queryKey: queryKeys.userOccasions(user.uuid) })
-      queryClient.invalidateQueries({ queryKey: queryKeys.tags })
       navigate(`/occasions/${importedOccasion.id}`)
     },
   })

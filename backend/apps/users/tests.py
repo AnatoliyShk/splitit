@@ -113,6 +113,27 @@ class AuthApiTests(APITestCase):
         response = self.csrf_post("/api/auth/login/", {"email": "ana@example.com", "password": "nope"})
         self.assertEqual(response.status_code, 429)
 
+    def test_a_made_up_forwarded_address_does_not_reset_the_limit(self):
+        # Behind the edge and nginx the client is the second-last entry; a caller can only add entries in front
+        for attempt in range(10):
+            self.client.get("/api/auth/csrf/")
+            token = self.client.cookies["csrftoken"].value
+            self.client.post(
+                "/api/auth/login/",
+                {"email": "ana@example.com", "password": "nope"},
+                format="json",
+                HTTP_X_CSRFTOKEN=token,
+                HTTP_X_FORWARDED_FOR=f"10.0.0.{attempt}, 203.0.113.7, 10.1.1.1",
+            )
+        response = self.client.post(
+            "/api/auth/login/",
+            {"email": "ana@example.com", "password": "nope"},
+            format="json",
+            HTTP_X_CSRFTOKEN=self.client.cookies["csrftoken"].value,
+            HTTP_X_FORWARDED_FOR="10.0.0.99, 203.0.113.7, 10.1.1.1",
+        )
+        self.assertEqual(response.status_code, 429)
+
 
 class AdultConfirmationTests(APITestCase):
     """Accounts made before sign-up asked for the 18+ declaration: blocked from the API until they make it."""
