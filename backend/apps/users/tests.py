@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest import mock
 
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
@@ -9,6 +10,7 @@ from rest_framework.test import APIClient, APITestCase
 from apps.tags.models import Tag
 
 from .models import User, FilterPreference, FilterPreferenceWeekday, Weekday
+from .serializers import RegisterSerializer
 
 PASSWORD = "correct-horse-battery"
 
@@ -73,6 +75,18 @@ class AuthApiTests(APITestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("email", response.json())
+
+    def test_register_losing_the_race_for_an_email_is_a_400(self):
+        User.objects.create_user("ana@example.com", PASSWORD, name="Ana")
+        # As if the exists-check ran before the other sign-up committed: the unique column has to stop this one
+        with mock.patch.object(RegisterSerializer, "validate_email", lambda self, value: value):
+            response = self.csrf_post(
+                "/api/auth/register/",
+                {"email": "ana@example.com", "name": "Ana", "password": PASSWORD, "is_adult": True},
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"email": ["An account with this email already exists."]})
+        self.assertEqual(User.objects.filter(email="ana@example.com").count(), 1)
 
     def test_register_rejects_weak_password(self):
         response = self.csrf_post(

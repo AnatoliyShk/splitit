@@ -1,7 +1,7 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -60,6 +60,7 @@ class PasswordChangeSerializer(serializers.Serializer):
         return value
 
 
+EMAIL_TAKEN_MESSAGE = "An account with this email already exists."
 ADULTS_ONLY_MESSAGE = "Splitit is only for people aged 18 or older."
 CONFIRM_AGE_MESSAGE = "Confirm that you're 18 or older."
 
@@ -87,7 +88,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         email = User.objects.normalize_email(value)
         if User.objects.filter(email=email).exists():
-            raise serializers.ValidationError("An account with this email already exists.")
+            raise serializers.ValidationError(EMAIL_TAKEN_MESSAGE)
         return email
 
     def validate(self, attrs):
@@ -100,7 +101,13 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop("is_adult")
-        return User.objects.create_user(adult_confirmed_at=timezone.now(), **validated_data)
+        try:
+            # A savepoint, so the failed insert doesn't poison an enclosing transaction
+            with transaction.atomic():
+                return User.objects.create_user(adult_confirmed_at=timezone.now(), **validated_data)
+        except IntegrityError:
+            # Two sign-ups with one email both passed validate_email(); the unique column stopped the second
+            raise serializers.ValidationError({"email": [EMAIL_TAKEN_MESSAGE]})
 
 
 class AgeDeclarationSerializer(serializers.Serializer):

@@ -40,6 +40,8 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
     # The host's proxy terminates TLS and forwards plain HTTP
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    # shortcut: 30 days and no subdomains or preload, since browsers hold on to it; raise it once the domain is final
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
 
 
 # Application definition
