@@ -37,12 +37,6 @@ class PanelPagination(PageNumberPagination):
     page_size = 20
 
 
-def upcoming_occasions():
-    """Occasions that haven't happened yet or are still running (one with no end is over once it starts)."""
-    now = timezone.now()
-    return Occasion.objects.filter(Q(start_datetime__gte=now) | Q(end_datetime__gt=now), cancelled_at=None)
-
-
 StatsSerializer = inline_serializer(
     "PanelStats",
     {
@@ -85,7 +79,7 @@ class StatsView(APIView):
             staff=Count("id", filter=Q(is_staff=True)),
             new_this_week=Count("id", filter=Q(date_joined__gte=week_ago)),
         )
-        upcoming = upcoming_occasions()
+        upcoming = Occasion.objects.upcoming()
         next_occasions = upcoming.annotate(attendees_count=Count("users")).order_by("start_datetime")[:5]
         return Response(
             {

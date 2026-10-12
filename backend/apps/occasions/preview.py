@@ -1,6 +1,6 @@
 """The main image of an occasion added from a link: a 1200x630 link-preview card, as SVG.
 
-Ported from frontend/og-preview.js. The title and a two-line subtitle sit on the left with an accent bar above,
+The title and a two-line subtitle sit on the left with an accent bar above,
 the link's domain at the bottom, and a large themed icon on a soft blob on the right. Every piece of text is
 escaped, so the page's (or the model's) words can't add markup.
 """

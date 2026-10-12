@@ -49,8 +49,4 @@ def apply_occasion(occasion_id):
 
 
 def unapplied_ended_occasions():
-    now = timezone.now()
-    ended = Occasion.objects.filter(end_datetime__lte=now) | Occasion.objects.filter(
-        end_datetime__isnull=True, start_datetime__lte=now
-    )
-    return ended.filter(connections_applied_at__isnull=True, cancelled_at__isnull=True)
+    return Occasion.objects.finished().filter(connections_applied_at__isnull=True, cancelled_at__isnull=True)

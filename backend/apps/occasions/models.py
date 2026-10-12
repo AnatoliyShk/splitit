@@ -251,7 +251,3 @@ class OccasionImage(models.Model):
 
     def __str__(self):
         return f"{self.occasion} #{self.order}"
-
-    @property
-    def is_main(self):
-        return self.order == MAIN_IMAGE_ORDER
