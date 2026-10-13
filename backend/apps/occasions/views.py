@@ -1,9 +1,11 @@
-from datetime import UTC
+from datetime import UTC, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.db.models import Count, Exists, OuterRef, Prefetch, Q
+from django.db.models.functions import ExtractIsoWeekDay
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema, extend_schema_field, inline_serializer
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_field, inline_serializer
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -129,6 +131,11 @@ class ImportedOccasionSerializer(serializers.ModelSerializer):
         end = attrs.get("end_datetime")
         if end and end <= attrs["start_datetime"]:
             raise serializers.ValidationError({"end_datetime": "The end must be after the start."})
+        start = attrs["start_datetime"]
+        if end is None and start <= timezone.now():
+            # Started earlier today with no end: without one it would count as over already, so it runs to midnight
+            start_day = start.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+            attrs["end_datetime"] = start_day + timedelta(days=1)
         return attrs
 
 
@@ -229,9 +236,18 @@ def with_known_attendees(occasions, user):
     return occasions.prefetch_related(Prefetch("users", queryset=known, to_attr="known_attendees"))
 
 
-def matching_filter_preference(occasions, user):
+def viewer_time_zone(request):
+    """The `tz` query parameter (an IANA name like Europe/Sofia) as a time zone; UTC when it's missing or unknown."""
+    try:
+        return ZoneInfo(request.query_params.get("tz") or "UTC")
+    except (ZoneInfoNotFoundError, ValueError):
+        return UTC
+
+
+def matching_filter_preference(occasions, user, time_zone):
     """Narrow occasions to the user's saved Explore filters: any of their tags, starting on one of their weekdays.
 
+    Weekdays are read in `time_zone`, the one the viewer's cards show times in.
     An empty list doesn't filter, and neither does having nothing saved or turning the filters off.
     """
     filter_preference = FilterPreference.objects.filter(user=user).first()
@@ -244,8 +260,9 @@ def matching_filter_preference(occasions, user):
         tagged = Tag.occasions.through.objects.filter(occasion=OuterRef("pk"), tag_id__in=tag_ids)
         occasions = occasions.filter(Exists(tagged))
     if weekdays:
-        # In the server's TIME_ZONE (UTC)
-        occasions = occasions.filter(start_datetime__iso_week_day__in=weekdays)
+        occasions = occasions.annotate(
+            start_weekday=ExtractIsoWeekDay("start_datetime", tzinfo=time_zone)
+        ).filter(start_weekday__in=weekdays)
     return occasions
 
 
@@ -275,7 +292,13 @@ class ExploreOccasionsView(APIView):
     permission_classes = [IsAuthenticated]
     limit = 50
 
-    @extend_schema(summary="Your active occasion, or upcoming ones to join", responses=ExploreResponseSerializer)
+    @extend_schema(
+        summary="Your active occasion, or upcoming ones to join",
+        parameters=[
+            OpenApiParameter("tz", str, description="Your IANA time zone, for the weekday filter (default UTC)")
+        ],
+        responses=ExploreResponseSerializer,
+    )
     def get(self, request):
         def details(occasions):
             return with_known_attendees(with_details(occasions), request.user)
@@ -284,7 +307,9 @@ class ExploreOccasionsView(APIView):
         occasions = []
         if active_occasion is None:
             upcoming_occasions = matching_filter_preference(
-                Occasion.objects.upcoming().visible_to(request.user).exclude(users=request.user), request.user
+                Occasion.objects.upcoming().visible_to(request.user).exclude(users=request.user),
+                request.user,
+                viewer_time_zone(request),
             )
             occasions = details(upcoming_occasions).order_by("start_datetime", "id")[: self.limit]
         return Response(

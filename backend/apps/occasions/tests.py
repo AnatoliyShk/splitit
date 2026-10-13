@@ -9,7 +9,7 @@ from django.utils import timezone
 from pgvector.django import CosineDistance
 
 from .models import EMBEDDING_DIMENSIONS, Occasion, OccasionTemplate, OccasionUser
-from .services import deactivate_finished
+from .services import active_occasions, deactivate_finished
 
 
 def one_hot(axis):
@@ -168,6 +168,21 @@ class ExploreApiTests(TestCase):
     def test_saved_weekdays_keep_occasions_starting_on_them(self):
         self.save_filters(weekdays=[self.sooner.start_datetime.isoweekday()])
         self.assertEqual(self.explore_names(), ["Sooner"])
+
+    def test_saved_weekdays_are_read_in_the_viewers_time_zone(self):
+        from zoneinfo import ZoneInfo
+
+        Occasion.objects.all().delete()
+        # Saturday 01:00 in Sofia is still Friday in UTC
+        Occasion.objects.create(name="Late gig", start_datetime=datetime(2099, 1, 2, 23, 0, tzinfo=UTC))
+        sofia_weekday = datetime(2099, 1, 2, 23, 0, tzinfo=UTC).astimezone(ZoneInfo("Europe/Sofia")).isoweekday()
+        self.save_filters(weekdays=[sofia_weekday])
+        explore_in_sofia = self.client.get("/api/occasions/explore/", {"tz": "Europe/Sofia"}).json()
+        self.assertEqual([occasion["name"] for occasion in explore_in_sofia["occasions"]], ["Late gig"])
+        # Without a zone (or with an unknown one) the day is read in UTC
+        self.assertEqual(self.explore_names(), [])
+        explore_unknown_zone = self.client.get("/api/occasions/explore/", {"tz": "Mars/Base"}).json()
+        self.assertEqual(explore_unknown_zone["occasions"], [])
 
     def test_tags_and_weekdays_must_both_match(self):
         from apps.tags.models import Tag
@@ -734,7 +749,11 @@ class ImportOccasionTests(TestCase):
         today_midnight = timezone.now().astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         response, _ = self.post_import(self.reply(start_date=today_midnight.isoformat(), end_date=None))
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(Occasion.objects.get().start_datetime, today_midnight)
+        occasion = Occasion.objects.get()
+        self.assertEqual(occasion.start_datetime, today_midnight)
+        # Without an end it would already count as over; it runs to midnight instead, and Ann is going
+        self.assertEqual(occasion.end_datetime, today_midnight + timedelta(days=1))
+        self.assertEqual(list(active_occasions(self.user)), [occasion])
 
     def test_refuses_a_past_event_and_creates_no_tags(self):
         from apps.tags.models import Tag

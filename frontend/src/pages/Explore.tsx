@@ -10,6 +10,7 @@ import { OccasionCard } from '../components/OccasionCard'
 import { Spinner } from '../components/Spinner'
 import { filtersApplied, useFilterPreference } from '../filterPreference'
 import { queryKeys } from '../queryClient'
+import { timeZone } from './panel/shared'
 import type { ExploreData, ExploreOccasion } from '../types/api/occasions'
 
 export default function Explore() {
@@ -24,7 +25,8 @@ export default function Explore() {
   const exploreQuery = useQuery({
     queryKey: queryKeys.explore,
     // Already sorted soonest first, without occasions the user is going to
-    queryFn: () => apiGet<ExploreData>('/api/occasions/explore/'),
+    // The time zone the cards show times in, so the weekday filter reads days the same way
+    queryFn: () => apiGet<ExploreData>(`/api/occasions/explore/?${new URLSearchParams({ tz: timeZone })}`),
     enabled: Boolean(user),
     // Occasions can be cancelled or end while the page is open: refresh whenever the user comes back to it
     refetchOnWindowFocus: true,

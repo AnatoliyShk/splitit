@@ -66,7 +66,7 @@ test.describe('Login success', () => {
   })
 
   test('returns to the page that required login', async ({ page }) => {
-    await page.route('**/api/occasions/explore/', (route) => json(route, 200, []))
+    await page.route('**/api/occasions/explore/**', (route) => json(route, 200, []))
     await page.route('**/api/auth/login/', (route) => json(route, 200, { user: fakeUser }))
     await page.goto('/explore')
     await expect(page).toHaveURL(/\/login$/)
