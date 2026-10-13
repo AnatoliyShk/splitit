@@ -755,6 +755,16 @@ class ImportOccasionTests(TestCase):
         self.assertEqual(occasion.end_datetime, today_midnight + timedelta(days=1))
         self.assertEqual(list(active_occasions(self.user)), [occasion])
 
+    def test_refuses_an_event_that_already_ended_today(self):
+        now = timezone.now().replace(microsecond=0)
+        reply = self.reply(
+            start_date=(now - timedelta(minutes=2)).isoformat(), end_date=(now - timedelta(minutes=1)).isoformat()
+        )
+        response, _ = self.post_import(reply)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("This event is already over.", response.json()["url"][0])
+        self.assertFalse(Occasion.objects.exists())
+
     def test_refuses_a_past_event_and_creates_no_tags(self):
         from apps.tags.models import Tag
 

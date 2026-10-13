@@ -136,6 +136,9 @@ class ImportedOccasionSerializer(serializers.ModelSerializer):
             # Started earlier today with no end: without one it would count as over already, so it runs to midnight
             start_day = start.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
             attrs["end_datetime"] = start_day + timedelta(days=1)
+        elif end is not None and end <= timezone.now():
+            # Ended earlier today: it would be saved already over
+            raise serializers.ValidationError({"end_datetime": "This event is already over."})
         return attrs
 
 
