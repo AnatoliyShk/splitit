@@ -512,6 +512,13 @@ class OccasionImageTests(PanelTestCase):
             self.assertIn("order", response.json())
         self.assertEqual(self.stored_files(), [])
 
+    def test_the_saved_extension_comes_from_the_image_not_its_name(self):
+        # Django's extension check allows .pdf; a PNG must still be saved (and served) as .png
+        response = self.upload(0, image_file(name="photo.pdf"))
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.json()["images"][0]["url"].endswith(".png"))
+        self.assertTrue(self.stored_files()[0].endswith(".png"))
+
     def test_rejects_files_that_are_not_web_images(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
 

@@ -67,6 +67,9 @@ class OccasionImageUploadSerializer(serializers.Serializer):
         # Pillow has already opened the file to check it's an image; this narrows it to web formats
         if getattr(getattr(value, "image", None), "format", None) not in IMAGE_FORMATS:
             raise serializers.ValidationError("Use a JPEG, PNG or WebP image.")
+        # The saved extension comes from the real format, not the uploader's name: Django's image check still
+        # allows names like x.pdf or x.eps, which would be served under that type
+        value.name = f"image.{value.image.format.lower()}"
         return value
 
 
