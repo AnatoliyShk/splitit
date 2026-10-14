@@ -426,7 +426,7 @@ class CancelOccasionView(APIView):
         if occasion.ends_at <= timezone.now():
             return Response({"detail": "This occasion is already over."}, status=status.HTTP_400_BAD_REQUEST)
         occasion.cancelled_at = timezone.now()
-        occasion.save()
+        occasion.save(update_fields=["cancelled_at", "updated_at"])
         deactivate_finished()
         return Response(OccasionDetailSerializer(occasion_detail(occasion.id, request.user)).data)
 

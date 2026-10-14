@@ -8,8 +8,14 @@ from .embedding import embedded_models, embedding_updated
 from .tasks import embed_object
 
 
-def queue_embedding(sender, instance, created, **kwargs):
+# Fields whose text goes into an embedding (see embedding.py); a save that names others keeps the vector
+EMBEDDED_FIELDS = {"name", "description"}
+
+
+def queue_embedding(sender, instance, created, update_fields=None, **kwargs):
     if not settings.GEMINI_API_KEY:
+        return
+    if update_fields is not None and not EMBEDDED_FIELDS & set(update_fields):
         return
     if not created and instance.embedding is not None:
         # Drop the old vector so a stale one never outlives a rename

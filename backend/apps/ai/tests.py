@@ -141,6 +141,16 @@ class EmbedOnSaveTests(FakeGeminiMixin, TestCase):
         self.assertEqual(self.embedded_texts(), ["Jazz", "Live jazz"])
         self.assertIsNotNone(tag.embedding)
 
+    def test_saving_only_other_fields_keeps_the_vector(self):
+        occasion = self.save(Occasion(name="Gig", start_datetime=timezone.now()))
+        occasion.cancelled_at = timezone.now()
+        with self.captureOnCommitCallbacks(execute=True):
+            occasion.save(update_fields=["cancelled_at", "updated_at"])
+        occasion.refresh_from_db()
+        # Cancelling doesn't change the text, so it's neither cleared nor sent to Gemini again
+        self.assertIsNotNone(occasion.embedding)
+        self.assertEqual(self.embedded_texts(), ["Gig"])
+
     def test_failed_re_embed_leaves_no_stale_vector(self):
         tag = self.save(Tag(name="Jazz"))
         self.embed_content.side_effect = RuntimeError("Gemini is down")

@@ -261,8 +261,9 @@ class OccasionViewSet(ImageSlotsMixin, viewsets.ModelViewSet):
             # Not started yet: move it back so it ends now, keeping its length (an hour if it has none)
             occasion.start_datetime = now - (occasion.duration or timedelta(hours=1))
         occasion.end_datetime = now
-        # A full save, so post_save schedules the connections count (see apps.connections.signals)
-        occasion.save()
+        # post_save schedules the connections count (see apps.connections.signals); the text is unchanged, so
+        # naming the fields keeps its embedding
+        occasion.save(update_fields=["start_datetime", "end_datetime", "updated_at"])
         # Free its attendees now rather than when the worker gets to it
         deactivate_finished()
         return Response(self.get_serializer(occasion).data)
@@ -275,7 +276,7 @@ class OccasionViewSet(ImageSlotsMixin, viewsets.ModelViewSet):
         now = timezone.now()
         self.check_still_on(occasion, now)
         occasion.cancelled_at = now
-        occasion.save()
+        occasion.save(update_fields=["cancelled_at", "updated_at"])
         deactivate_finished()
         return Response(self.get_serializer(occasion).data)
 
@@ -291,10 +292,14 @@ class OccasionViewSet(ImageSlotsMixin, viewsets.ModelViewSet):
             raise ValidationError({"non_field_errors": ["This occasion isn't cancelled."]})
         if occasion.ends_at <= timezone.now():
             raise ValidationError({"non_field_errors": ["This occasion is already over."]})
-        occasion.cancelled_at = None
-        occasion.save()
-        busy = OccasionUser.objects.filter(is_active=True).exclude(occasion=occasion).values("user_id")
-        OccasionUser.objects.filter(occasion=occasion).exclude(user_id__in=busy).update(is_active=True)
+        with transaction.atomic():
+            attendee_ids = OccasionUser.objects.filter(occasion=occasion).values("user_id")
+            # Lock the attendees' rows as join() does, so none of them joins another occasion while this runs
+            list(User.objects.select_for_update().filter(pk__in=attendee_ids).values_list("pk", flat=True))
+            occasion.cancelled_at = None
+            occasion.save(update_fields=["cancelled_at", "updated_at"])
+            busy = OccasionUser.objects.filter(is_active=True).exclude(occasion=occasion).values("user_id")
+            OccasionUser.objects.filter(occasion=occasion).exclude(user_id__in=busy).update(is_active=True)
         return Response(self.get_serializer(occasion).data)
 
     @staticmethod

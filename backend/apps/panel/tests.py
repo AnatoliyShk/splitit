@@ -266,6 +266,29 @@ class OccasionManagementTests(PanelTestCase):
         self.assertEqual(response.json()["attendees"][0]["id"], self.member.pk)
         self.assertEqual(self.client.get("/api/admin/stats/").json()["occasions"]["upcoming"], 0)
 
+    def test_revert_cancel_brings_back_attendees_who_are_still_free(self):
+        busy_member = User.objects.create_user("busy@example.com", PASSWORD, name="Busy", adult_confirmed_at=timezone.now())
+        occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
+        occasion.users.add(self.member, busy_member)
+        self.client.post(f"/api/admin/occasions/{occasion.pk}/cancel/")
+        # While it was cancelled, one of them went to something else
+        Occasion.objects.create(name="Other", start_datetime=timezone.now() + timedelta(days=2)).users.add(busy_member)
+
+        response = self.client.post(f"/api/admin/occasions/{occasion.pk}/revert_cancel/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["cancelled_at"])
+        self.assertTrue(OccasionUser.objects.get(occasion=occasion, user=self.member).is_active)
+        # Never active in two occasions at once
+        self.assertFalse(OccasionUser.objects.get(occasion=occasion, user=busy_member).is_active)
+
+    def test_revert_cancel_needs_a_cancelled_occasion_that_is_still_ahead(self):
+        occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
+        self.assertEqual(self.client.post(f"/api/admin/occasions/{occasion.pk}/revert_cancel/").status_code, 400)
+        past = Occasion.objects.create(
+            name="Past", start_datetime=timezone.now() - timedelta(days=1), cancelled_at=timezone.now()
+        )
+        self.assertEqual(self.client.post(f"/api/admin/occasions/{past.pk}/revert_cancel/").status_code, 400)
+
     def test_cancel_or_finish_twice_is_rejected(self):
         occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
         self.client.post(f"/api/admin/occasions/{occasion.pk}/cancel/")
