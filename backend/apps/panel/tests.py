@@ -255,6 +255,26 @@ class OccasionManagementTests(PanelTestCase):
         self.client.post(f"/api/admin/occasions/{occasion.pk}/finish/")
         self.assertFalse(OccasionUser.objects.get(occasion=occasion, user=self.member).is_active)
 
+    def test_attendees_are_fixed_once_connections_are_counted(self):
+        newcomer = User.objects.create_user("new@example.com", PASSWORD, name="New", adult_confirmed_at=timezone.now())
+        occasion = Occasion.objects.create(
+            name="Past",
+            start_datetime=timezone.now() - timedelta(days=2),
+            end_datetime=timezone.now() - timedelta(days=1),
+            connections_applied_at=timezone.now(),
+        )
+        occasion.users.add(self.member)
+        url = f"/api/admin/occasions/{occasion.pk}/"
+
+        response = self.client.patch(url, {"users": [self.member.pk, newcomer.pk]}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("users", response.json())
+        self.assertEqual(list(occasion.users.all()), [self.member])
+        # The form sends the same attendees with every save; other edits still go through
+        response = self.client.patch(url, {"name": "Renamed", "users": [self.member.pk]}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["name"], "Renamed")
+
     def test_cancel_marks_it_cancelled_and_frees_its_attendees(self):
         occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
         occasion.users.add(self.member)

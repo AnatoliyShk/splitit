@@ -125,6 +125,16 @@ class PanelOccasionSerializer(serializers.ModelSerializer):
             end = getattr(self.instance, "end_datetime", None)
         if start and end and end <= start:
             raise serializers.ValidationError({"end_datetime": "The end must be after the start."})
+        # Connections are counted once, from the attendees at that moment; a later change would never reach them
+        if (
+            "users" in attrs
+            and self.instance is not None
+            and self.instance.connections_applied_at is not None
+            and {user.pk for user in attrs["users"]} != set(self.instance.users.values_list("pk", flat=True))
+        ):
+            raise serializers.ValidationError(
+                {"users": "Connections for this occasion were already counted, so its attendees can't change."}
+            )
         return attrs
 
 
