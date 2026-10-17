@@ -61,9 +61,8 @@ export default function Explore() {
 
   const exploreData = exploreQuery.data
   const occasions = exploreData?.occasions.filter((occasion) => !declinedIds.has(occasion.id))
-  const activeOccasion = exploreData?.active_occasion
   const filtered = filtersApplied(filterPreferenceQuery.data)
-  const occasion = activeOccasion ? undefined : occasions?.[0]
+  const occasion = occasions?.[0]
 
   function decline() {
     if (!occasion) return
@@ -85,8 +84,7 @@ export default function Explore() {
           <strong>One occasion at a time.</strong> Accepting an occasion saves your spot and pauses Explore. Once it
           ends or is cancelled, you can pick your next one.
         </InfoTip>
-        {/* Filters only apply to the deck, which is paused while an occasion is active */}
-        {exploreData && !activeOccasion && <ExploreFilters user={user} />}
+        {exploreData && <ExploreFilters user={user} />}
       </div>
 
       <FormAlert messages={errors.non_field_errors} />
@@ -101,7 +99,7 @@ export default function Explore() {
         </div>
       )}
 
-      {exploreData && !activeOccasion && !occasion && (
+      {exploreData && !occasion && (
         <div className="explore-card explore-done">
           {exploreData.occasions.length === 0 && filtered ? (
             <>
