@@ -275,6 +275,18 @@ class OccasionManagementTests(PanelTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["name"], "Renamed")
 
+    def test_cannot_add_someone_already_going_to_another_occasion(self):
+        Occasion.objects.create(name="Other", start_datetime=timezone.now() + timedelta(days=1)).users.add(self.member)
+        occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=2))
+        response = self.client.patch(f"/api/admin/occasions/{occasion.pk}/", {"users": [self.member.pk]}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Member", response.json()["users"][0])
+        self.assertFalse(occasion.users.exists())
+        # A past occasion doesn't take anyone's one active spot, so they can be added to it
+        past = Occasion.objects.create(name="Past", start_datetime=timezone.now() - timedelta(days=1))
+        response = self.client.patch(f"/api/admin/occasions/{past.pk}/", {"users": [self.member.pk]}, format="json")
+        self.assertEqual(response.status_code, 200)
+
     def test_cancel_marks_it_cancelled_and_frees_its_attendees(self):
         occasion = Occasion.objects.create(name="Soon", start_datetime=timezone.now() + timedelta(days=1))
         occasion.users.add(self.member)
@@ -365,6 +377,16 @@ class OccasionManagementTests(PanelTestCase):
         self.assertNotIn(self.admin, attendees)
         self.assertNotIn(self.member, attendees)
         self.assertIn(test_user, attendees)
+
+    def test_create_test_occasion_skips_test_users_going_elsewhere(self):
+        busy_test_user = User.objects.create_user(
+            "test-busy0001@example.com", name="Busy (test)", adult_confirmed_at=timezone.now()
+        )
+        Occasion.objects.create(name="Other", start_datetime=timezone.now() + timedelta(days=1)).users.add(
+            busy_test_user
+        )
+        response = self.client.post("/api/admin/occasions/test/")
+        self.assertNotIn(busy_test_user.pk, [attendee["id"] for attendee in response.json()["attendees"]])
 
     def test_create_test_occasion_creates_users_when_there_are_none(self):
         response = self.client.post("/api/admin/occasions/test/")

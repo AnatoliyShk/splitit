@@ -461,7 +461,12 @@ test.describe('cancelled occasions', () => {
       handlers: { [explore]: (route) => route.fulfill({ json: { active_occasion: null, occasions: deck } }) },
     })
     await page.goto('/explore')
+    // Declining asks for the deck again without the skipped occasion, so later ones can come in
+    const deckWithoutDeclined = page.waitForResponse(
+      (response) => new URL(response.url()).searchParams.get('exclude') === String(occasions[0].id),
+    )
     await page.getByRole('button', { name: 'Decline' }).click()
+    await deckWithoutDeclined
     await expect(page.getByRole('article', { name: 'Board Game Night' })).toBeVisible()
 
     // Board Game Night is cancelled while the tab is in the background

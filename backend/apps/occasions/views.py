@@ -247,6 +247,16 @@ def viewer_time_zone(request):
         return UTC
 
 
+# Most skipped occasions one Explore request leaves out; enough for a long session, short enough for a URL
+MAX_EXCLUDED = 1000
+
+
+def excluded_occasion_ids(request):
+    """The `exclude` query parameter: ids of occasions the viewer skipped, comma-separated. Bad entries are ignored."""
+    id_parts = request.query_params.get("exclude", "").split(",")[:MAX_EXCLUDED]
+    return [int(id_part) for id_part in id_parts if id_part.isascii() and id_part.isdigit()]
+
+
 def matching_filter_preference(occasions, user, time_zone):
     """Narrow occasions to the user's saved Explore filters: any of their tags, starting on one of their weekdays.
 
@@ -289,7 +299,8 @@ class ExploreOccasionsView(APIView):
 
     A user goes to one occasion at a time: while `active_occasion` is set, `occasions` is empty.
     Otherwise it lists upcoming occasions the requester may see (see OccasionQuerySet.visible_to) and isn't
-    going to yet that match their saved filters, soonest first.
+    going to yet that match their saved filters, soonest first, leaving out the ones they skipped (`exclude`), so
+    skipping past the first page brings the next occasions in.
     """
 
     permission_classes = [IsAuthenticated]
@@ -298,7 +309,8 @@ class ExploreOccasionsView(APIView):
     @extend_schema(
         summary="Your active occasion, or upcoming ones to join",
         parameters=[
-            OpenApiParameter("tz", str, description="Your IANA time zone, for the weekday filter (default UTC)")
+            OpenApiParameter("tz", str, description="Your IANA time zone, for the weekday filter (default UTC)"),
+            OpenApiParameter("exclude", str, description="Comma-separated ids of occasions you skipped"),
         ],
         responses=ExploreResponseSerializer,
     )
@@ -310,7 +322,10 @@ class ExploreOccasionsView(APIView):
         occasions = []
         if active_occasion is None:
             upcoming_occasions = matching_filter_preference(
-                Occasion.objects.upcoming().visible_to(request.user).exclude(users=request.user),
+                Occasion.objects.upcoming()
+                .visible_to(request.user)
+                .exclude(users=request.user)
+                .exclude(id__in=excluded_occasion_ids(request)),
                 request.user,
                 viewer_time_zone(request),
             )

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, Navigate, useLocation } from 'react-router'
 import { ApiError, apiGet, apiPost, useFieldErrors } from '../api'
@@ -22,12 +22,20 @@ export default function Explore() {
   const [statusMessage, setStatusMessage] = useState('')
 
   const filterPreferenceQuery = useFilterPreference(user)
+  const declinedList = [...declinedIds]
+  const exploreDeckKey = queryKeys.exploreDeck(declinedList)
   const exploreQuery = useQuery({
-    queryKey: queryKeys.explore,
-    // Already sorted soonest first, without occasions the user is going to
+    queryKey: exploreDeckKey,
+    // Already sorted soonest first, without occasions the user is going to or skipped, so skipping past the
+    // first page brings the next ones in.
     // The time zone the cards show times in, so the weekday filter reads days the same way
-    queryFn: () => apiGet<ExploreData>(`/api/occasions/explore/?${new URLSearchParams({ tz: timeZone })}`),
+    queryFn: () =>
+      apiGet<ExploreData>(
+        `/api/occasions/explore/?${new URLSearchParams({ tz: timeZone, exclude: declinedList.join(',') })}`,
+      ),
     enabled: Boolean(user),
+    // Keep the current deck on screen while the one without the skipped occasion loads
+    placeholderData: keepPreviousData,
     // Occasions can be cancelled or end while the page is open: refresh whenever the user comes back to it
     refetchOnWindowFocus: true,
   })
@@ -37,7 +45,7 @@ export default function Explore() {
     onSuccess: (_, occasion) => {
       setStatusMessage(`You're going to ${occasion.name}`)
       // Joining makes it the active occasion, which pauses the rest of Explore
-      queryClient.setQueryData<ExploreData>(queryKeys.explore, {
+      queryClient.setQueryData<ExploreData>(exploreDeckKey, {
         active_occasion: { ...occasion, attendees_count: occasion.attendees_count + 1 },
         occasions: [],
       })

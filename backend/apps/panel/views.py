@@ -19,7 +19,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.occasions.models import Occasion, OccasionImage, OccasionTemplate, OccasionTemplateImage, OccasionUser
-from apps.occasions.services import deactivate_finished
+from apps.occasions.services import busy_attendances, deactivate_finished
 from apps.tags.cache import LIST_TTL, list_cache_key
 from apps.tags.models import Tag
 from apps.users.models import Gender, User
@@ -167,10 +167,11 @@ def create_test_user():
 
 
 def pick_test_attendees(count):
-    """`count` random test accounts (never real members), creating more when there aren't enough."""
+    """`count` random test accounts (never real members) that aren't going to another occasion, creating more when
+    there aren't enough."""
     test_users = User.objects.filter(
         email__startswith=TEST_EMAIL_PREFIX, email__endswith=TEST_EMAIL_DOMAIN, is_staff=False, is_active=True
-    )
+    ).exclude(id__in=busy_attendances().values("user_id"))
     users = list(test_users.order_by("?")[:count])
     users.extend(create_test_user() for _ in range(count - len(users)))
     return users

@@ -134,6 +134,10 @@ class ExploreApiTests(TestCase):
     def join(self, occasion):
         return self.client.post(f"/api/occasions/{occasion.id}/join/")
 
+    def test_skipped_occasions_are_left_out_so_later_ones_come_in(self):
+        explore_data = self.client.get(f"/api/occasions/explore/?exclude={self.running.id},{self.sooner.id},x,").json()
+        self.assertEqual([occasion["name"] for occasion in explore_data["occasions"]], ["Later"])
+
     def test_lists_upcoming_occasions_im_not_going_to_soonest_first(self):
         explore_data = self.explore()
         self.assertIsNone(explore_data["active_occasion"])

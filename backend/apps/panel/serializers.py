@@ -1,6 +1,9 @@
 from rest_framework import serializers
 
+from django.utils import timezone
+
 from apps.occasions.models import MAX_IMAGE_ORDER, Occasion, OccasionImage, OccasionTemplate, OccasionTemplateImage
+from apps.occasions.services import busy_attendances
 from apps.tags.models import Tag
 from apps.users.models import User
 
@@ -125,16 +128,27 @@ class PanelOccasionSerializer(serializers.ModelSerializer):
             end = getattr(self.instance, "end_datetime", None)
         if start and end and end <= start:
             raise serializers.ValidationError({"end_datetime": "The end must be after the start."})
+        if "users" not in attrs:
+            return attrs
+        current_ids = set(self.instance.users.values_list("pk", flat=True)) if self.instance else set()
+        new_ids = {user.pk for user in attrs["users"]}
+        added_ids = new_ids - current_ids
         # Connections are counted once, from the attendees at that moment; a later change would never reach them
-        if (
-            "users" in attrs
-            and self.instance is not None
-            and self.instance.connections_applied_at is not None
-            and {user.pk for user in attrs["users"]} != set(self.instance.users.values_list("pk", flat=True))
-        ):
+        if self.instance is not None and self.instance.connections_applied_at is not None and new_ids != current_ids:
             raise serializers.ValidationError(
                 {"users": "Connections for this occasion were already counted, so its attendees can't change."}
             )
+        # One occasion at a time, as join() enforces; only matters while this one is still ahead or running
+        still_on = getattr(self.instance, "cancelled_at", None) is None and (end or start) >= timezone.now()
+        if added_ids and still_on:
+            busy = busy_attendances().filter(user_id__in=added_ids)
+            if self.instance is not None:
+                busy = busy.exclude(occasion=self.instance)
+            busy_names = sorted(set(busy.values_list("user__name", flat=True)))
+            if busy_names:
+                raise serializers.ValidationError(
+                    {"users": f"Already going to another occasion: {', '.join(busy_names)}."}
+                )
         return attrs
 
 

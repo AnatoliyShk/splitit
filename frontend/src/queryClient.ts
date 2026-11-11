@@ -25,7 +25,9 @@ export const queryKeys = {
   connectionsGraph: (userUuid: string) => ['users', userUuid, 'connections', 'graph'] as const,
   filterPreference: (userUuid: string) => ['users', userUuid, 'filter-preference'] as const,
   tags: ['tags'] as const,
+  // The prefix of every Explore deck; exploreDeck is one deck, without the occasions the user skipped
   explore: ['occasions', 'explore'] as const,
+  exploreDeck: (declinedIds: number[]) => ['occasions', 'explore', declinedIds] as const,
   occasionTemplates: ['occasion-templates'] as const,
   occasion: (occasionId: string) => ['occasions', occasionId] as const,
   panel: {

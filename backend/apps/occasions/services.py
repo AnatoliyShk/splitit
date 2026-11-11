@@ -29,6 +29,11 @@ def active_occasions(user):
     )
 
 
+def busy_attendances():
+    """Attendances that keep their user from going to another occasion: active, on an occasion still ahead or running."""
+    return OccasionUser.objects.filter(is_active=True, occasion__in=Occasion.objects.upcoming())
+
+
 def join(occasion, user):
     """Add `user` to `occasion`, unless they're already going to a different active one (raises AlreadyGoing)."""
     with transaction.atomic():
