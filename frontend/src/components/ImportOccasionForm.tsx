@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState, type SubmitEvent } from 'react'
+import { useRef, useState, type SubmitEvent } from 'react'
 import { useNavigate } from 'react-router'
-import { apiPost, useFieldErrors } from '../api'
+import { apiPost, useFieldErrors, useFocusFirstInvalid } from '../api'
 import { queryKeys } from '../queryClient'
 import type { OccasionDetail } from '../types/api/occasions'
 import type { ImportOccasionFormProps } from '../types/ui/importOccasionForm'
@@ -32,10 +32,7 @@ export function ImportOccasionForm({ user }: ImportOccasionFormProps) {
   // Stays disabled after success, while the page changes
   const submitting = importMutation.isPending || importMutation.isSuccess
 
-  // After a failed import, move focus to the link field when it's the problem, so the message is announced
-  useEffect(() => {
-    formRef.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus()
-  }, [errors])
+  useFocusFirstInvalid(formRef, errors)
 
   function onSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()

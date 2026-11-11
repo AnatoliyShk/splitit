@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { Navigate, NavLink, useLocation } from 'react-router'
+import { useFocusFirstInvalid } from '../api'
 import { useAuth } from '../auth'
 import type { AuthCardProps } from '../types/ui/authCard'
 import { FormAlert } from './Field'
@@ -18,10 +19,7 @@ export function AuthCard({ title, subtitle, errors, onSubmit, children }: AuthCa
   const fromPath = (state as { from?: string } | null)?.from
   const returnTo = fromPath?.startsWith('/') ? fromPath : '/'
 
-  // After a failed submit, move focus to the first invalid field so it's announced
-  useEffect(() => {
-    formRef.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus()
-  }, [errors])
+  useFocusFirstInvalid(formRef, errors)
 
   if (!loading && user) return <Navigate to={returnTo} replace />
 

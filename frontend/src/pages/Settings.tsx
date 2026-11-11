@@ -1,18 +1,11 @@
 import { useMutation } from '@tanstack/react-query'
-import { useEffect, useRef, useState, type RefObject, type SubmitEvent } from 'react'
+import { useRef, useState, type SubmitEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router'
-import { apiPatch, apiPost, useFieldErrors, type FieldErrors } from '../api'
+import { apiPatch, apiPost, useFieldErrors, useFocusFirstInvalid } from '../api'
 import { useAuth } from '../auth'
 import { Field, FormAlert, SelectField } from '../components/Field'
 import { GENDER_OPTIONS } from '../gender'
 import type { Gender, User } from '../types/api/users'
-
-// After a failed submit, move focus to the first invalid field so it's announced
-function useFocusFirstInvalid(formRef: RefObject<HTMLFormElement | null>, errors: FieldErrors) {
-  useEffect(() => {
-    formRef.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus()
-  }, [formRef, errors])
-}
 
 function DetailsForm({ user }: { user: User }) {
   const { setUser } = useAuth()

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, type RefObject } from 'react'
 
 // DRF error shape: field name -> messages; form-wide errors use `non_field_errors`
 export type FieldErrors = Record<string, string[]>
@@ -97,4 +97,11 @@ const NO_ERRORS: FieldErrors = {}
 export function useFieldErrors(...failures: unknown[]): FieldErrors {
   const failure = failures.find((candidate) => candidate != null)
   return useMemo(() => (failure == null ? NO_ERRORS : errorsFrom(failure)), [failure])
+}
+
+// After a failed submit, move focus to the first invalid field so its message is announced
+export function useFocusFirstInvalid(formRef: RefObject<HTMLFormElement | null>, errors: FieldErrors) {
+  useEffect(() => {
+    formRef.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus()
+  }, [formRef, errors])
 }
